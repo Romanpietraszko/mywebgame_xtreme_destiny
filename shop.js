@@ -1,27 +1,27 @@
 // --- LOGIKA SKLEPU (shop.js) ---
 
-// NOWOŚĆ: Definicja ścieżek ulepszeń i nazw wyświetlanych
+// NOWOŚĆ: Definicja ścieżek ulepszeń, nazw wyświetlanych oraz ikonek dla UI
 const upgradePaths = {
     // Drzewko Łuku
-    'bow': { next: 'golden_bow', name: 'Złoty Łuk', price: 250 },
-    'golden_bow': { next: 'diamond_bow', name: 'Diamentowy Łuk', price: 500 },
-    'diamond_bow': { next: 'crossbow', name: 'Kusza', price: 1000 },
-    'crossbow': { next: 'shotgun', name: 'Strzelba', price: 2000 },
-    'shotgun': { next: null, name: 'MAX', price: '---' },
+    'bow': { next: 'golden_bow', name: 'Złoty Łuk', price: 250, icon: '🏹' },
+    'golden_bow': { next: 'diamond_bow', name: 'Diamentowy Łuk', price: 500, icon: '🏹' },
+    'diamond_bow': { next: 'crossbow', name: 'Kusza', price: 1000, icon: '🏹' },
+    'crossbow': { next: 'shotgun', name: 'Strzelba', price: 2000, icon: '🔫' },
+    'shotgun': { next: null, name: 'MAX', price: '---', icon: '🔫' },
 
     // Drzewko Noża
-    'knife': { next: 'golden_knife', name: 'Złoty Nóż', price: 150 },
-    'golden_knife': { next: 'diamond_knife', name: 'Diamentowy Nóż', price: 350 },
-    'diamond_knife': { next: 'hunting_knife', name: 'Nóż Myśliwski', price: 700 },
-    'hunting_knife': { next: 'cleaver', name: 'Tasak', price: 1200 },
-    'cleaver': { next: null, name: 'MAX', price: '---' },
+    'knife': { next: 'golden_knife', name: 'Złoty Nóż', price: 150, icon: '🗡️' },
+    'golden_knife': { next: 'diamond_knife', name: 'Diamentowy Nóż', price: 350, icon: '🗡️' },
+    'diamond_knife': { next: 'hunting_knife', name: 'Nóż Myśliwski', price: 700, icon: '🗡️' },
+    'hunting_knife': { next: 'cleaver', name: 'Tasak', price: 1200, icon: '🪓' },
+    'cleaver': { next: null, name: 'MAX', price: '---', icon: '🪓' },
 
     // Drzewko Shurikena
-    'shuriken': { next: 'golden_shuriken', name: 'Złoty Shuriken', price: 80 },
-    'golden_shuriken': { next: 'diamond_shuriken', name: 'Diamentowy Shuriken', price: 200 },
-    'diamond_shuriken': { next: 'chakram', name: 'Czakram', price: 500 },
-    'chakram': { next: 'explosive_kunai', name: 'Wybuchowe Kunai', price: 1000 },
-    'explosive_kunai': { next: null, name: 'MAX', price: '---' }
+    'shuriken': { next: 'golden_shuriken', name: 'Złoty Shuriken', price: 80, icon: '🥷' },
+    'golden_shuriken': { next: 'diamond_shuriken', name: 'Diamentowy Shuriken', price: 200, icon: '🥷' },
+    'diamond_shuriken': { next: 'chakram', name: 'Czakram', price: 500, icon: '🌀' },
+    'chakram': { next: 'explosive_kunai', name: 'Wyb. Kunai', price: 1000, icon: '🧨' },
+    'explosive_kunai': { next: null, name: 'MAX', price: '---', icon: '🧨' }
 };
 
 window.buyItem = (item) => {
@@ -44,26 +44,25 @@ socket.on('shopSuccess', (data) => {
         }, 300);
     }
 
-    // --- NOWOŚĆ: Dynamiczna aktualizacja interfejsu sklepu ---
+    // --- NOWOŚĆ: Dynamiczna aktualizacja interfejsu sklepu z zachowaniem stylów HTML ---
     const upgradeInfo = upgradePaths[data.item];
-    if (upgradeInfo && upgradeInfo.next) {
+    if (upgradeInfo) {
         // Szukamy przycisku, który właśnie kliknęliśmy
         const btn = document.querySelector(`button[onclick="buyItem('${data.item}')"]`);
         if (btn) {
-            // Zmieniamy akcję na następny poziom
-            btn.setAttribute('onclick', `buyItem('${upgradeInfo.next}')`);
-            // Aktualizujemy tekst przycisku
-            btn.innerHTML = `${upgradeInfo.name} ($${upgradeInfo.price})`;
-        }
-    } else if (upgradeInfo && upgradeInfo.next === null) {
-        // Jeśli osiągnięto MAX poziom
-        const btn = document.querySelector(`button[onclick="buyItem('${data.item}')"]`);
-        if (btn) {
-            btn.setAttribute('onclick', `return false;`);
-            btn.innerHTML = `MAX POZIOM`;
-            btn.disabled = true; 
-            btn.style.opacity = "0.5";
-            btn.style.cursor = "not-allowed";
+            if (upgradeInfo.next) {
+                // Zmieniamy akcję na następny poziom
+                btn.setAttribute('onclick', `buyItem('${upgradeInfo.next}')`);
+                // Aktualizujemy tekst przycisku, zachowując dwa <span> dla ładnego formatowania
+                btn.innerHTML = `<span>${upgradeInfo.icon} ${upgradeInfo.name}</span> <span>$${upgradeInfo.price}</span>`;
+            } else {
+                // Jeśli osiągnięto MAX poziom
+                btn.setAttribute('onclick', `return false;`);
+                btn.innerHTML = `<span>${upgradeInfo.icon} MAX POZIOM</span> <span>---</span>`;
+                btn.disabled = true; 
+                btn.style.opacity = "0.5";
+                btn.style.cursor = "not-allowed";
+            }
         }
     }
 });
