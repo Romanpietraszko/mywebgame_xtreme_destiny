@@ -46,7 +46,7 @@ function killPlayer(pId) {
     if (p) {
         // Wysyłamy informację o końcu gry tylko do zabitego gracza
         io.to(p.id).emit('gameOver', { finalScore: p.score });
-        console.log(`Gracz ${p.name} został zjedzony! GAME OVER.`);
+        console.log(`Gracz ${p.name} został zjedzony lub zginął poza mapą! GAME OVER.`);
         // Bezlitośnie usuwamy gracza z serwera
         delete players[pId];
     }
@@ -63,7 +63,7 @@ function spawnBot() {
         id: `bot_${++entityIdCounter}`,
         x: Math.random() * WORLD_SIZE,
         y: Math.random() * WORLD_SIZE,
-        score: Math.floor(Math.random() * 10) + 5,
+        score: 0, // ZMIANA: Boty też zaczynają od zera!
         color: `hsl(${Math.random() * 360}, 70%, 50%)`,
         name: `Bot AI #${botNameCounter}`, // Unikalne numery!
         angle: Math.random() * Math.PI * 2,
@@ -87,7 +87,7 @@ io.on('connection', (socket) => {
             id: socket.id,
             x: 2000,
             y: 2000,
-            score: 5,
+            score: 0, // ZMIANA: Zmiana startowego score (masa 0)
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
@@ -289,31 +289,40 @@ io.on('connection', (socket) => {
 
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
-    // 1. Logika Botów i sztuczna inteligencja zakupów
-    bots.forEach(b => {
+    // ZABÓJCZE MARGINESY DLA GRACZY (Ściany Śmierci)
+    const pKeysList = Object.keys(players);
+    for (let i = pKeysList.length - 1; i >= 0; i--) {
+        let pId = pKeysList[i];
+        let p = players[pId];
+        
+        // Zostawiamy delikatny bufor tolerancji dla lagów (np. 10px), żeby nie zabić za szybko
+        if (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10) {
+            io.emit('killEvent', { text: `${p.name} zginął w lesie (poza mapą)!` }); 
+            killPlayer(pId);
+        }
+    }
+
+    // 1. Logika Botów 
+    for (let i = bots.length - 1; i >= 0; i--) {
+        let b = bots[i];
+        
+        // Ruch bota
         if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
         
         b.x += Math.cos(b.angle) * b.speed;
         b.y += Math.sin(b.angle) * b.speed;
 
+        // Odbijanie botów od ścian
         if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
         if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
 
-        if (Math.random() < 0.05) { 
-            if (b.score > 200 && !b.inventory.bow) {
-                b.score -= 100; b.inventory.bow = 1; b.activeWeapon = 'bow';
-            } else if (b.score > 100 && !b.inventory.knife && !b.inventory.bow) {
-                b.score -= 50; b.inventory.knife = 1; b.activeWeapon = 'knife';
-            } else if (b.score > 50 && !b.inventory.shuriken && !b.inventory.knife && !b.inventory.bow) {
-                b.score -= 20; b.inventory.shuriken = 1; b.activeWeapon = 'shuriken';
-            }
-        }
-
+        // Strzelanie (bardzo uproszczona logika strzelania mieczem, jeśli go stać)
         if (Math.random() < 0.01) {
             let type = b.activeWeapon;
             let stats = weaponStats[type];
             
-            if (stats && b.score >= stats.cost) {
+            // Bot strzela tylko wtedy, gdy ma wystarczającą ilość pkt (żeby nie był maszyną do samobójstw)
+            if (stats && b.score >= stats.cost + 5) {
                 b.score -= stats.cost;
                 projectiles.push({
                     id: ++entityIdCounter, ownerId: b.id,
@@ -330,7 +339,7 @@ setInterval(() => {
                 foods[fi] = spawnFood();
             }
         });
-    });
+    }
 
     // 2. Bot zjada Bota (Powiadomienia Kill Feed!)
     for (let i = 0; i < bots.length; i++) {
