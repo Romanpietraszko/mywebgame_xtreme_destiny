@@ -21,7 +21,38 @@ const safeZones = [
     { x: 3000, y: 3000, radius: 250 }
 ];
 
-// --- OBSŁUGA MYSZKI (NOWOŚĆ: CELOWANIE I STRZELANIE) ---
+// --- GENEROWANIE MAPY LASU (NOWOŚĆ) ---
+const mapData = { trees: [], roads: [] };
+
+// Generujemy przecinające się drogi
+mapData.roads.push({ x: WORLD_SIZE / 2 - 120, y: 0, width: 240, height: WORLD_SIZE });
+mapData.roads.push({ x: 0, y: WORLD_SIZE / 2 - 120, width: WORLD_SIZE, height: 240 });
+
+// Proceduralne generowanie drzew (żeby las był zawsze ten sam na mapie)
+const NUM_TREES = 350; // Ilość drzew na planszy 4000x4000
+for (let i = 0; i < NUM_TREES; i++) {
+    const r = 35 + Math.random() * 40; // Różna wielkość drzew
+    let tx, ty, onRoad;
+    do {
+        onRoad = false;
+        tx = Math.random() * WORLD_SIZE;
+        ty = Math.random() * WORLD_SIZE;
+        // Sprawdzamy czy nie rosną na ścieżce
+        for(let road of mapData.roads) {
+            if (tx > road.x - r && tx < road.x + road.width + r &&
+                ty > road.y - r && ty < road.y + road.height + r) {
+                onRoad = true; break;
+            }
+        }
+    } while(onRoad);
+    
+    mapData.trees.push({
+        x: tx, y: ty, radius: r,
+        color: Math.random() > 0.5 ? '#1e4620' : '#2d6a31' // Dwa odcienie zieleni
+    });
+}
+
+// --- OBSŁUGA MYSZKI ---
 window.addEventListener('mousemove', (e) => {
     if (gameState === 'PLAYING' && player) {
         const rect = canvas.getBoundingClientRect();
@@ -45,6 +76,22 @@ window.addEventListener('mousedown', (e) => {
             dx: lastMoveDir.x, 
             dy: lastMoveDir.y 
         });
+    }
+    
+    // NOWOŚĆ: Kliknięcie w przycisk WYJŚCIE podczas pauzy
+    if (gameState === 'PAUSED' && e.button === 0) {
+        const rect = canvas.getBoundingClientRect();
+        const mouseX = e.clientX - rect.left;
+        const mouseY = e.clientY - rect.top;
+        
+        // Współrzędne przycisku (zgodne z rysowaniem w gameLoop)
+        const btnX = canvas.width / 2 - 100;
+        const btnY = canvas.height / 2 + 10;
+        
+        if (mouseX >= btnX && mouseX <= btnX + 200 && mouseY >= btnY && mouseY <= btnY + 50) {
+            socket.disconnect(); // Rozłącza gracza (wywołuje event disconnect na serwerze)
+            location.reload();   // Przeładowuje stronę (wraca do menu)
+        }
     }
 });
 
@@ -90,7 +137,7 @@ window.startGame = (type) => {
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     player = {
-        x: 2000, y: 2000, score: 5, level: 1,
+        x: 2000, y: 2000, score: 5, level: 1, // UWAGA: Zmiana startowego score (masa 0) wymaga zmiany w backendzie (server.js)
         name: name, color: color, isSafe: false,
         isShielding: false,
         aura: null, 
@@ -200,16 +247,48 @@ function checkEquipmentUpgrades() {
 }
 
 // --- RYSOWANIE GRAFIKI ---
-function drawGrid() {
+
+// NOWOŚĆ: Funkcja rysująca mapę lasu zamiast siatki
+function drawForestMap() {
+    // 1. Podłoże (ciemna trawa) wypełnia cały ekran (ignoruje kamerę, bo to tło okna)
+    ctx.fillStyle = '#38761d';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
     ctx.save();
-    ctx.strokeStyle = '#e0e8f0';
-    const gridSize = 40;
-    for (let x = -camera.x % gridSize; x < canvas.width; x += gridSize) {
-        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, canvas.height); ctx.stroke();
+    ctx.translate(-camera.x, -camera.y);
+
+    // 2. Rysujemy drogi (brązowe)
+    ctx.fillStyle = '#5c4033';
+    for(let road of mapData.roads) {
+        ctx.fillRect(road.x, road.y, road.width, road.height);
     }
-    for (let y = -camera.y % gridSize; y < canvas.height; y += gridSize) {
-        ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(canvas.width, y); ctx.stroke();
+
+    // 3. Włączamy cienie dla głębi (Premium feel)
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 12;
+    ctx.shadowOffsetX = 6;
+    ctx.shadowOffsetY = 6;
+
+    // 4. Rysujemy drzewa
+    for(let tree of mapData.trees) {
+        // Optymalizacja: nie rysuj drzew, których nie widać na ekranie
+        if (tree.x + tree.radius < camera.x || tree.x - tree.radius > camera.x + canvas.width ||
+            tree.y + tree.radius < camera.y || tree.y - tree.radius > camera.y + canvas.height) {
+            continue;
+        }
+
+        // Pień drzewa
+        ctx.fillStyle = '#3e2723';
+        ctx.fillRect(tree.x - 8, tree.y + tree.radius - 20, 16, 35);
+
+        // Korona drzewa
+        ctx.beginPath();
+        ctx.arc(tree.x, tree.y, tree.radius, 0, Math.PI * 2);
+        ctx.fillStyle = tree.color;
+        ctx.fill();
+        ctx.closePath();
     }
+    
     ctx.restore();
 }
 
@@ -598,7 +677,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.fillStyle = '#000';
+    ctx.fillStyle = '#fff'; // Zmiana koloru tekstu na biały (lepiej widać na ciemnym lesie)
     ctx.font = `bold ${13 * sc}px Arial`;
     ctx.textAlign = 'center';
     ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc);
@@ -620,7 +699,6 @@ function update() {
         if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
     }
     
-    // ZMIANA: Usunięto nadpisywanie kąta celowania przez kierunek poruszania się!
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
@@ -635,8 +713,8 @@ function update() {
 }
 
 function gameLoop() {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawGrid(); 
+    // UWAGA: Zmiana z drawGrid() na drawForestMap()
+    drawForestMap(); 
     
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
@@ -709,7 +787,7 @@ function gameLoop() {
                 }
             });
 
-            ctx.fillStyle = '#000'; ctx.font = 'bold 20px Arial';
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
             ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
 
             if (killLogs.length > 0) {
@@ -782,10 +860,22 @@ function gameLoop() {
             wasSafe = player.isSafe; 
         }
 
+        // NOWOŚĆ: Wygląd PAUZY z przyciskiem WYJŚCIE
         if (gameState === 'PAUSED') {
-            ctx.fillStyle = 'rgba(0,0,0,0.5)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
-            ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2);
+            ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
+            
+            // Guzik WYJŚCIE
+            const btnX = canvas.width / 2 - 100;
+            const btnY = canvas.height / 2 + 10;
+            ctx.fillStyle = '#e74c3c'; // Czerwone tło guzika
+            ctx.fillRect(btnX, btnY, 200, 50);
+            
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px Arial';
+            ctx.fillText("WYJŚCIE", canvas.width / 2, btnY + 33);
+            
             ctx.textAlign = 'left';
         }
     }
