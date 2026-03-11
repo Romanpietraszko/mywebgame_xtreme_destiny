@@ -21,23 +21,22 @@ const safeZones = [
     { x: 3000, y: 3000, radius: 250 }
 ];
 
-// --- GENEROWANIE MAPY LASU (NOWOŚĆ) ---
+// --- GENEROWANIE MAPY LASU ---
 const mapData = { trees: [], roads: [] };
 
 // Generujemy przecinające się drogi
 mapData.roads.push({ x: WORLD_SIZE / 2 - 120, y: 0, width: 240, height: WORLD_SIZE });
 mapData.roads.push({ x: 0, y: WORLD_SIZE / 2 - 120, width: WORLD_SIZE, height: 240 });
 
-// Proceduralne generowanie drzew (żeby las był zawsze ten sam na mapie)
-const NUM_TREES = 350; // Ilość drzew na planszy 4000x4000
+// Proceduralne generowanie drzew
+const NUM_TREES = 350; 
 for (let i = 0; i < NUM_TREES; i++) {
-    const r = 35 + Math.random() * 40; // Różna wielkość drzew
+    const r = 35 + Math.random() * 40; 
     let tx, ty, onRoad;
     do {
         onRoad = false;
         tx = Math.random() * WORLD_SIZE;
         ty = Math.random() * WORLD_SIZE;
-        // Sprawdzamy czy nie rosną na ścieżce
         for(let road of mapData.roads) {
             if (tx > road.x - r && tx < road.x + road.width + r &&
                 ty > road.y - r && ty < road.y + road.height + r) {
@@ -48,7 +47,7 @@ for (let i = 0; i < NUM_TREES; i++) {
     
     mapData.trees.push({
         x: tx, y: ty, radius: r,
-        color: Math.random() > 0.5 ? '#1e4620' : '#2d6a31' // Dwa odcienie zieleni
+        color: Math.random() > 0.5 ? '#1e4620' : '#2d6a31' 
     });
 }
 
@@ -68,7 +67,6 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
-    // Lewy przycisk myszy = strzał
     if (gameState === 'PLAYING' && player && e.button === 0) { 
         socket.emit('throwSword', { 
             x: player.x, 
@@ -78,19 +76,17 @@ window.addEventListener('mousedown', (e) => {
         });
     }
     
-    // NOWOŚĆ: Kliknięcie w przycisk WYJŚCIE podczas pauzy
     if (gameState === 'PAUSED' && e.button === 0) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // Współrzędne przycisku (zgodne z rysowaniem w gameLoop)
         const btnX = canvas.width / 2 - 100;
         const btnY = canvas.height / 2 + 10;
         
         if (mouseX >= btnX && mouseX <= btnX + 200 && mouseY >= btnY && mouseY <= btnY + 50) {
-            socket.disconnect(); // Rozłącza gracza (wywołuje event disconnect na serwerze)
-            location.reload();   // Przeładowuje stronę (wraca do menu)
+            socket.disconnect();
+            location.reload();   
         }
     }
 });
@@ -105,7 +101,6 @@ window.onkeydown = (e) => {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
 
-        // Zostawiamy klawisz E dla przyzwyczajonych
         if (e.code === 'KeyE') {
             socket.emit('throwSword', { 
                 x: player.x, 
@@ -137,7 +132,7 @@ window.startGame = (type) => {
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     player = {
-        x: 2000, y: 2000, score: 5, level: 1, // UWAGA: Zmiana startowego score (masa 0) wymaga zmiany w backendzie (server.js)
+        x: 2000, y: 2000, score: 5, level: 1,
         name: name, color: color, isSafe: false,
         isShielding: false,
         aura: null, 
@@ -248,40 +243,32 @@ function checkEquipmentUpgrades() {
 
 // --- RYSOWANIE GRAFIKI ---
 
-// NOWOŚĆ: Funkcja rysująca mapę lasu zamiast siatki
 function drawForestMap() {
-    // 1. Podłoże (ciemna trawa) wypełnia cały ekran (ignoruje kamerę, bo to tło okna)
     ctx.fillStyle = '#38761d';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // 2. Rysujemy drogi (brązowe)
     ctx.fillStyle = '#5c4033';
     for(let road of mapData.roads) {
         ctx.fillRect(road.x, road.y, road.width, road.height);
     }
 
-    // 3. Włączamy cienie dla głębi (Premium feel)
     ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
     ctx.shadowBlur = 12;
     ctx.shadowOffsetX = 6;
     ctx.shadowOffsetY = 6;
 
-    // 4. Rysujemy drzewa
     for(let tree of mapData.trees) {
-        // Optymalizacja: nie rysuj drzew, których nie widać na ekranie
         if (tree.x + tree.radius < camera.x || tree.x - tree.radius > camera.x + canvas.width ||
             tree.y + tree.radius < camera.y || tree.y - tree.radius > camera.y + canvas.height) {
             continue;
         }
 
-        // Pień drzewa
         ctx.fillStyle = '#3e2723';
         ctx.fillRect(tree.x - 8, tree.y + tree.radius - 20, 16, 35);
 
-        // Korona drzewa
         ctx.beginPath();
         ctx.arc(tree.x, tree.y, tree.radius, 0, Math.PI * 2);
         ctx.fillStyle = tree.color;
@@ -541,14 +528,34 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     ctx.lineWidth = 3 * sc;
     ctx.lineCap = 'round';
     
+    // --- ZMIANA: Rysowanie rąk, nóg i EMOTKI zamiast patyczaka ---
+    
+    // Ręce i nogi dorysowane z boków
     ctx.beginPath();
-    ctx.arc(x, y - 20 * sc, 10 * sc, 0, Math.PI * 2); 
-    ctx.moveTo(x, y - 10 * sc); ctx.lineTo(x, y + 15 * sc); 
-    ctx.moveTo(x, y); ctx.lineTo(x - 15 * sc, y + 10 * sc); 
-    ctx.moveTo(x, y); ctx.lineTo(x + 15 * sc, y + 10 * sc);
-    ctx.moveTo(x, y + 15 * sc); ctx.lineTo(x - 10 * sc, y + 35 * sc); 
-    ctx.moveTo(x, y + 15 * sc); ctx.lineTo(x + 10 * sc, y + 35 * sc);
+    ctx.moveTo(x - 10 * sc, y); ctx.lineTo(x - 15 * sc, y + 10 * sc); // Lewa ręka
+    ctx.moveTo(x + 10 * sc, y); ctx.lineTo(x + 15 * sc, y + 10 * sc); // Prawa ręka
+    ctx.moveTo(x - 5 * sc, y + 15 * sc); ctx.lineTo(x - 10 * sc, y + 35 * sc); // Lewa noga
+    ctx.moveTo(x + 5 * sc, y + 15 * sc); ctx.lineTo(x + 10 * sc, y + 35 * sc); // Prawa noga
     ctx.stroke();
+
+    // Emotka (Głowa + Tułów)
+    ctx.save();
+    ctx.font = `${32 * sc}px Arial`; 
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    
+    let emojiChar = '🤤';
+    if (e === player) {
+        emojiChar = '🤤'; // Gracz
+    } else if (e.name && e.name.includes('Bot')) {
+        emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; // Boty: Szkielet jeśli ma punkty, inaczej Zombie
+    } else {
+        emojiChar = '👿'; // Inni gracze po sieci
+    }
+    
+    ctx.fillText(emojiChar, x, y - 8 * sc); // Rysujemy na odpowiedniej wysokości
+    ctx.restore();
+    // --- KONIEC ZMIANY ---
 
     const armorTier = getTier(score, [100, 450, 850]);
     const helmetTier = getTier(score, [500, 800, 1150]);
@@ -677,7 +684,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill();
     }
 
-    ctx.fillStyle = '#fff'; // Zmiana koloru tekstu na biały (lepiej widać na ciemnym lesie)
+    ctx.fillStyle = '#fff'; 
     ctx.font = `bold ${13 * sc}px Arial`;
     ctx.textAlign = 'center';
     ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc);
@@ -713,7 +720,6 @@ function update() {
 }
 
 function gameLoop() {
-    // UWAGA: Zmiana z drawGrid() na drawForestMap()
     drawForestMap(); 
     
     let allEntities = Object.values(otherPlayers).concat(bots);
@@ -860,16 +866,14 @@ function gameLoop() {
             wasSafe = player.isSafe; 
         }
 
-        // NOWOŚĆ: Wygląd PAUZY z przyciskiem WYJŚCIE
         if (gameState === 'PAUSED') {
             ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
             ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
             
-            // Guzik WYJŚCIE
             const btnX = canvas.width / 2 - 100;
             const btnY = canvas.height / 2 + 10;
-            ctx.fillStyle = '#e74c3c'; // Czerwone tło guzika
+            ctx.fillStyle = '#e74c3c'; 
             ctx.fillRect(btnX, btnY, 200, 50);
             
             ctx.fillStyle = '#fff';
