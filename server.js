@@ -46,7 +46,7 @@ function killPlayer(pId) {
     if (p) {
         // Wysyłamy informację o końcu gry tylko do zabitego gracza
         io.to(p.id).emit('gameOver', { finalScore: p.score });
-        console.log(`Gracz ${p.name} został zjedzony lub zginął poza mapą! GAME OVER.`);
+        console.log(`[ŚMIERĆ] Gracz ${p.name} został zjedzony lub zginął poza mapą! GAME OVER.`);
         // Bezlitośnie usuwamy gracza z serwera
         delete players[pId];
     }
@@ -68,6 +68,9 @@ function spawnBot() {
         name: `Bot AI #${botNameCounter}`, // Unikalne numery!
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
+        ownerId: null, // NOWOŚĆ: Kto jest panem bota (RTS)
+        orbitAngle: 0, // NOWOŚĆ: Kąt rotacji wokół pana
+        orbitRadius: 0, // NOWOŚĆ: Odległość od pana w formacji
         // Boty rodzą się z ekwipunkiem
         inventory: { bow: 0, knife: 0, shuriken: 0 },
         activeWeapon: 'sword'
@@ -80,7 +83,10 @@ for (let i = 0; i < MAX_BOTS; i++) bots.push(spawnBot());
 
 // --- LOGIKA POŁĄCZEŃ ---
 io.on('connection', (socket) => {
-    console.log(`Nowy gracz połączony: ${socket.id}`);
+    // --- NOWOŚĆ: Wyraźny log przy połączeniu dla panelu Render ---
+    console.log(`\n===========================================`);
+    console.log(`[SOCKET INFO] Ustanowiono nowe połączenie sieciowe. ID: ${socket.id}`);
+    console.log(`===========================================\n`);
 
     socket.on('joinGame', (data) => {
         players[socket.id] = {
@@ -103,6 +109,12 @@ io.on('connection', (socket) => {
             activeWeapon: 'sword'
         };
         socket.emit('init', { id: socket.id });
+
+        // --- NOWOŚĆ: Wyraźny log przy dołączeniu do gry (Start Menu -> Play) ---
+        console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
+        console.log(`[NOWY GRACZ] >> ${players[socket.id].name} << wszedł do gry! (ID: ${socket.id})`);
+        console.log(`Aktualna liczba graczy na serwerze: ${Object.keys(players).length}`);
+        console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
     });
 
     // Ruch gracza i synchronizacja progresji
@@ -181,7 +193,7 @@ io.on('connection', (socket) => {
             p.activeWeapon = item;        
             
             socket.emit('shopSuccess', { item: item });
-            console.log(`${p.name} kupił ${item}. Zostało mu ${p.score} masy.`);
+            console.log(`[SKLEP] ${p.name} kupił ${item}. Zostało mu ${p.score} masy.`);
         } else {
             socket.emit('shopError', { message: "Za mało punktów masy!" });
         }
@@ -277,13 +289,21 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         if (p && p.score >= 20) {
             p.score -= data.mass;
-            console.log(`${p.name} podzielił się.`);
         }
     });
 
     socket.on('disconnect', () => {
-        console.log(`Gracz rozłączony: ${socket.id}`);
+        const p = players[socket.id];
+        // --- NOWOŚĆ: Wyraźny log przy wylogowaniu/rozłączeniu ---
+        console.log(`\n-------------------------------------------`);
+        if (p) {
+            console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer. (ID: ${socket.id})`);
+        } else {
+            console.log(`[ROZŁĄCZENIE] Socket (nie będący w grze) został rozłączony. (ID: ${socket.id})`);
+        }
         delete players[socket.id];
+        console.log(`Aktualna liczba graczy na serwerze: ${Object.keys(players).length}`);
+        console.log(`-------------------------------------------\n`);
     });
 });
 
@@ -306,26 +326,54 @@ setInterval(() => {
     for (let i = bots.length - 1; i >= 0; i--) {
         let b = bots[i];
         
-        // Ruch bota
-        if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
-        
-        b.x += Math.cos(b.angle) * b.speed;
-        b.y += Math.sin(b.angle) * b.speed;
+        // --- ZMIANA: Logika podążania za Panem (Rój / Armia) ---
+        if (b.ownerId) {
+            let owner = players[b.ownerId];
+            if (owner) {
+                // Powolne rotowanie formacji wokół gracza (Rój)
+                b.orbitAngle = (b.orbitAngle || 0) + 0.015;
+                
+                // Każdy bot ma swój unikalny punkt docelowy WOKÓŁ gracza
+                let targetX = owner.x + Math.cos(b.orbitAngle) * b.orbitRadius;
+                let targetY = owner.y + Math.sin(b.orbitAngle) * b.orbitRadius;
+                
+                let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
+                
+                // Bot idzie do swojego miejsca w szyku
+                if (distToTarget > 15) {
+                    b.angle = Math.atan2(targetY - b.y, targetX - b.x);
+                    // Jeśli król biegnie szybko, armia przyspiesza, żeby go dogonić!
+                    let speedMult = distToTarget > 150 ? 1.6 : 1; 
+                    b.x += Math.cos(b.angle) * (b.speed * speedMult);
+                    b.y += Math.sin(b.angle) * (b.speed * speedMult);
+                }
+            } else {
+                // Jeśli właściciel zginął lub wylogował się, bot staje się znów dziki
+                b.ownerId = null;
+                b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                botNameCounter++;
+                b.name = `Bot AI #${botNameCounter}`;
+            }
+        } else {
+            // Dziki bot - losowy ruch
+            if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
+            b.x += Math.cos(b.angle) * b.speed;
+            b.y += Math.sin(b.angle) * b.speed;
 
-        // Odbijanie botów od ścian
-        if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
-        if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
+            // Odbijanie botów od ścian
+            if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
+            if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
+        }
 
-        // Strzelanie (bardzo uproszczona logika strzelania mieczem, jeśli go stać)
+        // Strzelanie botów
         if (Math.random() < 0.01) {
             let type = b.activeWeapon;
             let stats = weaponStats[type];
             
-            // Bot strzela tylko wtedy, gdy ma wystarczającą ilość pkt (żeby nie był maszyną do samobójstw)
             if (stats && b.score >= stats.cost + 5) {
                 b.score -= stats.cost;
                 projectiles.push({
-                    id: ++entityIdCounter, ownerId: b.id,
+                    id: ++entityIdCounter, ownerId: b.ownerId || b.id,
                     x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
                     life: stats.life, speed: stats.speed, isBotSword: true,
                     scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
@@ -346,6 +394,10 @@ setInterval(() => {
         for (let j = i + 1; j < bots.length; j++) {
             let b1 = bots[i];
             let b2 = bots[j];
+            
+            // Boty z tym samym właścicielem nie zjadają się nawzajem!
+            if (b1.ownerId && b1.ownerId === b2.ownerId) continue;
+            
             let dist = Math.hypot(b1.x - b2.x, b1.y - b2.y);
             let r1 = 25 * (1 + Math.pow(Math.max(0, b1.score - 1), 0.45) * 0.15);
             let r2 = 25 * (1 + Math.pow(Math.max(0, b2.score - 1), 0.45) * 0.15);
@@ -380,13 +432,25 @@ setInterval(() => {
             let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
 
             if (!p.isSafe) {
-                if (dist < pRadius && p.score > b.score * 1.15) {
-                    io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
-                    p.score += Math.floor(b.score * 0.5);
-                    bots[bi] = spawnBot();
+                // --- ZMIANA: Werbowanie botów (RTS) z przydziałem formacji ---
+                if (dist < pRadius && p.score > b.score * 1.15 && b.ownerId !== p.id) {
+                    io.emit('killEvent', { text: `${p.name} zwerbował do armii: ${b.name}!` }); 
+                    p.score += Math.floor(b.score * 0.5); // Bonus za zjedzenie nadal działa
+                    
+                    // Zmiana bota w sługę (Miniona) zamiast spawnu nowego
+                    b.ownerId = p.id;
+                    b.score = 5; // Minion zaczyna z małą masą
+                    b.color = p.color; // Zmienia kolor na kolor gracza
+                    b.name = `Sługa [${p.name}]`; // Zmienia nick
+                    
+                    // --- NOWOŚĆ: Każdy bot dostaje losowe miejsce w formacji roju ---
+                    b.orbitAngle = Math.random() * Math.PI * 2; // Losowy kąt wokół gracza
+                    b.orbitRadius = 70 + Math.random() * 60;    // Dystans od 70 do 130 pikseli od gracza
+                    
                     io.to(p.id).emit('botEaten', { newScore: p.score });
                 }
-                else if (dist < bRadius && b.score > p.score * 1.15) {
+                // Jeśli dziki bot (lub bot innego gracza) zje gracza
+                else if (dist < bRadius && b.score > p.score * 1.15 && b.ownerId !== p.id) {
                     io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
                     b.score += Math.floor(p.score * 0.5);
                     killPlayer(p.id); 
@@ -430,7 +494,8 @@ setInterval(() => {
 
         bots.forEach((b) => {
             let hitRange = p.isWinter ? 60 : 30; 
-            if (p.ownerId !== b.id && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
+            // ZMIANA: Pocisk nie uderza we własne boty gracza!
+            if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
                 b.score = Math.max(1, b.score - p.damage);
                 if (!p.isPiercing) p.life = 0; 
             }
