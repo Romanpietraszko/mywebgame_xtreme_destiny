@@ -16,6 +16,7 @@ let lastCalculatedTier = 0;
 let wasSafe = false; 
 let killLogs = [];
 const visualStates = {}; // NOWOŚĆ: Przechowuje liczniki animacji twarzy
+let draggedBotId = null; // NOWOŚĆ: Pamięta, którego bota przeciągasz myszką!
 
 const safeZones = [
     { x: 1000, y: 1000, radius: 250 },
@@ -52,29 +53,71 @@ for (let i = 0; i < NUM_TREES; i++) {
     });
 }
 
+// Blokada menu pod prawym przyciskiem, żeby dało się przeciągać
+window.addEventListener('contextmenu', e => e.preventDefault());
+
 // --- OBSŁUGA MYSZKI ---
 window.addEventListener('mousemove', (e) => {
     if (gameState === 'PLAYING' && player) {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
+        const mouseWorldX = mouseX + camera.x;
+        const mouseWorldY = mouseY + camera.y;
         
         const playerScreenX = player.x - camera.x;
         const playerScreenY = player.y - camera.y;
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
+
+        // --- NOWOŚĆ: Ręczne układanie formacji w czasie rzeczywistym ---
+        if (draggedBotId && (e.buttons & 2)) { // Trzymasz PPM
+            let dx = mouseWorldX - player.x;
+            let dy = mouseWorldY - player.y;
+            let dist = Math.hypot(dx, dy);
+            let absAngle = Math.atan2(dy, dx);
+            let playerFaceAngle = Math.atan2(lastMoveDir.y, lastMoveDir.x);
+            let relAngle = absAngle - playerFaceAngle;
+            
+            socket.emit('setBotOffset', { botId: draggedBotId, angleOffset: relAngle, distOffset: dist });
+        }
     }
 });
 
 window.addEventListener('mousedown', (e) => {
-    if (gameState === 'PLAYING' && player && e.button === 0) { 
-        socket.emit('throwSword', { 
-            x: player.x, 
-            y: player.y, 
-            dx: lastMoveDir.x, 
-            dy: lastMoveDir.y 
-        });
+    if (gameState === 'PLAYING' && player) { 
+        // --- NOWOŚĆ: Chwytanie bota do układania formacji (PPM) ---
+        if (e.button === 2) { 
+            const rect = canvas.getBoundingClientRect();
+            const mouseWorldX = e.clientX - rect.left + camera.x;
+            const mouseWorldY = e.clientY - rect.top + camera.y;
+
+            let closestBot = null;
+            let minDist = 80; // Zasięg "łapania" myszką
+            bots.forEach(b => {
+                if (b.ownerId === myId) {
+                    let d = Math.hypot(b.x - mouseWorldX, b.y - mouseWorldY);
+                    if (d < minDist) {
+                        minDist = d;
+                        closestBot = b;
+                    }
+                }
+            });
+
+            if (closestBot) {
+                draggedBotId = closestBot.id;
+            }
+        }
+        // Strzał z Miecza (LPM)
+        else if (e.button === 0) {
+            socket.emit('throwSword', { 
+                x: player.x, 
+                y: player.y, 
+                dx: lastMoveDir.x, 
+                dy: lastMoveDir.y 
+            });
+        }
     }
     
     if (gameState === 'PAUSED' && e.button === 0) {
@@ -89,6 +132,12 @@ window.addEventListener('mousedown', (e) => {
             socket.disconnect();
             location.reload();   
         }
+    }
+});
+
+window.addEventListener('mouseup', (e) => {
+    if (e.button === 2) {
+        draggedBotId = null; // Puszczasz bota z myszki
     }
 });
 
@@ -828,6 +877,33 @@ function gameLoop() {
                 drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8);
             } else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') {
                 drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2);
+            }
+        });
+
+        // --- NOWOŚĆ: Rysowanie "podpowiadaczek" (Docelowych miejsc dla botów z Twojej armii) ---
+        bots.forEach(b => {
+            if (b.ownerId === myId && b.targetX && b.targetY) {
+                ctx.save();
+                ctx.strokeStyle = 'rgba(241, 196, 15, 0.6)'; // Złoty, lekko przezroczysty kolor
+                ctx.lineWidth = 2;
+                ctx.setLineDash([5, 5]); // Linia przerywana dla "ducha"
+                
+                // Rysujemy cel formacji
+                ctx.beginPath();
+                ctx.arc(b.targetX, b.targetY, 20, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Jeśli aktualnie przeciągasz TEGO bota, wyraźnie to zaznacz linią!
+                if (draggedBotId === b.id) {
+                    ctx.fillStyle = 'rgba(241, 196, 15, 0.2)';
+                    ctx.fill(); // Wypełnij kółko
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(player.x, player.y);
+                    ctx.lineTo(b.targetX, b.targetY);
+                    ctx.stroke(); // Połącz bota z tobą wizualną "smyczą" podczas ustawiania
+                }
+                ctx.restore();
             }
         });
 
