@@ -15,24 +15,20 @@ let foods = [];
 let bots = [];
 let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
-let botNameCounter = 0; // NOWOŚĆ: Numery dla botów
+let botNameCounter = 0;
 
-// --- NOWOŚĆ: Statystyki wszystkich poziomów broni ---
 const weaponStats = {
     'sword': { dmg: 5, life: 60, speed: 18, cost: 2, piercing: false },
-    // Łuki
     'bow': { dmg: 8, life: 90, speed: 26, cost: 2, piercing: false },
     'golden_bow': { dmg: 16, life: 100, speed: 30, cost: 5, piercing: false },
     'diamond_bow': { dmg: 30, life: 120, speed: 35, cost: 10, piercing: true },
     'crossbow': { dmg: 50, life: 140, speed: 45, cost: 20, piercing: true },
-    'shotgun': { dmg: 100, life: 40, speed: 50, cost: 50, piercing: true }, // Krótki zasięg, miazga!
-    // Noże
+    'shotgun': { dmg: 100, life: 40, speed: 50, cost: 50, piercing: true },
     'knife': { dmg: 12, life: 30, speed: 22, cost: 2, piercing: false },
     'golden_knife': { dmg: 24, life: 35, speed: 25, cost: 5, piercing: false },
     'diamond_knife': { dmg: 45, life: 40, speed: 28, cost: 10, piercing: true },
     'hunting_knife': { dmg: 80, life: 45, speed: 32, cost: 20, piercing: true },
     'cleaver': { dmg: 150, life: 50, speed: 35, cost: 40, piercing: true },
-    // Shurikeny
     'shuriken': { dmg: 4, life: 45, speed: 20, cost: 2, piercing: false },
     'golden_shuriken': { dmg: 10, life: 55, speed: 24, cost: 4, piercing: false },
     'diamond_shuriken': { dmg: 20, life: 65, speed: 28, cost: 8, piercing: true },
@@ -40,19 +36,15 @@ const weaponStats = {
     'explosive_kunai': { dmg: 75, life: 85, speed: 38, cost: 30, piercing: true }
 };
 
-// --- POMOCNICZA FUNKCJA: PERMANENTNA ŚMIERĆ ---
 function killPlayer(pId) {
     const p = players[pId];
     if (p) {
-        // Wysyłamy informację o końcu gry tylko do zabitego gracza
         io.to(p.id).emit('gameOver', { finalScore: p.score });
-        console.log(`[ŚMIERĆ] Gracz ${p.name} został zjedzony lub zginął poza mapą! GAME OVER.`);
-        // Bezlitośnie usuwamy gracza z serwera
+        console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! GAME OVER.`);
         delete players[pId];
     }
 }
 
-// --- FUNKCJE GENERUJĄCE ---
 function spawnFood() {
     return { id: ++entityIdCounter, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
 }
@@ -63,29 +55,23 @@ function spawnBot() {
         id: `bot_${++entityIdCounter}`,
         x: Math.random() * WORLD_SIZE,
         y: Math.random() * WORLD_SIZE,
-        score: 0, // ZMIANA: Boty też zaczynają od zera!
+        score: 0, 
         color: `hsl(${Math.random() * 360}, 70%, 50%)`,
-        name: `Bot AI #${botNameCounter}`, // Unikalne numery!
+        name: `Bot AI #${botNameCounter}`,
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
-        ownerId: null, // NOWOŚĆ: Kto jest panem bota (RTS)
-        orbitAngle: 0, // NOWOŚĆ: Kąt rotacji wokół pana
-        orbitRadius: 0, // NOWOŚĆ: Odległość od pana w formacji
-        // Boty rodzą się z ekwipunkiem
+        ownerId: null, 
         inventory: { bow: 0, knife: 0, shuriken: 0 },
         activeWeapon: 'sword'
     };
 }
 
-// Inicjalizacja zasobów na starcie serwera
 for (let i = 0; i < MAX_FOODS; i++) foods.push(spawnFood());
 for (let i = 0; i < MAX_BOTS; i++) bots.push(spawnBot());
 
-// --- LOGIKA POŁĄCZEŃ ---
 io.on('connection', (socket) => {
-    // --- NOWOŚĆ: Wyraźny log przy połączeniu dla panelu Render ---
     console.log(`\n===========================================`);
-    console.log(`[SOCKET INFO] Ustanowiono nowe połączenie sieciowe. ID: ${socket.id}`);
+    console.log(`[SOCKET INFO] Nowe połączenie. ID: ${socket.id}`);
     console.log(`===========================================\n`);
 
     socket.on('joinGame', (data) => {
@@ -93,7 +79,7 @@ io.on('connection', (socket) => {
             id: socket.id,
             x: 2000,
             y: 2000,
-            score: 0, // ZMIANA: Zmiana startowego score (masa 0)
+            score: 0, 
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
@@ -104,29 +90,32 @@ io.on('connection', (socket) => {
             isSafe: false,
             isShielding: false,
             armorHits: 0,
-            // Baza pod sklep zamkowy i ekwipunek
             inventory: { bow: 0, knife: 0, shuriken: 0 },
-            activeWeapon: 'sword'
+            activeWeapon: 'sword',
+            // --- NOWOŚCI RTS ---
+            isRecruiting: false, // Domyslnie pożera boty
+            formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia
+            moveAngle: 0         // Kierunek biegu gracza do formacji
         };
         socket.emit('init', { id: socket.id });
 
-        // --- NOWOŚĆ: Wyraźny log przy dołączeniu do gry (Start Menu -> Play) ---
         console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
-        console.log(`[NOWY GRACZ] >> ${players[socket.id].name} << wszedł do gry! (ID: ${socket.id})`);
-        console.log(`Aktualna liczba graczy na serwerze: ${Object.keys(players).length}`);
+        console.log(`[NOWY GRACZ] >> ${players[socket.id].name} << wszedł do gry!`);
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
     });
 
-    // Ruch gracza i synchronizacja progresji
     socket.on('playerMovement', (data) => {
         const p = players[socket.id];
         if (p) {
+            // Obliczamy kąt ruchu dla formacji
+            if (data.x !== p.x || data.y !== p.y) {
+                p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
+            }
             p.x = data.x;
             p.y = data.y;
             p.isSafe = data.isSafe;
             p.isShielding = data.isShielding; 
 
-            // Logika awansu (Level Up)
             let newLevel = Math.floor(p.score / 20) + 1;
             if (newLevel > p.level) {
                 p.level = newLevel;
@@ -136,16 +125,30 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- SYSTEM ULEPSZANIA Z BLOKADAMI ---
+    // --- NOWOŚĆ: Przełączniki RTS ---
+    socket.on('toggleRecruit', () => {
+        const p = players[socket.id];
+        if (p) {
+            p.isRecruiting = !p.isRecruiting;
+            socket.emit('recruitToggled', p.isRecruiting);
+        }
+    });
+
+    socket.on('switchFormation', () => {
+        const p = players[socket.id];
+        if (p) {
+            p.formation = (p.formation + 1) % 3; // Zmiana 0 -> 1 -> 2 -> 0
+            let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : "LINIA");
+            socket.emit('formationSwitched', formName);
+        }
+    });
+
     socket.on('upgradeSkill', (skillName) => {
         const p = players[socket.id];
         if (p && p.skillPoints > 0) {
-            
-            // Wymagania posiadania ekwipunku
-            if (skillName === 'strength' && p.score < 100) return; // Wymaga Zbroi
-            if (skillName === 'weapon' && p.score < 15) return;    // Wymaga Miecza
+            if (skillName === 'strength' && p.score < 100) return; 
+            if (skillName === 'weapon' && p.score < 15) return;    
 
-            // Szybkość do 10, Siła i Broń do 100
             let maxLevel = (skillName === 'speed') ? 10 : 100;
 
             if (p.skills[skillName] !== undefined && p.skills[skillName] < maxLevel) {
@@ -156,7 +159,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- WYBÓR ŚCIEŻKI BRONI ---
     socket.on('chooseWeaponPath', (path) => {
         const p = players[socket.id];
         if (p && p.skills.weapon >= 5 && p.weaponPath === 'none') {
@@ -167,17 +169,10 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- LOGIKA SKLEPU ZAMKOWEGO (ZAKTUALIZOWANA) ---
     socket.on('buyShopItem', (item) => {
         const p = players[socket.id];
-        
-        // 1. Zabezpieczenie: Czy gracz istnieje i CZY JEST W ZAMKU?
-        if (!p || !p.isSafe) {
-            socket.emit('shopError', { message: "Musisz być w zamku, aby kupować!" });
-            return;
-        }
+        if (!p || !p.isSafe) return;
 
-        // NOWY Cennik broni (ze wszystkimi tierami)
         const shopPrices = {
             'bow': 100, 'golden_bow': 250, 'diamond_bow': 500, 'crossbow': 1000, 'shotgun': 2000,
             'knife': 50, 'golden_knife': 150, 'diamond_knife': 350, 'hunting_knife': 700, 'cleaver': 1200,
@@ -186,42 +181,29 @@ io.on('connection', (socket) => {
 
         const price = shopPrices[item];
 
-        // 2. Transakcja i dodanie do ekwipunku
         if (price && p.score >= price) {
             p.score -= price;             
             p.inventory[item] = 1;        
             p.activeWeapon = item;        
-            
             socket.emit('shopSuccess', { item: item });
-            console.log(`[SKLEP] ${p.name} kupił ${item}. Zostało mu ${p.score} masy.`);
         } else {
             socket.emit('shopError', { message: "Za mało punktów masy!" });
         }
     });
 
-    // --- ZMIANA BRONI (Klawisze 1 i 2) ---
     socket.on('switchWeapon', (slot) => {
         const p = players[socket.id];
         if(!p) return;
-        
-        if (slot === 1) {
-            p.activeWeapon = 'sword';
-        } else if (slot === 2) {
-            // Szukamy najlepszej broni jaką gracz posiada
-            const types = ['shotgun', 'crossbow', 'diamond_bow', 'golden_bow', 'bow',
-                           'cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife',
-                           'explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'];
-            for(let t of types) {
-                if(p.inventory[t]) { p.activeWeapon = t; break; }
-            }
+        if (slot === 1) p.activeWeapon = 'sword';
+        else if (slot === 2) {
+            const types = ['shotgun', 'crossbow', 'diamond_bow', 'golden_bow', 'bow', 'cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife', 'explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'];
+            for(let t of types) if(p.inventory[t]) { p.activeWeapon = t; break; }
         }
     });
 
-    // --- MECHANIKA RZUTU RÓŻNYMI BRONIAMI (Klawisz E) ---
     socket.on('throwSword', (data) => {
         const p = players[socket.id];
         if (!p) return;
-
         let type = p.activeWeapon;
         let stats = weaponStats[type];
         
@@ -232,32 +214,19 @@ io.on('connection', (socket) => {
 
             if (canShoot) {
                 p.score -= stats.cost;
-                
-                // Miecz dziedziczy bonus z umiejętności, reszta ma bazowe mocne DMG
                 let finalDmg = type === 'sword' ? stats.dmg + (p.skills.weapon * 1) : stats.dmg;
                 let isPierce = type === 'sword' ? (p.weaponPath === 'piercing') : stats.piercing;
 
                 projectiles.push({
-                    id: ++entityIdCounter,
-                    ownerId: socket.id,
-                    x: data.x,
-                    y: data.y,
-                    dx: data.dx,
-                    dy: data.dy,
-                    life: stats.life,
-                    speed: stats.speed, 
-                    isBotSword: false,
-                    scoreAtThrow: p.score,
-                    isPiercing: isPierce, 
-                    damage: finalDmg,
-                    isWinter: false,
-                    projType: type 
+                    id: ++entityIdCounter, ownerId: socket.id,
+                    x: data.x, y: data.y, dx: data.dx, dy: data.dy,
+                    life: stats.life, speed: stats.speed, isBotSword: false,
+                    scoreAtThrow: p.score, isPiercing: isPierce, damage: finalDmg, isWinter: false, projType: type 
                 });
             }
         }
     });
 
-    // Zimowy Miecz z nieba
     socket.on('throwWinterSword', () => {
         const p = players[socket.id];
         const now = Date.now();
@@ -266,89 +235,94 @@ io.on('connection', (socket) => {
             let winterDmg = 15 + (p.skills.weapon * 2);
 
             projectiles.push({
-                id: ++entityIdCounter,
-                ownerId: socket.id,
-                x: p.x, 
-                y: p.y - 1000, 
-                dx: 0,
-                dy: 1.5, 
-                life: 150, 
-                speed: 18,
-                isBotSword: false,
-                scoreAtThrow: Math.max(700, p.score), 
-                isPiercing: true, 
-                isWinter: true, 
-                damage: winterDmg,
-                projType: 'winter'
+                id: ++entityIdCounter, ownerId: socket.id,
+                x: p.x, y: p.y - 1000, dx: 0, dy: 1.5, life: 150, speed: 18,
+                isBotSword: false, scoreAtThrow: Math.max(700, p.score), isPiercing: true, isWinter: true, damage: winterDmg, projType: 'winter'
             });
-        }
-    });
-
-    // Mechanika Podziału
-    socket.on('splitMass', (data) => {
-        const p = players[socket.id];
-        if (p && p.score >= 20) {
-            p.score -= data.mass;
         }
     });
 
     socket.on('disconnect', () => {
         const p = players[socket.id];
-        // --- NOWOŚĆ: Wyraźny log przy wylogowaniu/rozłączeniu ---
         console.log(`\n-------------------------------------------`);
-        if (p) {
-            console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer. (ID: ${socket.id})`);
-        } else {
-            console.log(`[ROZŁĄCZENIE] Socket (nie będący w grze) został rozłączony. (ID: ${socket.id})`);
-        }
+        if (p) console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer.`);
         delete players[socket.id];
-        console.log(`Aktualna liczba graczy na serwerze: ${Object.keys(players).length}`);
         console.log(`-------------------------------------------\n`);
     });
 });
 
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
-    // ZABÓJCZE MARGINESY DLA GRACZY (Ściany Śmierci)
+    // Kary za ucieczkę z mapy
     const pKeysList = Object.keys(players);
     for (let i = pKeysList.length - 1; i >= 0; i--) {
         let pId = pKeysList[i];
         let p = players[pId];
-        
-        // Zostawiamy delikatny bufor tolerancji dla lagów (np. 10px), żeby nie zabić za szybko
         if (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10) {
-            io.emit('killEvent', { text: `${p.name} zginął w lesie (poza mapą)!` }); 
+            io.emit('killEvent', { text: `${p.name} zginął poza mapą!` }); 
             killPlayer(pId);
         }
     }
 
-    // 1. Logika Botów 
+    // --- BUDOWA STRUKTURY ARMII DO OBLICZEŃ FORMACJI ---
+    let armies = {};
+    for(let b of bots) {
+        if (b.ownerId) {
+            if (!armies[b.ownerId]) armies[b.ownerId] = [];
+            armies[b.ownerId].push(b);
+        }
+    }
+
+    // 1. Logika Ruchu Botów i Formacji
     for (let i = bots.length - 1; i >= 0; i--) {
         let b = bots[i];
         
-        // --- ZMIANA: Logika podążania za Panem (Rój / Armia) ---
         if (b.ownerId) {
             let owner = players[b.ownerId];
-            if (owner) {
-                // Powolne rotowanie formacji wokół gracza (Rój)
-                b.orbitAngle = (b.orbitAngle || 0) + 0.015;
-                
-                // Każdy bot ma swój unikalny punkt docelowy WOKÓŁ gracza
-                let targetX = owner.x + Math.cos(b.orbitAngle) * b.orbitRadius;
-                let targetY = owner.y + Math.sin(b.orbitAngle) * b.orbitRadius;
-                
+            if (owner && armies[b.ownerId]) {
+                // Wyciągamy informacje o roju gracza
+                let myIndex = armies[b.ownerId].indexOf(b);
+                let total = armies[b.ownerId].length;
+                let targetX = owner.x;
+                let targetY = owner.y;
+
+                // --- MATEMATYKA FORMACJI WOJSKOWYCH ---
+                if (owner.formation === 0) { 
+                    // OKRĄG (Rotująca Tarcza)
+                    let angleStep = (Math.PI * 2) / total;
+                    let currentAngle = (Date.now() / 1500) + (myIndex * angleStep);
+                    let radius = 70 + (total * 2); // Koło rośnie wraz z ilością
+                    targetX = owner.x + Math.cos(currentAngle) * radius;
+                    targetY = owner.y + Math.sin(currentAngle) * radius;
+                } 
+                else if (owner.formation === 1) { 
+                    // KLIN (Trójkąt V za plecami)
+                    let row = Math.floor(myIndex / 2) + 1;
+                    let side = myIndex % 2 === 0 ? 1 : -1;
+                    if (myIndex === 0) { row = 1; side = 0; } // Dowódca tuż za graczem
+                    let spacingX = 45;
+                    let spacingY = 35;
+                    targetX = owner.x - Math.cos(owner.moveAngle) * (row * spacingX) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
+                    targetY = owner.y - Math.sin(owner.moveAngle) * (row * spacingX) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
+                } 
+                else if (owner.formation === 2) { 
+                    // LINIA (Falanga pozioma za plecami)
+                    let spacing = 45;
+                    let offset = (myIndex - (total - 1) / 2) * spacing;
+                    targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
+                    targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
+                }
+
+                // Fizyka podążania do punktu
                 let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
-                
-                // Bot idzie do swojego miejsca w szyku
-                if (distToTarget > 15) {
+                if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
-                    // Jeśli król biegnie szybko, armia przyspiesza, żeby go dogonić!
-                    let speedMult = distToTarget > 150 ? 1.6 : 1; 
+                    // Płynne dostosowanie prędkości (doganianie)
+                    let speedMult = distToTarget > 120 ? 1.8 : (distToTarget > 40 ? 1.3 : 0.8);
                     b.x += Math.cos(b.angle) * (b.speed * speedMult);
                     b.y += Math.sin(b.angle) * (b.speed * speedMult);
                 }
             } else {
-                // Jeśli właściciel zginął lub wylogował się, bot staje się znów dziki
                 b.ownerId = null;
                 b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
                 botNameCounter++;
@@ -360,16 +334,14 @@ setInterval(() => {
             b.x += Math.cos(b.angle) * b.speed;
             b.y += Math.sin(b.angle) * b.speed;
 
-            // Odbijanie botów od ścian
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
         }
 
-        // Strzelanie botów
+        // Strzelanie dzikich botów
         if (Math.random() < 0.01) {
             let type = b.activeWeapon;
             let stats = weaponStats[type];
-            
             if (stats && b.score >= stats.cost + 5) {
                 b.score -= stats.cost;
                 projectiles.push({
@@ -389,13 +361,11 @@ setInterval(() => {
         });
     }
 
-    // 2. Bot zjada Bota (Powiadomienia Kill Feed!)
+    // 2. Bot zjada Bota 
     for (let i = 0; i < bots.length; i++) {
         for (let j = i + 1; j < bots.length; j++) {
             let b1 = bots[i];
             let b2 = bots[j];
-            
-            // Boty z tym samym właścicielem nie zjadają się nawzajem!
             if (b1.ownerId && b1.ownerId === b2.ownerId) continue;
             
             let dist = Math.hypot(b1.x - b2.x, b1.y - b2.y);
@@ -414,7 +384,7 @@ setInterval(() => {
         }
     }
 
-    // 3. Kolizje Graczy (Jedzenie, Boty) + Powiadomienia Kill Feed!
+    // 3. Kolizje Graczy (Jedzenie, Boty) - ODDZIELONA REKRUTACJA
     Object.values(players).forEach(p => {
         if (!players[p.id]) return; 
 
@@ -432,24 +402,23 @@ setInterval(() => {
             let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
 
             if (!p.isSafe) {
-                // --- ZMIANA: Werbowanie botów (RTS) z przydziałem formacji ---
                 if (dist < pRadius && p.score > b.score * 1.15 && b.ownerId !== p.id) {
-                    io.emit('killEvent', { text: `${p.name} zwerbował do armii: ${b.name}!` }); 
-                    p.score += Math.floor(b.score * 0.5); // Bonus za zjedzenie nadal działa
                     
-                    // Zmiana bota w sługę (Miniona) zamiast spawnu nowego
-                    b.ownerId = p.id;
-                    b.score = 5; // Minion zaczyna z małą masą
-                    b.color = p.color; // Zmienia kolor na kolor gracza
-                    b.name = `Sługa [${p.name}]`; // Zmienia nick
-                    
-                    // --- NOWOŚĆ: Każdy bot dostaje losowe miejsce w formacji roju ---
-                    b.orbitAngle = Math.random() * Math.PI * 2; // Losowy kąt wokół gracza
-                    b.orbitRadius = 70 + Math.random() * 60;    // Dystans od 70 do 130 pikseli od gracza
-                    
+                    if (p.isRecruiting) {
+                        // TRYB WERBOWANIA (Zero zdobywanej masy, armia rośnie)
+                        io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
+                        b.ownerId = p.id;
+                        b.score = 5; 
+                        b.color = p.color; 
+                        b.name = `Wojownik`; 
+                    } else {
+                        // TRYB POŻERANIA (Brak rekrutacji, nowa masa, bot się odradza)
+                        io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
+                        p.score += Math.floor(b.score * 0.5);
+                        bots[bi] = spawnBot(); // Ważne: Respawnujemy bota na mapie!
+                    }
                     io.to(p.id).emit('botEaten', { newScore: p.score });
                 }
-                // Jeśli dziki bot (lub bot innego gracza) zje gracza
                 else if (dist < bRadius && b.score > p.score * 1.15 && b.ownerId !== p.id) {
                     io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
                     b.score += Math.floor(p.score * 0.5);
@@ -459,15 +428,13 @@ setInterval(() => {
         });
     });
 
-    // Gracz zjada Gracza (PvP) + Powiadomienia Kill Feed!
+    // Gracz zjada Gracza (PvP)
     const pKeys = Object.keys(players);
     for (let i = 0; i < pKeys.length; i++) {
         for (let j = i + 1; j < pKeys.length; j++) {
             let p1 = players[pKeys[i]];
             let p2 = players[pKeys[j]];
-            
             if (!p1 || !p2 || p1.isSafe || p2.isSafe) continue; 
-
             let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
             let r1 = 25 * (1 + Math.pow(Math.max(0, p1.score - 1), 0.45) * 0.15);
             let r2 = 25 * (1 + Math.pow(Math.max(0, p2.score - 1), 0.45) * 0.15);
@@ -484,17 +451,15 @@ setInterval(() => {
         }
     }
 
-    // 4. Fizyka Mieczy (Projectiles) + LOGIKA TARCZY I PANCERZA
+    // 4. Fizyka Mieczy
     for (let i = projectiles.length - 1; i >= 0; i--) {
         let p = projectiles[i];
-        
         p.x += p.dx * p.speed;
         p.y += p.dy * p.speed;
         p.life--;
 
         bots.forEach((b) => {
             let hitRange = p.isWinter ? 60 : 30; 
-            // ZMIANA: Pocisk nie uderza we własne boty gracza!
             if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
                 b.score = Math.max(1, b.score - p.damage);
                 if (!p.isPiercing) p.life = 0; 
@@ -504,21 +469,17 @@ setInterval(() => {
         Object.values(players).forEach(pl => {
             let hitRange = p.isWinter ? 60 : 30;
             if (p.ownerId !== pl.id && Math.hypot(p.x - pl.x, p.y - pl.y) < hitRange) {
-                
                 if (pl.isShielding && !p.isWinter) {
                     if (!p.isPiercing) p.life = 0; 
                 } else {
                     let damage = p.damage;
-                    
                     if (pl.score >= 800) { damage -= 4; if (pl.armorHits < 3 && !p.isWinter) { damage = 0; pl.armorHits++; } } 
                     else if (pl.score >= 400) { damage -= 3; } 
                     else if (pl.score >= 100) { damage -= 2; }
 
                     let strengthReduction = Math.floor((pl.skills.strength || 0) / 10);
                     damage -= strengthReduction;
-
                     damage = Math.max(1, damage); 
-
                     if (p.isWinter) damage = p.damage;
 
                     pl.score = Math.max(1, pl.score - Math.floor(damage));
@@ -526,41 +487,21 @@ setInterval(() => {
                 }
             }
         });
-
         if (p.life <= 0) projectiles.splice(i, 1);
     }
 
-    // --- 5. BEZLITOSNY SYSTEM KAR (SKILL RESET) ---
     Object.values(players).forEach(p => {
         let skillsChanged = false;
-
-        if (p.score < 100 && p.skills.strength > 0) {
-            p.skills.strength = 0;
-            skillsChanged = true;
-        }
-
+        if (p.score < 100 && p.skills.strength > 0) { p.skills.strength = 0; skillsChanged = true; }
         if (p.score < 15 && (p.skills.weapon > 0 || p.weaponPath !== 'none' || p.activeWeapon !== 'sword')) {
-            p.skills.weapon = 0;
-            p.weaponPath = 'none';
-            p.activeWeapon = 'sword'; 
-            skillsChanged = true;
+            p.skills.weapon = 0; p.weaponPath = 'none'; p.activeWeapon = 'sword'; skillsChanged = true;
         }
-
-        if (skillsChanged) {
-            io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
-        }
+        if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
     });
 
-    // 6. Wysłanie stanu świata do wszystkich
-    io.emit('serverTick', {
-        players,
-        bots,
-        foods,
-        projectiles
-    });
+    io.emit('serverTick', { players, bots, foods, projectiles });
 }, 33);
 
-// ZAKTUALIZOWANY PORT NA POTRZEBY HOSTINGU (RENDER)
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`=========================================`);
