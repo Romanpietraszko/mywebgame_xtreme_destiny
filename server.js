@@ -61,6 +61,11 @@ function spawnBot() {
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
         ownerId: null, 
+        // --- NOWOŚĆ: Pamięć formacji ---
+        angleOffset: 0, 
+        distOffset: 0,  
+        targetX: 0,     
+        targetY: 0,
         inventory: { bow: 0, knife: 0, shuriken: 0 },
         activeWeapon: 'sword'
     };
@@ -94,7 +99,7 @@ io.on('connection', (socket) => {
             activeWeapon: 'sword',
             // --- NOWOŚCI RTS ---
             isRecruiting: false, // Domyslnie pożera boty
-            formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia
+            formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia, 3: Własna
             moveAngle: 0         // Kierunek biegu gracza do formacji
         };
         socket.emit('init', { id: socket.id });
@@ -137,9 +142,23 @@ io.on('connection', (socket) => {
     socket.on('switchFormation', () => {
         const p = players[socket.id];
         if (p) {
-            p.formation = (p.formation + 1) % 3; // Zmiana 0 -> 1 -> 2 -> 0
-            let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : "LINIA");
+            p.formation = (p.formation + 1) % 4; // Zmiana na 4 stany
+            let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : (p.formation === 2 ? "LINIA" : "WŁASNA (PPM)"));
             socket.emit('formationSwitched', formName);
+        }
+    });
+
+    // --- NOWOŚĆ: Odbieranie przesuniętych botów z myszki ---
+    socket.on('setBotOffset', (data) => {
+        const p = players[socket.id];
+        let b = bots.find(bot => bot.id === data.botId);
+        if (p && b && b.ownerId === p.id) {
+            b.angleOffset = data.angleOffset;
+            b.distOffset = data.distOffset;
+            if (p.formation !== 3) {
+                p.formation = 3; // Automatyczna zmiana na "WŁASNA" po dotknięciu
+                socket.emit('formationSwitched', "WŁASNA (PPM)");
+            }
         }
     });
 
@@ -182,7 +201,7 @@ io.on('connection', (socket) => {
         const price = shopPrices[item];
 
         if (price && p.score >= price) {
-            p.score -= price;             
+            p.score -= price;              
             p.inventory[item] = 1;        
             p.activeWeapon = item;        
             socket.emit('shopSuccess', { item: item });
@@ -312,6 +331,15 @@ setInterval(() => {
                     targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
                     targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
                 }
+                else if (owner.formation === 3) {
+                    // WŁASNA (Drag & Drop z myszki)
+                    targetX = owner.x + Math.cos(owner.moveAngle + b.angleOffset) * b.distOffset;
+                    targetY = owner.y + Math.sin(owner.moveAngle + b.angleOffset) * b.distOffset;
+                }
+
+                // Przypisanie celu (dla frontu do rysowania "duchów")
+                b.targetX = targetX;
+                b.targetY = targetY;
 
                 // Fizyka podążania do punktu
                 let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
@@ -327,6 +355,8 @@ setInterval(() => {
                 b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
                 botNameCounter++;
                 b.name = `Bot AI #${botNameCounter}`;
+                b.targetX = 0;
+                b.targetY = 0;
             }
         } else {
             // Dziki bot - losowy ruch
@@ -411,6 +441,13 @@ setInterval(() => {
                         b.score = 5; 
                         b.color = p.color; 
                         b.name = `Wojownik`; 
+                        
+                        // Zapisanie relatywnej pozycji w momencie rekrutacji
+                        let dx = b.x - p.x;
+                        let dy = b.y - p.y;
+                        b.distOffset = Math.hypot(dx, dy);
+                        b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
+
                     } else {
                         // TRYB POŻERANIA (Brak rekrutacji, nowa masa, bot się odradza)
                         io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
