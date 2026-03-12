@@ -524,23 +524,10 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     const inv = e.inventory || { bow: 0, knife: 0, shuriken: 0 };
     const actWpn = e.activeWeapon || 'sword';
 
-    ctx.strokeStyle = e.color || '#000';
-    ctx.lineWidth = 3 * sc;
-    ctx.lineCap = 'round';
-    
-    // --- ZMIANA: Rysowanie rąk, nóg i EMOTKI zamiast patyczaka ---
-    
-    // Ręce i nogi dorysowane z boków
-    ctx.beginPath();
-    ctx.moveTo(x - 10 * sc, y); ctx.lineTo(x - 15 * sc, y + 10 * sc); // Lewa ręka
-    ctx.moveTo(x + 10 * sc, y); ctx.lineTo(x + 15 * sc, y + 10 * sc); // Prawa ręka
-    ctx.moveTo(x - 5 * sc, y + 15 * sc); ctx.lineTo(x - 10 * sc, y + 35 * sc); // Lewa noga
-    ctx.moveTo(x + 5 * sc, y + 15 * sc); ctx.lineTo(x + 10 * sc, y + 35 * sc); // Prawa noga
-    ctx.stroke();
-
-    // Emotka (Głowa + Tułów)
+    // --- NOWY WYGLĄD: Urocza emotka z grubszymi łapkami (Brak patyczaka!) ---
+    // 1. Emotka jako główne ciało
     ctx.save();
-    ctx.font = `${32 * sc}px Arial`; 
+    ctx.font = `${38 * sc}px Arial`; 
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     
@@ -548,14 +535,33 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     if (e === player) {
         emojiChar = '🤤'; // Gracz
     } else if (e.name && e.name.includes('Bot')) {
-        emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; // Boty: Szkielet jeśli ma punkty, inaczej Zombie
+        emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; // Boty
     } else {
-        emojiChar = '👿'; // Inni gracze po sieci
+        emojiChar = '👿'; // Inni gracze
     }
-    
-    ctx.fillText(emojiChar, x, y - 8 * sc); // Rysujemy na odpowiedniej wysokości
+    ctx.fillText(emojiChar, x, y); // Rysujemy idealnie na środku
     ctx.restore();
-    // --- KONIEC ZMIANY ---
+
+    // 2. Grubsze, urocze rączki i nóżki
+    ctx.strokeStyle = e.color || '#000';
+    ctx.lineWidth = 5.5 * sc; 
+    ctx.lineCap = 'round';
+    
+    ctx.beginPath();
+    // Lewa rączka
+    ctx.moveTo(x - 14 * sc, y + 4 * sc); 
+    ctx.lineTo(x - 21 * sc, y + 12 * sc); 
+    // Prawa rączka
+    ctx.moveTo(x + 14 * sc, y + 4 * sc); 
+    ctx.lineTo(x + 21 * sc, y + 12 * sc); 
+    // Lewa nóżka
+    ctx.moveTo(x - 7 * sc, y + 16 * sc); 
+    ctx.lineTo(x - 11 * sc, y + 29 * sc); 
+    // Prawa nóżka
+    ctx.moveTo(x + 7 * sc, y + 16 * sc); 
+    ctx.lineTo(x + 11 * sc, y + 29 * sc); 
+    ctx.stroke();
+    // --- KONIEC NOWEGO WYGLĄDU ---
 
     const armorTier = getTier(score, [100, 450, 850]);
     const helmetTier = getTier(score, [500, 800, 1150]);
