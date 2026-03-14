@@ -8,7 +8,7 @@ app.use(express.static(__dirname));
 // --- KONFIGURACJA ŚWIATA ---
 const WORLD_SIZE = 4000;
 const MAX_FOODS = 200;
-const MAX_BOTS = 25;
+const MAX_BOTS = 80; // <--- ZWIĘKSZONA LICZBA BOTÓW (PRAWDZIWA WOJNA!)
 
 const players = {};
 let foods = [];
