@@ -16,6 +16,7 @@ let lastCalculatedTier = 0;
 let wasSafe = false; 
 let killLogs = [];
 const visualStates = {}; 
+let lastWinterUseClient = 0; // NOWOŚĆ: Zmienna do paska ładowania R
 
 // NOWOŚCI: Zmienne do precyzyjnego przeciągania botów (RTS)
 let draggedBotId = null; 
@@ -170,8 +171,13 @@ window.onkeydown = (e) => {
                 dy: lastMoveDir.y 
             });
         }
+        // NOWOŚĆ: Synchronizacja paska ładowania z rzucaniem zimowego miecza
         if (e.code === 'KeyR' && weaponPath === 'winter') {
-            socket.emit('throwWinterSword');
+            const now = Date.now();
+            if (now - lastWinterUseClient >= 15000) {
+                lastWinterUseClient = now;
+                socket.emit('throwWinterSword');
+            }
         }
         if (e.code === 'KeyQ' && player.score >= 50) {
             player.isShielding = true;
@@ -752,10 +758,14 @@ function update() {
         player.y += Math.sin(moveAngle) * speed;
     }
     
-    player.x = Math.max(0, Math.min(WORLD_SIZE, player.x)); player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
-    player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
-    camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-    socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
+    // NOWOŚĆ: Śmierć po wyjściu poza krawędź mapy! (zastępuje dawne Math.max/Math.min)
+    if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
+        socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
+    } else {
+        player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+        camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
+        socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
+    }
 }
 
 function gameLoop() {
@@ -905,6 +915,28 @@ function gameLoop() {
                 }
             }
             ctx.font = '9px Arial'; ctx.fillText(secText, startX + 65, startY + 40);
+
+            // --- NOWOŚĆ: UI COOLDOWNU DLA ZIMOWEGO MIECZA (Pasek R) ---
+            if (weaponPath === 'winter') {
+                let winterProgress = Math.min(1, (Date.now() - lastWinterUseClient) / 15000);
+                let btnX = startX + 120;
+                
+                // Ciemne tło
+                ctx.fillStyle = 'rgba(44, 62, 80, 0.8)';
+                ctx.fillRect(btnX, startY, 50, 50);
+                
+                // Ładujący się niebieski pasek
+                ctx.fillStyle = 'rgba(52, 152, 219, 0.8)';
+                ctx.fillRect(btnX, startY + 50 * (1 - winterProgress), 50, 50 * winterProgress);
+                
+                // Obramowanie
+                ctx.strokeStyle = winterProgress >= 1 ? '#3498db' : '#7f8c8d'; 
+                ctx.lineWidth = 2; ctx.strokeRect(btnX, startY, 50, 50);
+                
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText('R', btnX + 25, startY + 18);
+                ctx.font = '10px Arial'; ctx.fillText(winterProgress >= 1 ? 'GOTOWE' : 'ŁADUJE', btnX + 25, startY + 40);
+            }
+
             ctx.restore();
             
             const skillMenu = document.getElementById('skill-menu');
