@@ -15,8 +15,11 @@ let lastMoveDir = { x: 1, y: 0 };
 let lastCalculatedTier = 0; 
 let wasSafe = false; 
 let killLogs = [];
-const visualStates = {}; // NOWOŚĆ: Przechowuje liczniki animacji twarzy
-let draggedBotId = null; // NOWOŚĆ: Pamięta, którego bota przeciągasz myszką!
+const visualStates = {}; 
+
+// NOWOŚCI: Zmienne do precyzyjnego przeciągania botów (RTS)
+let draggedBotId = null; 
+let dragMouseWorld = { x: 0, y: 0 };
 
 const safeZones = [
     { x: 1000, y: 1000, radius: 250 },
@@ -71,23 +74,16 @@ window.addEventListener('mousemove', (e) => {
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
 
-        // --- NOWOŚĆ: Ręczne układanie formacji w czasie rzeczywistym ---
-        if (draggedBotId && (e.buttons & 2)) { // Trzymasz PPM
-            let dx = mouseWorldX - player.x;
-            let dy = mouseWorldY - player.y;
-            let dist = Math.hypot(dx, dy);
-            let absAngle = Math.atan2(dy, dx);
-            let playerFaceAngle = Math.atan2(lastMoveDir.y, lastMoveDir.x);
-            let relAngle = absAngle - playerFaceAngle;
-            
-            socket.emit('setBotOffset', { botId: draggedBotId, angleOffset: relAngle, distOffset: dist });
+        // Aktualizujemy pozycję myszy u klienta do rysowania smyczy (zero spamu do serwera!)
+        if (draggedBotId) {
+            dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
         }
     }
 });
 
 window.addEventListener('mousedown', (e) => {
     if (gameState === 'PLAYING' && player) { 
-        // --- NOWOŚĆ: Chwytanie bota do układania formacji (PPM) ---
+        // --- Chwytanie bota do układania formacji (PPM) ---
         if (e.button === 2) { 
             const rect = canvas.getBoundingClientRect();
             const mouseWorldX = e.clientX - rect.left + camera.x;
@@ -107,6 +103,7 @@ window.addEventListener('mousedown', (e) => {
 
             if (closestBot) {
                 draggedBotId = closestBot.id;
+                dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
             }
         }
         // Strzał z Miecza (LPM)
@@ -136,8 +133,22 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
-    if (e.button === 2) {
-        draggedBotId = null; // Puszczasz bota z myszki
+    // Puszczasz bota z myszki (PPM) - wysyłamy JEDNĄ komendę do serwera
+    if (e.button === 2 && draggedBotId && player) {
+        let dx = dragMouseWorld.x - player.x;
+        let dy = dragMouseWorld.y - player.y;
+        let dist = Math.hypot(dx, dy);
+        let absAngle = Math.atan2(dy, dx);
+        let playerFaceAngle = Math.atan2(lastMoveDir.y, lastMoveDir.x);
+        let relAngle = absAngle - playerFaceAngle;
+
+        socket.emit('setBotOffset', {
+            botId: draggedBotId,
+            angleOffset: relAngle,
+            distOffset: dist
+        });
+
+        draggedBotId = null; 
     }
 });
 
@@ -165,7 +176,7 @@ window.onkeydown = (e) => {
         if (e.code === 'KeyQ' && player.score >= 50) {
             player.isShielding = true;
         }
-        // --- NOWOŚĆ: Klawisze RTS ---
+        // Klawisze RTS
         if (e.code === 'KeyP') socket.emit('toggleRecruit');
         if (e.code === 'KeyC') socket.emit('switchFormation');
     }
@@ -215,7 +226,6 @@ socket.on('killEvent', (data) => {
     killLogs.push({ text: data.text, time: 200 }); 
 });
 
-// --- NOWOŚĆ: Powiadomienia RTS z serwera ---
 socket.on('recruitToggled', (state) => {
     killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
 });
@@ -305,13 +315,9 @@ function checkEquipmentUpgrades() {
 // --- RYSOWANIE GRAFIKI ---
 
 function drawForestMap() {
-    // --- NOWOŚĆ: BARDZIEJ ORYGINALNA MAPA Z SIATKĄ ---
-    
-    // Tło (Ziemia/Trawa)
-    ctx.fillStyle = '#264a18'; // Głębsza zieleń
+    ctx.fillStyle = '#264a18';
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    // Rysowanie dynamicznej siatki (Grid), ułatwia poczucie ruchu!
     ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
     ctx.lineWidth = 2;
     const TILE_SIZE = 100;
@@ -330,8 +336,7 @@ function drawForestMap() {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Drogi z obramowaniem (Lepiej widoczne i stylowe)
-    ctx.fillStyle = '#6d4c41'; // Kolor ubitej ziemi
+    ctx.fillStyle = '#6d4c41'; 
     ctx.strokeStyle = '#3e2723';
     ctx.lineWidth = 10;
     for(let road of mapData.roads) {
@@ -344,27 +349,23 @@ function drawForestMap() {
     ctx.shadowOffsetX = 8;
     ctx.shadowOffsetY = 8;
 
-    // Ulepszone rysowanie drzew (Efekt warstw 3D)
     for(let tree of mapData.trees) {
         if (tree.x + tree.radius < camera.x || tree.x - tree.radius > camera.x + canvas.width ||
             tree.y + tree.radius < camera.y || tree.y - tree.radius > camera.y + canvas.height) {
             continue;
         }
 
-        // Pień
         ctx.fillStyle = '#3e2723';
         ctx.fillRect(tree.x - 8, tree.y + tree.radius - 20, 16, 35);
 
-        // Główna korona
         ctx.beginPath();
         ctx.arc(tree.x, tree.y, tree.radius, 0, Math.PI * 2);
         ctx.fillStyle = tree.color;
         ctx.fill();
         ctx.closePath();
 
-        // Podświetlenie korony (Highlight - daje efekt objętości)
         ctx.save();
-        ctx.shadowColor = 'transparent'; // Wyłączamy cień dla highlightu
+        ctx.shadowColor = 'transparent'; 
         ctx.beginPath();
         ctx.arc(tree.x - tree.radius * 0.2, tree.y - tree.radius * 0.2, tree.radius * 0.6, 0, Math.PI * 2);
         ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
@@ -588,223 +589,143 @@ function drawProShield(x, y, sc, tier) {
     ctx.restore();
 }
 
+// --- NOWA WERSJA: GRUBE ŁAPKI + Z-INDEX (Zbroja z tyłu, twarz z przodu) ---
 function drawStickman(e, x, y, sc, safe, kingId) {
-    ctx.save();
+    ctx.save(); 
     if (safe) ctx.globalAlpha = 0.35;
     
-    if (e.aura && e.aura.time > 0) {
-        ctx.save();
+    // --- AURA ---
+    if (e.aura && e.aura.time > 0) { 
+        ctx.save(); 
         let progress = 1 - (e.aura.time / e.aura.maxTime); 
         let radius = (30 * sc) + (progress * 70 * sc); 
         let alpha = 1 - Math.pow(progress, 2); 
-        
-        ctx.globalAlpha = alpha;
-        
-        let gradient = ctx.createLinearGradient(x, y + 20 * sc, x, y - 120 * sc);
-        gradient.addColorStop(0, e.aura.color);
-        gradient.addColorStop(1, 'transparent');
-        ctx.fillStyle = gradient;
-        ctx.fillRect(x - 25 * sc, y - 120 * sc, 50 * sc, 140 * sc);
-
-        ctx.beginPath();
-        ctx.arc(x, y, radius, 0, Math.PI * 2);
-        ctx.strokeStyle = e.aura.color;
-        ctx.lineWidth = 15 * (1 - progress);
-        ctx.shadowBlur = 20;
-        ctx.shadowColor = e.aura.color;
-        ctx.stroke();
-        ctx.restore();
+        ctx.globalAlpha = alpha; 
+        let gradient = ctx.createLinearGradient(x, y + 20 * sc, x, y - 120 * sc); 
+        gradient.addColorStop(0, e.aura.color); 
+        gradient.addColorStop(1, 'transparent'); 
+        ctx.fillStyle = gradient; 
+        ctx.fillRect(x - 25 * sc, y - 120 * sc, 50 * sc, 140 * sc); 
+        ctx.beginPath(); 
+        ctx.arc(x, y, radius, 0, Math.PI * 2); 
+        ctx.strokeStyle = e.aura.color; 
+        ctx.lineWidth = 15 * (1 - progress); 
+        ctx.shadowBlur = 20; 
+        ctx.shadowColor = e.aura.color; 
+        ctx.stroke(); 
+        ctx.restore(); 
     }
 
-    const score = e.score || 0;
-    const skills = e.skills || (e === player ? playerSkills : { speed: 0, strength: 0, weapon: 0 });
-    const inv = e.inventory || { bow: 0, knife: 0, shuriken: 0 };
+    const score = e.score || 0; 
+    const skills = e.skills || (e === player ? playerSkills : { speed: 0, strength: 0, weapon: 0 }); 
+    const inv = e.inventory || { bow: 0, knife: 0, shuriken: 0 }; 
     const actWpn = e.activeWeapon || 'sword';
 
-    // --- NOWOŚĆ: Logika pamięci animacji twarzy ---
-    let eId = e.id || e.name || 'unknown';
-    if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
-    
-    if (score > visualStates[eId].lastScore) {
-        visualStates[eId].eatTimer = 15; // Zjadł coś = otwarta buzia na ułamek sekundy
-        visualStates[eId].lastScore = score;
-    }
-    // Obsługa spadku punktów (żeby nie zablokować licznika)
-    if (score < visualStates[eId].lastScore) {
-        visualStates[eId].lastScore = score;
-    }
-    
-    if (visualStates[eId].eatTimer > 0) visualStates[eId].eatTimer--;
-
-    // 1. Emotka jako główne ciało
-    ctx.save();
-    ctx.font = `${38 * sc}px Arial`; 
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    let emojiChar = '🙂'; // Domyślnie zadowolony
-    
-    if (visualStates[eId].eatTimer > 0) {
-        emojiChar = '🤤'; // Aktualnie je!
-    } else if (e.name === 'Wojownik') {
-        emojiChar = '😠'; // Zwerbowany do armii jest zawsze skupiony i groźny
-    } else if (e.name && e.name.includes('Bot')) {
-        emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; // Boty
-    } else if (e !== player) {
-        emojiChar = '👿'; // Inni wrogowie sieciowi
-    }
-
-    ctx.fillText(emojiChar, x, y); 
-    ctx.restore();
-
-    // 2. Grubsze, urocze rączki i nóżki
-    ctx.strokeStyle = e.color || '#000';
-    ctx.lineWidth = 5.5 * sc; 
-    ctx.lineCap = 'round';
-    
-    ctx.beginPath();
-    ctx.moveTo(x - 14 * sc, y + 4 * sc); ctx.lineTo(x - 21 * sc, y + 12 * sc); // L ręka
-    ctx.moveTo(x + 14 * sc, y + 4 * sc); ctx.lineTo(x + 21 * sc, y + 12 * sc); // P ręka
-    ctx.moveTo(x - 7 * sc, y + 16 * sc); ctx.lineTo(x - 11 * sc, y + 29 * sc); // L noga
-    ctx.moveTo(x + 7 * sc, y + 16 * sc); ctx.lineTo(x + 11 * sc, y + 29 * sc); // P noga
-    ctx.stroke();
-
-    const armorTier = getTier(score, [100, 450, 850]);
-    const helmetTier = getTier(score, [500, 800, 1150]);
-    const swordTier = getTier(score, [15, 300, 700]);
+    const armorTier = getTier(score, [100, 450, 850]); 
+    const helmetTier = getTier(score, [500, 800, 1150]); 
+    const swordTier = getTier(score, [15, 300, 700]); 
     const shieldTier = getTier(score, [50, 150, 300]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
 
-    if (armorTier > 0) drawProArmor(x, y, sc, armorTier, skills.strength);
+    // 1. GRUBE, UROCZE ŁAPKI (Rysowane na samym dole)
+    ctx.save();
+    ctx.strokeStyle = e.color || '#000'; 
+    ctx.lineWidth = 11 * sc; 
+    ctx.lineCap = 'round'; 
+    ctx.lineJoin = 'round';
+    
+    ctx.beginPath(); 
+    ctx.moveTo(x - 15 * sc, y + 5 * sc); ctx.lineTo(x - 22 * sc, y + 12 * sc); // L ręka
+    ctx.moveTo(x + 15 * sc, y + 5 * sc); ctx.lineTo(x + 22 * sc, y + 12 * sc); // P ręka
+    ctx.moveTo(x - 8 * sc, y + 14 * sc); ctx.lineTo(x - 11 * sc, y + 28 * sc); // L noga
+    ctx.moveTo(x + 8 * sc, y + 14 * sc); ctx.lineTo(x + 11 * sc, y + 28 * sc); // P noga
+    ctx.stroke();
+    ctx.restore();
+
+    // 2. NAKOLANNIKI (też pod spodem)
+    if (score >= 200) { 
+        const legTier = getTier(score, [200, 500, 900]); 
+        ctx.strokeStyle = legTier === 3 ? '#f1c40f' : (legTier === 2 ? '#3498db' : '#95a5a6'); 
+        ctx.lineWidth = 8 * sc; 
+        ctx.lineCap = 'round';
+        ctx.beginPath(); ctx.moveTo(x - 5 * sc, y + 16 * sc); ctx.lineTo(x - 11 * sc, y + 27 * sc); 
+        ctx.moveTo(x + 5 * sc, y + 16 * sc); ctx.lineTo(x + 11 * sc, y + 27 * sc); 
+        ctx.stroke(); 
+    }
+
+    // 3. BUTY (pod spodem)
+    if (score >= 350) { 
+        ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#34495e'); 
+        ctx.beginPath(); ctx.roundRect(x - 16 * sc, y + 26 * sc, 12 * sc, 8 * sc, 4); ctx.fill(); 
+        ctx.beginPath(); ctx.roundRect(x + 4 * sc, y + 26 * sc, 12 * sc, 8 * sc, 4); ctx.fill(); 
+        if (bootTier >= 2) { 
+            ctx.fillStyle = 'white'; 
+            ctx.beginPath(); ctx.moveTo(x-14*sc, y+31*sc); ctx.lineTo(x-20*sc, y+25*sc); ctx.lineTo(x-12*sc, y+27*sc); ctx.fill(); 
+            ctx.beginPath(); ctx.moveTo(x+14*sc, y+31*sc); ctx.lineTo(x+20*sc, y+25*sc); ctx.lineTo(x+12*sc, y+27*sc); ctx.fill(); 
+        } 
+    }
+
+    // 4. ZBROJA (Rysowana PRZED twarzą, udaje brzuszek pod głową)
+    if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
+
+    // 5. TWARZ / EMOTKA (Rysowana NA WIERZCHU, żeby zbroja jej nie zasłaniała!)
+    let eId = e.id || e.name || 'unknown'; 
+    if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
+    if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
+    if (score < visualStates[eId].lastScore) { visualStates[eId].lastScore = score; } 
+    if (visualStates[eId].eatTimer > 0) visualStates[eId].eatTimer--;
+
+    ctx.save(); 
+    ctx.font = `${42 * sc}px Arial`; 
+    ctx.textAlign = 'center'; 
+    ctx.textBaseline = 'middle';
+    
+    // Lekki cień pod buzią, żeby odcinała się od zbroi
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+    ctx.shadowBlur = 6 * sc;
+    ctx.shadowOffsetY = 2 * sc;
+
+    let emojiChar = '🙂'; 
+    if (visualStates[eId].eatTimer > 0) emojiChar = '🤤'; 
+    else if (e.name === 'Wojownik') emojiChar = '😠'; 
+    else if (e.name && e.name.includes('Bot')) emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; 
+    else if (e !== player) emojiChar = '👿';
+    ctx.fillText(emojiChar, x, y); 
+    ctx.restore();
+
+    // 6. HEŁM (Na samej górze głowy)
     if (helmetTier > 0) drawProHelmet(x, y, sc, helmetTier);
 
-    if (e.isShielding) {
-        ctx.save();
-        ctx.strokeStyle = '#3498db';
-        ctx.lineWidth = 5 * sc;
-        ctx.shadowBlur = 10;
-        ctx.shadowColor = '#3498db';
-        ctx.beginPath();
-        let shieldAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) : 0;
-        ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9);
-        ctx.stroke();
-        ctx.restore();
+    // 7. TARCZA
+    if (e.isShielding) { 
+        ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; ctx.beginPath(); 
+        let shieldAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) : 0; 
+        ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9); ctx.stroke(); ctx.restore(); 
     }
+    if (score >= 50) { drawProShield(x - 20 * sc, y + 6 * sc, sc, shieldTier); }
 
+    // 8. BRONIE W RĘCE
     if (score >= 15 || actWpn !== 'sword') {
-        let weaponAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) + 0.5 : 0.5;
-        let handX = x + 15 * sc, handY = y + 10 * sc;
-
-        if (actWpn === 'sword' && score >= 15) {
-            e.isPiercing = (e === player) ? (weaponPath === 'piercing') : false; 
-            drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1);
-        } else if (actWpn.includes('bow') || actWpn === 'crossbow' || actWpn === 'shotgun') { 
-            drawBowModel(handX, handY, weaponAngle, sc); 
-        } else if (actWpn.includes('knife') || actWpn === 'cleaver') { 
-            drawKnifeModel(handX, handY, weaponAngle, sc); 
-        } else if (actWpn.includes('shuriken') || actWpn === 'chakram' || actWpn === 'explosive_kunai') { 
-            drawShurikenModel(handX, handY, weaponAngle, sc); 
-        }
+        let weaponAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) + 0.5 : 0.5; 
+        let handX = x + 18 * sc, handY = y + 10 * sc; // Broń przesunięta do nowej, grubej łapki
+        if (actWpn === 'sword' && score >= 15) { e.isPiercing = (e === player) ? (weaponPath === 'piercing') : false; drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1); } 
+        else if (actWpn.includes('bow') || actWpn === 'crossbow' || actWpn === 'shotgun') { drawBowModel(handX, handY, weaponAngle, sc); } 
+        else if (actWpn.includes('knife') || actWpn === 'cleaver') { drawKnifeModel(handX, handY, weaponAngle, sc); } 
+        else if (actWpn.includes('shuriken') || actWpn === 'chakram' || actWpn === 'explosive_kunai') { drawShurikenModel(handX, handY, weaponAngle, sc); }
         
-        if (e === player && gameState === 'PLAYING') {
-            ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(x + lastMoveDir.x * 45, y + lastMoveDir.y * 45);
-            ctx.lineTo(x + lastMoveDir.x * 75, y + lastMoveDir.y * 75);
-            ctx.stroke();
-        }
+        if (e === player && gameState === 'PLAYING') { ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + lastMoveDir.x * 45, y + lastMoveDir.y * 45); ctx.lineTo(x + lastMoveDir.x * 75, y + lastMoveDir.y * 75); ctx.stroke(); }
     }
 
-    if (score >= 200) {
-        const legTier = getTier(score, [200, 500, 900]);
-        ctx.strokeStyle = legTier === 3 ? '#f1c40f' : (legTier === 2 ? '#3498db' : '#95a5a6');
-        ctx.lineWidth = 6 * sc;
-        ctx.beginPath(); ctx.moveTo(x, y + 15 * sc); ctx.lineTo(x - 7 * sc, y + 28 * sc);
-        ctx.moveTo(x, y + 15 * sc); ctx.lineTo(x + 7 * sc, y + 28 * sc);
-        ctx.stroke();
-    }
-
-    if (score >= 350) {
-        ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#34495e');
-        ctx.fillRect(x - 14 * sc, y + 31 * sc, 9 * sc, 5 * sc);
-        ctx.fillRect(x + 5 * sc, y + 31 * sc, 9 * sc, 5 * sc);
-        if (bootTier >= 2) {
-            ctx.fillStyle = 'white';
-            ctx.beginPath(); ctx.moveTo(x-14*sc, y+31*sc); ctx.lineTo(x-22*sc, y+24*sc); ctx.lineTo(x-14*sc, y+27*sc); ctx.fill();
-            ctx.beginPath(); ctx.moveTo(x+14*sc, y+31*sc); ctx.lineTo(x+22*sc, y+24*sc); ctx.lineTo(x+14*sc, y+27*sc); ctx.fill();
-        }
-    }
-
-    if (score >= 50) {
-        drawProShield(x - 18 * sc, y + 5 * sc, sc, shieldTier);
-    }
-
-    if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) {
-        ctx.save();
-        ctx.translate(x - 5 * sc, y + 2 * sc); 
-        ctx.rotate(-Math.PI / 6);
-        ctx.fillStyle = '#4a235a'; 
-        ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc);
-        ctx.fillStyle = '#bdc3c7';
-        ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc);
-        ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc);
-        ctx.fillStyle = '#e74c3c'; 
-        ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc);
-        ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc);
-
-        if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') {
-            ctx.strokeStyle = '#8e44ad'; 
-            ctx.lineWidth = 3 * sc; 
-            ctx.lineCap = 'round';
-            ctx.beginPath(); 
-            ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); 
-            ctx.stroke();
-            ctx.strokeStyle = '#bdc3c7'; 
-            ctx.lineWidth = 1 * sc;
-            ctx.beginPath(); 
-            ctx.moveTo(0, -16 * sc); 
-            ctx.lineTo(0, 16 * sc); 
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') {
-        ctx.save();
-        ctx.translate(x + 12 * sc, y + 14 * sc);
-        ctx.rotate(Math.PI / 4);
-        ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill();
-        ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc);
-        ctx.restore();
-    }
-
-    if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') {
-        ctx.save();
-        ctx.translate(x - 10 * sc, y + 18 * sc);
-        ctx.fillStyle = '#34495e';
-        for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); }
-        ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill();
-        ctx.restore();
-    }
-
-    if (kingId === eId && score >= 1) { 
-        ctx.fillStyle = '#f1c40f'; ctx.beginPath();
-        ctx.moveTo(x - 12 * sc, y - 35 * sc); ctx.lineTo(x - 12 * sc, y - 55 * sc);
-        ctx.lineTo(x - 6 * sc, y - 45 * sc); ctx.lineTo(x, y - 55 * sc);
-        ctx.lineTo(x + 6 * sc, y - 45 * sc); ctx.lineTo(x + 12 * sc, y - 55 * sc);
-        ctx.lineTo(x + 12 * sc, y - 35 * sc); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill();
-    }
-
-    ctx.fillStyle = '#fff'; 
-    ctx.font = `bold ${13 * sc}px Arial`;
-    ctx.textAlign = 'center';
+    // 9. BRONIE NA PLECACH
+    if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) { ctx.save(); ctx.translate(x - 5 * sc, y + 2 * sc); ctx.rotate(-Math.PI / 6); ctx.fillStyle = '#4a235a'; ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc); ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc); ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc); ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc); if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') { ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc; ctx.beginPath(); ctx.moveTo(0, -16 * sc); ctx.lineTo(0, 16 * sc); ctx.stroke(); } ctx.restore(); }
+    if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
+    if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') { ctx.save(); ctx.translate(x - 10 * sc, y + 18 * sc); ctx.fillStyle = '#34495e'; for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); } ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     
-    // Zwerbowane boty mają wyłączone nicki na mapie, żeby nie robić bałaganu
-    if (e.name !== 'Wojownik') {
-        ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc);
-    } else {
-        ctx.fillText(`[${score}]`, x, y - 65 * sc);
-    }
+    // 10. KORONA I NICK
+    if (kingId === eId && score >= 1) { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(x - 12 * sc, y - 35 * sc); ctx.lineTo(x - 12 * sc, y - 55 * sc); ctx.lineTo(x - 6 * sc, y - 45 * sc); ctx.lineTo(x, y - 55 * sc); ctx.lineTo(x + 6 * sc, y - 45 * sc); ctx.lineTo(x + 12 * sc, y - 55 * sc); ctx.lineTo(x + 12 * sc, y - 35 * sc); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill(); }
+
+    ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * sc}px Arial`; ctx.textAlign = 'center';
+    if (e.name !== 'Wojownik') { ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc); } else { ctx.fillText(`[${score}]`, x, y - 65 * sc); } 
     
     ctx.restore();
 }
@@ -880,32 +801,39 @@ function gameLoop() {
             }
         });
 
-        // --- NOWOŚĆ: Rysowanie "podpowiadaczek" (Docelowych miejsc dla botów z Twojej armii) ---
-        bots.forEach(b => {
-            if (b.ownerId === myId && b.targetX && b.targetY) {
-                ctx.save();
-                ctx.strokeStyle = 'rgba(241, 196, 15, 0.6)'; // Złoty, lekko przezroczysty kolor
-                ctx.lineWidth = 2;
-                ctx.setLineDash([5, 5]); // Linia przerywana dla "ducha"
-                
-                // Rysujemy cel formacji
-                ctx.beginPath();
-                ctx.arc(b.targetX, b.targetY, 20, 0, Math.PI * 2);
-                ctx.stroke();
+        // --- CZYSTE RYSOWANIE "PODPOWIADACZKI" (Tylko w trakcie aktywnego przeciągania na kliencie) ---
+        if (draggedBotId && player) {
+            ctx.save();
+            
+            // 1. Smycz (Linia od gracza do myszki)
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)';
+            ctx.lineWidth = 2;
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y);
+            ctx.stroke();
 
-                // Jeśli aktualnie przeciągasz TEGO bota, wyraźnie to zaznacz linią!
-                if (draggedBotId === b.id) {
-                    ctx.fillStyle = 'rgba(241, 196, 15, 0.2)';
-                    ctx.fill(); // Wypełnij kółko
-                    
-                    ctx.beginPath();
-                    ctx.moveTo(player.x, player.y);
-                    ctx.lineTo(b.targetX, b.targetY);
-                    ctx.stroke(); // Połącz bota z tobą wizualną "smyczą" podczas ustawiania
-                }
-                ctx.restore();
+            // 2. Cel (Duch gdzie bot stanie)
+            ctx.beginPath();
+            ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)';
+            ctx.fill();
+            ctx.stroke();
+
+            // 3. Wyraźne podświetlenie bota, którego właśnie złapałeś!
+            let b = bots.find(bot => bot.id === draggedBotId);
+            if (b) {
+                ctx.setLineDash([]); // Pełna linia dla obwódki
+                ctx.strokeStyle = '#f1c40f';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.arc(b.x, b.y, 40, 0, Math.PI * 2);
+                ctx.stroke();
             }
-        });
+            
+            ctx.restore();
+        }
 
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
