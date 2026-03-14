@@ -61,7 +61,7 @@ function spawnBot() {
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
         ownerId: null, 
-        // --- NOWOŚĆ: Pamięć formacji ---
+        // --- Pamięć formacji RTS ---
         angleOffset: 0, 
         distOffset: 0,  
         targetX: 0,     
@@ -130,7 +130,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NOWOŚĆ: Przełączniki RTS ---
+    // --- Przełączniki RTS ---
     socket.on('toggleRecruit', () => {
         const p = players[socket.id];
         if (p) {
@@ -148,7 +148,7 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NOWOŚĆ: Odbieranie przesuniętych botów z myszki ---
+    // --- Odbieranie przesuniętych botów z myszki ---
     socket.on('setBotOffset', (data) => {
         const p = players[socket.id];
         let b = bots.find(bot => bot.id === data.botId);
