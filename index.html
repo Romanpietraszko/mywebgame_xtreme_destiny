@@ -262,7 +262,7 @@
         next.onclick = () => {
             if (nameInput.value.trim().length > 0) {
                 s1.style.display = 'none';
-                s2.style.display = 'block'; // Pokazuje wybór trybu
+                s2.style.display = 'block'; 
             } else {
                 nameInput.style.borderColor = 'red';
                 alert("Wpisz swój nick, aby kontynuować!");
@@ -273,17 +273,27 @@
             if (e.key === "Enter") next.click();
         });
 
-        // Funkcja przypisana do przycisków trybu gry
         window.selectMode = (mode) => {
             chosenMode = mode;
             s2.style.display = 'none';
-            s3.style.display = 'block'; // Przejście do sterowania
+            s3.style.display = 'block'; 
         };
 
-        // --- DYNAMICZNY LOADER SKRYPTÓW ---
-        // Ta funkcja zapobiega wysypaniu się gry! Ładuje tylko to, co jest potrzebne.
+        // --- DYNAMICZNY LOADER SKRYPTÓW (NAPRAWIONY!) ---
         window.launchGame = (controlType) => {
-            document.getElementById('menu').innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
+            // UKRYWAMY KROK 3 (Zamiast niszczyć całe menu!)
+            document.getElementById('step-3').style.display = 'none';
+            document.getElementById('game-info').style.display = 'none'; // Ukrywamy też info
+            
+            // BEZPIECZNE DODANIE EKRANU ŁADOWANIA
+            let loadingDiv = document.getElementById('loading-step');
+            if (!loadingDiv) {
+                loadingDiv = document.createElement('div');
+                loadingDiv.id = 'loading-step';
+                loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
+                document.getElementById('menu').appendChild(loadingDiv);
+            }
+            loadingDiv.style.display = 'block';
 
             // Zależnie od wyboru, wczytujemy plik free.js albo teams.js
             const scriptSrc = chosenMode === 'FREE' ? 'free.js' : 'teams.js';
@@ -291,14 +301,15 @@
             script.src = scriptSrc;
             
             script.onload = () => {
-                // Sklep ładujemy DOPIERO po załadowaniu głównego pliku, bo wymaga globalnego 'socket'
                 const shopScript = document.createElement('script');
                 shopScript.src = 'shop.js';
                 shopScript.onload = () => {
+                    // Odpalamy grę DOPIERO gdy załadują się wszystkie pliki.
+                    // Pola Input (Nick, Kolor) wciąż istnieją w HTML, więc gra się nie sypie!
                     if (chosenMode === 'FREE') {
-                        startGame(controlType); // Start dla trybu free
+                        startGame(controlType); 
                     } else {
-                        startGame(controlType, chosenMode); // Start dla trybu drużynowego
+                        startGame(controlType, chosenMode); 
                     }
                 };
                 document.body.appendChild(shopScript);
