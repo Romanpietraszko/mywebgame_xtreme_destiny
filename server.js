@@ -9,17 +9,20 @@ app.use(express.static(__dirname));
 const WORLD_SIZE = 4000;
 const MAX_FOODS = 200;
 const MAX_BOTS = 80; // <--- ZWIĘKSZONA LICZBA BOTÓW (PRAWDZIWA WOJNA!)
+const MAX_LOOTS = 15; // <--- NOWOŚĆ: Ilość skrzynek na mapie
 
 const players = {};
 let foods = [];
 let bots = [];
+let loots = []; // <--- NOWOŚĆ: Tablica skrzynek
 let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
-// --- ZMIENNE EVENTOWE (NOWOŚĆ) ---
+// --- ZMIENNE EVENTOWE ---
 let activeEvent = null; 
 let eventTimer = 0;     
+let eventTickCounter = 0; // Pomocniczy zegar do zadawania obrażeń od deszczu
 let currentKingId = null; 
 
 const weaponStats = {
@@ -44,7 +47,7 @@ const weaponStats = {
 function killPlayer(pId) {
     const p = players[pId];
     if (p) {
-        // --- DETRONIZACJA (NOWOŚĆ) ---
+        // --- DETRONIZACJA ---
         if (pId === currentKingId) {
             io.emit('killEvent', { text: `☠️ Król ${p.name} obalony!`, time: 200 });
             currentKingId = null; 
@@ -59,6 +62,17 @@ function killPlayer(pId) {
 
 function spawnFood() {
     return { id: ++entityIdCounter, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
+}
+
+// --- NOWOŚĆ: Funkcja do spawnowania skrzynek ---
+function spawnLoot() {
+    const types = ['mass', 'skill', 'weapon'];
+    return {
+        id: ++entityIdCounter,
+        x: Math.random() * WORLD_SIZE,
+        y: Math.random() * WORLD_SIZE,
+        type: types[Math.floor(Math.random() * types.length)]
+    };
 }
 
 function spawnBot() {
@@ -85,6 +99,7 @@ function spawnBot() {
 
 for (let i = 0; i < MAX_FOODS; i++) foods.push(spawnFood());
 for (let i = 0; i < MAX_BOTS; i++) bots.push(spawnBot());
+for (let i = 0; i < MAX_LOOTS; i++) loots.push(spawnLoot()); // Spawn startowych skrzynek
 
 io.on('connection', (socket) => {
     console.log(`\n===========================================`);
@@ -284,6 +299,8 @@ io.on('connection', (socket) => {
 
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
+    eventTickCounter++;
+
     // Kary za ucieczkę z mapy
     const pKeysList = Object.keys(players);
     for (let i = pKeysList.length - 1; i >= 0; i--) {
@@ -295,36 +312,56 @@ setInterval(() => {
         }
     }
 
-    // --- EVENTY SERWEROWE (NOWOŚĆ) ---
+    // --- SYSTEM EVENTÓW (Król lub Deszcz) ---
     eventTimer++;
     // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
-        if (playersArray.length > 0) {
-            // Znajdź gracza z największą liczbą punktów
+        
+        // Losujemy typ eventu (50% szans na Króla, 50% na Deszcz)
+        if (Math.random() > 0.5 && playersArray.length > 0) {
+            // EVENT: Polowanie na Króla
             playersArray.sort((a, b) => b.score - a.score);
             let topPlayer = playersArray[0];
 
-            if (topPlayer && topPlayer.score >= 50) { // Król musi mieć chociaż 50 pkt
+            if (topPlayer && topPlayer.score >= 50) { 
                 currentKingId = topPlayer.id;
                 activeEvent = 'KING_HUNT';
                 io.emit('killEvent', { text: `👑 EVENT! ${topPlayer.name} ZDOBYŁ KORONĘ! WSZYSCY NA NIEGO!`, time: 300 });
 
-                // Event trwa 30 sekund
                 setTimeout(() => {
                     if (activeEvent === 'KING_HUNT' && players[currentKingId]) {
-                        // Król przetrwał!
-                        players[currentKingId].score += 500; // Nagroda za przetrwanie
+                        players[currentKingId].score += 500; 
                         io.emit('killEvent', { text: `🛡️ Król ${players[currentKingId].name} przetrwał rzeź! +500 pkt!`, time: 200 });
                     }
                     activeEvent = null;
                     currentKingId = null;
                     eventTimer = 0;
-                }, 30000);
+                }, 30000); // 30 sekund
             } else {
-                eventTimer = 0; // Nikt nie spełnia warunków, resetujemy i czekamy dalej
+                eventTimer = 0; 
             }
+        } else {
+            // EVENT: Kwaśny Deszcz
+            activeEvent = 'TOXIC_RAIN';
+            io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
+            
+            setTimeout(() => {
+                activeEvent = null;
+                eventTimer = 0;
+                io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
+            }, 25000); // 25 sekund deszczu
         }
+    }
+
+    // Obrażenia od deszczu (Co około 1 sekundę = 30 ticków)
+    if (activeEvent === 'TOXIC_RAIN' && eventTickCounter % 30 === 0) {
+        Object.values(players).forEach(p => {
+            if (!p.isSafe && p.score > 5) p.score -= 2;
+        });
+        bots.forEach(b => {
+            if (!b.isSafe && b.score > 5) b.score -= 1;
+        });
     }
 
     // --- BUDOWA STRUKTURY ARMII DO OBLICZEŃ FORMACJI ---
@@ -354,7 +391,7 @@ setInterval(() => {
                     // OKRĄG (Rotująca Tarcza)
                     let angleStep = (Math.PI * 2) / total;
                     let currentAngle = (Date.now() / 1500) + (myIndex * angleStep);
-                    let radius = 70 + (total * 2); // Koło rośnie wraz z ilością
+                    let radius = 70 + (total * 2); 
                     targetX = owner.x + Math.cos(currentAngle) * radius;
                     targetY = owner.y + Math.sin(currentAngle) * radius;
                 } 
@@ -362,7 +399,7 @@ setInterval(() => {
                     // KLIN (Trójkąt V za plecami)
                     let row = Math.floor(myIndex / 2) + 1;
                     let side = myIndex % 2 === 0 ? 1 : -1;
-                    if (myIndex === 0) { row = 1; side = 0; } // Dowódca tuż za graczem
+                    if (myIndex === 0) { row = 1; side = 0; } 
                     let spacingX = 45;
                     let spacingY = 35;
                     targetX = owner.x - Math.cos(owner.moveAngle) * (row * spacingX) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
@@ -389,7 +426,6 @@ setInterval(() => {
                 let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
                 if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
-                    // Płynne dostosowanie prędkości (doganianie)
                     let speedMult = distToTarget > 120 ? 1.8 : (distToTarget > 40 ? 1.3 : 0.8);
                     b.x += Math.cos(b.angle) * (b.speed * speedMult);
                     b.y += Math.sin(b.angle) * (b.speed * speedMult);
@@ -403,7 +439,7 @@ setInterval(() => {
                 b.targetY = 0;
             }
         } else {
-            // --- AI DZIKICH BOTÓW (NOWOŚĆ - POLOWANIE NA KRÓLA) ---
+            // --- AI DZIKICH BOTÓW ---
             let isHuntingKing = false;
             
             // Jeśli trwa event i Król żyje (i nie chowa się w bezpiecznej strefie)
@@ -411,21 +447,18 @@ setInterval(() => {
                 let king = players[currentKingId];
                 if (!king.isSafe) {
                     isHuntingKing = true;
-                    // Bot kieruje się prosto na Króla!
                     b.angle = Math.atan2(king.y - b.y, king.x - b.x);
-                    // Szał bitewny - szybszy bieg i czerwony kolor
                     b.x += Math.cos(b.angle) * (b.speed * 1.5);
                     b.y += Math.sin(b.angle) * (b.speed * 1.5);
                     b.color = '#c0392b'; 
                 }
             }
 
-            // Normalny, losowy ruch, jeśli nie gonią Króla
+            // Normalny, losowy ruch
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
                 b.x += Math.cos(b.angle) * b.speed;
                 b.y += Math.sin(b.angle) * b.speed;
-                // Powrót do losowego koloru, jeśli event się skończył
                 if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
 
@@ -493,6 +526,25 @@ setInterval(() => {
             }
         });
 
+        // --- ZBIERANIE LOOTU (SKRZYNEK) ---
+        loots.forEach((l, li) => {
+            if (Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
+                if (l.type === 'mass') {
+                    p.score += 100;
+                    io.emit('killEvent', { text: `🎁 ${p.name} znalazł złoże Masy (+100)!` }); 
+                } else if (l.type === 'skill') {
+                    p.skillPoints++;
+                    io.to(p.id).emit('levelUp', { level: p.level, points: p.skillPoints });
+                    io.emit('killEvent', { text: `📘 ${p.name} odnalazł Księgę Wiedzy!` }); 
+                } else if (l.type === 'weapon') {
+                    p.inventory['knife'] = 1;
+                    p.activeWeapon = 'knife';
+                    io.emit('killEvent', { text: `🗡️ ${p.name} znalazł Nóż w skrzynce!` }); 
+                }
+                loots[li] = spawnLoot(); // Odradzamy skrzynkę w nowym miejscu
+            }
+        });
+
         bots.forEach((b, bi) => {
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
             let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
@@ -501,24 +553,23 @@ setInterval(() => {
                 if (dist < pRadius && p.score > b.score * 1.15 && b.ownerId !== p.id) {
                     
                     if (p.isRecruiting) {
-                        // TRYB WERBOWANIA (Zero zdobywanej masy, armia rośnie)
+                        // TRYB WERBOWANIA
                         io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
                         b.ownerId = p.id;
                         b.score = 5; 
                         b.color = p.color; 
                         b.name = `Wojownik`; 
                         
-                        // Zapisanie relatywnej pozycji w momencie rekrutacji
                         let dx = b.x - p.x;
                         let dy = b.y - p.y;
                         b.distOffset = Math.hypot(dx, dy);
                         b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
 
                     } else {
-                        // TRYB POŻERANIA (Brak rekrutacji, nowa masa, bot się odradza)
+                        // TRYB POŻERANIA
                         io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
                         p.score += Math.floor(b.score * 0.5);
-                        bots[bi] = spawnBot(); // Ważne: Respawnujemy bota na mapie!
+                        bots[bi] = spawnBot(); 
                     }
                     io.to(p.id).emit('botEaten', { newScore: p.score });
                 }
@@ -602,7 +653,8 @@ setInterval(() => {
         if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
     });
 
-    io.emit('serverTick', { players, bots, foods, projectiles });
+    // --- ZMIANA WYSYŁANIA: Dodano skrzynki i info o evencie ---
+    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent });
 }, 33);
 
 const PORT = process.env.PORT || 3000;
