@@ -12,14 +12,14 @@ let controlType = 'WASD', gameState = 'MENU', myId = null;
 
 // Konfiguracja Drużyn
 let myTeam = null; 
-let gameMode = 'PvP'; // Domyślnie PvP, zmieniane w menu (PvP lub TRAINING)
+let gameMode = 'PvP'; 
 
 // Statystyki
 let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 }, weaponPath = 'none'; 
 let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [], lastWinterUseClient = 0; 
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
 
-initMap(WORLD_SIZE); // Z map.js
+initMap(WORLD_SIZE); 
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -81,7 +81,7 @@ window.onkeyup = (e) => { keys[e.code] = false; if (e.code === 'KeyQ' && player)
 // --- NOWE MENU STARTOWE ---
 window.startGame = (control, mode) => {
     controlType = control;
-    gameMode = mode; // 'TRAINING' lub 'PvP'
+    gameMode = mode; 
     document.getElementById('ui-layer').style.display = 'none';
     
     const name = document.getElementById('playerName').value || "Żołnierz";
@@ -89,7 +89,7 @@ window.startGame = (control, mode) => {
     player = {
         x: 2000, y: 2000, score: 5, level: 1, name: name, color: '#fff', 
         isSafe: false, isShielding: false, aura: null, inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
-        team: null 
+        team: null, isRecruiting: false, formation: 0
     };
     
     socket.emit('joinTeamGame', { name: name, mode: gameMode });
@@ -100,18 +100,18 @@ window.startGame = (control, mode) => {
 // --- KOMUNIKACJA Z SERWEREM ---
 socket.on('initTeam', (data) => { 
     myId = data.id; 
-    myTeam = data.team; // N, S, E, W
+    myTeam = data.team; 
     if (player) {
         player.id = myId;
         player.team = myTeam;
-        player.color = data.color; // Serwer narzuca kolor
+        player.color = data.color; 
     }
 });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 socket.on('skillUpdated', (data) => { playerSkills = data.skills; skillPoints = data.points; weaponPath = data.weaponPath || 'none'; });
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
-socket.on('recruitToggled', (state) => { killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
+socket.on('recruitToggled', (state) => { if (player) player.isRecruiting = state; killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
 socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); });
 
 socket.on('gameOver', (data) => {
@@ -127,6 +127,8 @@ socket.on('serverTick', (data) => {
     if (myId && otherPlayers[myId]) {
         player.score = otherPlayers[myId].score; player.inventory = otherPlayers[myId].inventory || { bow: 0, knife: 0, shuriken: 0 }; 
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword'; player.isSafe = otherPlayers[myId].isSafe;
+        if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
+        if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
     }
     delete otherPlayers[myId];
 });
@@ -153,11 +155,27 @@ function update() {
 }
 
 function gameLoop() {
-    drawForestMap(ctx, camera, canvas.width, canvas.height); 
+    // 1. Zmiana mapy na Mroczną Arenę (zamiast drawForestMap)
+    ctx.fillStyle = '#1e272e'; // Ciemny, kamienny kolor tła
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.save();
+    ctx.translate(-camera.x % 100, -camera.y % 100);
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 2;
+    for (let i = -100; i <= canvas.width + 100; i += 100) {
+        ctx.beginPath(); ctx.moveTo(i, -100); ctx.lineTo(i, canvas.height + 100); ctx.stroke();
+    }
+    for (let i = -100; i <= canvas.height + 100; i += 100) {
+        ctx.beginPath(); ctx.moveTo(-100, i); ctx.lineTo(canvas.width + 100, i); ctx.stroke();
+    }
+    ctx.restore();
     
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
     allEntities.sort((a,b) => b.score - a.score);
+    let topEntities = allEntities.slice(0, 5);
+    let currentKingId = topEntities.length > 0 ? (topEntities[0].id || topEntities[0].name) : null;
     
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         if (gameState === 'PLAYING') { update(); }
@@ -193,14 +211,19 @@ function gameLoop() {
         // --- GRAWERUNKI NA MIECZACH ---
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
-            rot += (Date.now() / 100); 
-            
-            if (typeof drawSwordModel === 'function') {
+            if (p.projType === 'sword' || p.projType === 'winter' || !p.projType) {
+                rot += (Date.now() / 100); 
                 drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
-            } else {
-                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot);
-                ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-5, -20, 10, 40);
+            } else if (p.projType.includes('bow') || p.projType === 'crossbow' || p.projType === 'shotgun') {
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot); 
+                ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-10,-1,20,2); 
+                ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10,-3,4,6); 
+                ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(15,0); ctx.lineTo(10,3); ctx.fill(); 
                 ctx.restore();
+            } else if (p.projType.includes('knife') || p.projType === 'cleaver') {
+                drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8);
+            } else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') {
+                drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2);
             }
             
             if (p.teamInitial) {
@@ -213,47 +236,52 @@ function gameLoop() {
             }
         });
 
-        // --- RYSOWANIE GRACZY I BOTÓW ---
-        allEntities.forEach(e => {
+        // Linii przeciągania RTS
+        if (draggedBotId && player) {
             ctx.save();
-            ctx.translate(e.x, e.y);
-            
-            let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
-            
-            // Tarcza z Q
-            if (e.isShielding) {
-                ctx.beginPath(); ctx.arc(0, 0, radius + 10, 0, Math.PI * 2);
-                ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)'; ctx.lineWidth = 6; ctx.stroke();
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
+            ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y); ctx.stroke();
+            ctx.beginPath(); ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; ctx.fill(); ctx.stroke();
+
+            let b = bots.find(bot => bot.id === draggedBotId);
+            if (b) {
+                ctx.setLineDash([]); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); ctx.stroke();
             }
+            ctx.restore();
+        }
 
-            // Ciało
-            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2);
-            ctx.fillStyle = e.color || '#fff'; ctx.fill();
-            ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.stroke();
+        ctx.restore(); // Koniec przestrzeni świata gry, wracamy do ekranu
+        
+        // --- RYSOWANIE GRACZY I BOTÓW (Z Emotkami Diabłów!) ---
+        allEntities.forEach(e => {
+            if (e.isSafe && (!player || !player.isSafe)) return;
+            
+            let scale = getScale(e.score);
+            // Rysujemy bazowego patyczaka z engine.js
+            drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
 
-            // Znak drużyny na brzuchu gracza
+            // Dodatki drużynowe
             if (e.team) {
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-                ctx.font = `bold ${Math.floor(radius)}px Arial`;
+                ctx.save();
+                ctx.translate(e.x - camera.x, e.y - camera.y);
+                let radius = 25 * scale;
+
+                // Litera na brzuchu
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
                 ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 ctx.fillText(e.team, 0, 0);
+
+                // Emotka nad głową (każda drużyna ma swojego demona!)
+                const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' };
+                ctx.font = `${Math.floor(radius)}px Arial`;
+                ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 20);
+                
+                ctx.restore();
             }
-
-            // Nazwa
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-            ctx.strokeText(e.name || 'Bot', 0, -radius - 10);
-            ctx.fillText(e.name || 'Bot', 0, -radius - 10);
-            
-            // Punkty
-            ctx.font = 'bold 12px Arial';
-            ctx.strokeText(Math.floor(e.score), 0, radius + 20);
-            ctx.fillText(Math.floor(e.score), 0, radius + 20);
-            
-            ctx.restore();
         });
-
-        ctx.restore(); 
         
         // --- EFEKTY POGODY I UI ---
         if (currentEvent === 'TOXIC_RAIN') {
@@ -267,6 +295,28 @@ function gameLoop() {
         } else if (currentEvent === 'KING_HUNT') {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
             ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
+        }
+
+        // --- RYSOWANIE UI GRACZA ---
+        if (gameState !== 'GAMEOVER' && player) {
+            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
+            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
+            ctx.fillText("🏆 RANKING SERWERA", canvas.width - 265, 30);
+            
+            topEntities.forEach((p, i) => {
+                let yPos = 55 + i * 20;
+                if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); } 
+                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#fff'; ctx.fillText(`${i+1}. ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); }
+            });
+
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
+            ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
+            
+            if (player.isRecruiting !== undefined) {
+                ctx.font = 'bold 14px Arial';
+                ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c';
+                ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
+            }
         }
 
         // EKRAN ŚMIERCI
