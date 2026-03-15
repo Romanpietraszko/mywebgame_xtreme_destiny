@@ -17,6 +17,11 @@ let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
+// --- ZMIENNE EVENTOWE (NOWOŚĆ) ---
+let activeEvent = null; 
+let eventTimer = 0;     
+let currentKingId = null; 
+
 const weaponStats = {
     'sword': { dmg: 5, life: 60, speed: 18, cost: 2, piercing: false },
     'bow': { dmg: 8, life: 90, speed: 26, cost: 2, piercing: false },
@@ -39,6 +44,13 @@ const weaponStats = {
 function killPlayer(pId) {
     const p = players[pId];
     if (p) {
+        // --- DETRONIZACJA (NOWOŚĆ) ---
+        if (pId === currentKingId) {
+            io.emit('killEvent', { text: `☠️ Król ${p.name} obalony!`, time: 200 });
+            currentKingId = null; 
+            activeEvent = null;   
+        }
+
         io.to(p.id).emit('gameOver', { finalScore: p.score });
         console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! GAME OVER.`);
         delete players[pId];
@@ -166,7 +178,7 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         if (p && p.skillPoints > 0) {
             if (skillName === 'strength' && p.score < 100) return; 
-            if (skillName === 'weapon' && p.score < 15) return;    
+            if (skillName === 'weapon' && p.score < 15) return;   
 
             let maxLevel = (skillName === 'speed') ? 10 : 100;
 
@@ -283,6 +295,38 @@ setInterval(() => {
         }
     }
 
+    // --- EVENTY SERWEROWE (NOWOŚĆ) ---
+    eventTimer++;
+    // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
+    if (eventTimer > 2700 && activeEvent === null) {
+        let playersArray = Object.values(players);
+        if (playersArray.length > 0) {
+            // Znajdź gracza z największą liczbą punktów
+            playersArray.sort((a, b) => b.score - a.score);
+            let topPlayer = playersArray[0];
+
+            if (topPlayer && topPlayer.score >= 50) { // Król musi mieć chociaż 50 pkt
+                currentKingId = topPlayer.id;
+                activeEvent = 'KING_HUNT';
+                io.emit('killEvent', { text: `👑 EVENT! ${topPlayer.name} ZDOBYŁ KORONĘ! WSZYSCY NA NIEGO!`, time: 300 });
+
+                // Event trwa 30 sekund
+                setTimeout(() => {
+                    if (activeEvent === 'KING_HUNT' && players[currentKingId]) {
+                        // Król przetrwał!
+                        players[currentKingId].score += 500; // Nagroda za przetrwanie
+                        io.emit('killEvent', { text: `🛡️ Król ${players[currentKingId].name} przetrwał rzeź! +500 pkt!`, time: 200 });
+                    }
+                    activeEvent = null;
+                    currentKingId = null;
+                    eventTimer = 0;
+                }, 30000);
+            } else {
+                eventTimer = 0; // Nikt nie spełnia warunków, resetujemy i czekamy dalej
+            }
+        }
+    }
+
     // --- BUDOWA STRUKTURY ARMII DO OBLICZEŃ FORMACJI ---
     let armies = {};
     for(let b of bots) {
@@ -359,11 +403,33 @@ setInterval(() => {
                 b.targetY = 0;
             }
         } else {
-            // Dziki bot - losowy ruch
-            if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
-            b.x += Math.cos(b.angle) * b.speed;
-            b.y += Math.sin(b.angle) * b.speed;
+            // --- AI DZIKICH BOTÓW (NOWOŚĆ - POLOWANIE NA KRÓLA) ---
+            let isHuntingKing = false;
+            
+            // Jeśli trwa event i Król żyje (i nie chowa się w bezpiecznej strefie)
+            if (activeEvent === 'KING_HUNT' && currentKingId && players[currentKingId]) {
+                let king = players[currentKingId];
+                if (!king.isSafe) {
+                    isHuntingKing = true;
+                    // Bot kieruje się prosto na Króla!
+                    b.angle = Math.atan2(king.y - b.y, king.x - b.x);
+                    // Szał bitewny - szybszy bieg i czerwony kolor
+                    b.x += Math.cos(b.angle) * (b.speed * 1.5);
+                    b.y += Math.sin(b.angle) * (b.speed * 1.5);
+                    b.color = '#c0392b'; 
+                }
+            }
 
+            // Normalny, losowy ruch, jeśli nie gonią Króla
+            if (!isHuntingKing) {
+                if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
+                b.x += Math.cos(b.angle) * b.speed;
+                b.y += Math.sin(b.angle) * b.speed;
+                // Powrót do losowego koloru, jeśli event się skończył
+                if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+            }
+
+            // Odbijanie od ścian
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
         }
