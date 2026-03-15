@@ -8,6 +8,7 @@ const socket = io();
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];           // <--- NOWOŚĆ: Tablica skrzynek z serwera
 let currentEvent = null;  // <--- NOWOŚĆ: Info o evencie z serwera
+let eventTimeLeft = 0;    // <--- NOWOŚĆ: Czas do kolejnego eventu
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
 // Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
@@ -191,6 +192,7 @@ socket.on('serverTick', (data) => {
     projectiles = data.projectiles || [];
     loots = data.loots || [];             // <--- Odbieramy skrzynki z serwera
     currentEvent = data.activeEvent;      // <--- Odbieramy aktywny event
+    eventTimeLeft = data.eventTimeLeft || 0; // <--- Odbieramy czas do eventu
     
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
@@ -242,6 +244,12 @@ function update() {
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
+        
+        // --- NOWOŚĆ: Spowolnienie gracza podczas Śnieżycy! ---
+        if (currentEvent === 'BLIZZARD') {
+            speed *= 0.4; // 60% wolniej!
+        }
+
         player.x += Math.cos(moveAngle) * speed; 
         player.y += Math.sin(moveAngle) * speed;
     }
@@ -341,32 +349,35 @@ function gameLoop() {
         }
         ctx.restore(); // Przywracamy układ do współrzędnych ekranu!
         
-        // --- NOWOŚĆ: RYSOWANIE EFEKTU KWAŚNEGO DESZCZU NA EKRANIE ---
+        // --- EFEKTY WIZUALNE POGODY ---
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save();
-            // Zielonkawy filtr na całości
-            ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-            // Linie deszczu
-            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)';
-            ctx.lineWidth = 2;
-            ctx.beginPath();
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
             let timeOffset = Date.now() / 5;
             for(let i = 0; i < 150; i++) {
-                // Wyliczamy pozycje kropel
                 let rx = (Math.random() * canvas.width + timeOffset) % canvas.width;
                 let ry = (Math.random() * canvas.height + (Date.now() % canvas.height)) % canvas.height;
-                ctx.moveTo(rx, ry);
-                ctx.lineTo(rx - 10, ry + 20);
+                ctx.moveTo(rx, ry); ctx.lineTo(rx - 10, ry + 20);
             }
             ctx.stroke();
+            ctx.restore();
+        } else if (currentEvent === 'BLIZZARD') { 
+            // --- NOWOŚĆ: Śnieg i Mgła ---
+            ctx.save();
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // Gęsta mgła
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            // Komunikat na środku ekranu
-            ctx.fillStyle = '#e74c3c';
-            ctx.font = 'bold 30px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText("KWAŚNY DESZCZ! CHOWAJ SIĘ W ZAMKU!", canvas.width / 2, 80);
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            let timeOffset = Date.now() / 15;
+            for(let i = 0; i < 200; i++) {
+                let rx = (Math.random() * canvas.width + timeOffset * (i%3 + 1)) % canvas.width;
+                let ry = (Math.random() * canvas.height + timeOffset * 2) % canvas.height;
+                ctx.moveTo(rx, ry);
+                ctx.arc(rx, ry, Math.random() * 3 + 1.5, 0, Math.PI * 2);
+            }
+            ctx.fill();
             ctx.restore();
         }
 
@@ -384,6 +395,29 @@ function gameLoop() {
 
             ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
             ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
+
+            // --- NOWOŚĆ: Rysowanie Odliczania / Statusu Eventu na środku ---
+            ctx.save();
+            ctx.textAlign = 'center';
+            if (currentEvent === null) {
+                ctx.font = 'bold 20px Arial';
+                // Pomaluj na czerwono i lekko powiększ, jeśli zostało mało czasu
+                if (eventTimeLeft <= 10) {
+                    ctx.fillStyle = '#e74c3c';
+                    ctx.font = 'bold 24px Arial';
+                } else {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                }
+                ctx.fillText(`Kolejny event za: ${eventTimeLeft}s`, canvas.width / 2, 40);
+            } else {
+                ctx.font = 'bold 28px Arial';
+                ctx.fillStyle = '#e74c3c';
+                let eName = currentEvent === 'KING_HUNT' ? '👑 POLOWANIE NA KRÓLA!' : (currentEvent === 'TOXIC_RAIN' ? '🌧️ KWAŚNY DESZCZ!' : '❄️ ZAMIĘĆ ŚNIEŻNA!');
+                ctx.fillText(eName, canvas.width / 2, 50);
+                if (currentEvent === 'TOXIC_RAIN') { ctx.font = '16px Arial'; ctx.fillText("Chowaj się w zamku!", canvas.width / 2, 75); }
+                if (currentEvent === 'BLIZZARD') { ctx.font = '16px Arial'; ctx.fillText("Poruszasz się znacznie wolniej!", canvas.width / 2, 75); }
+            }
+            ctx.restore();
 
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
