@@ -6,7 +6,7 @@ const socket = io();
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
-let castles = []; // <--- NOWOŚĆ: Bazy drużynowe odbierane z serwera
+let castles = []; // Bazy drużynowe odbierane z serwera
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
@@ -50,7 +50,6 @@ window.addEventListener('mousedown', (e) => {
         else if (e.button === 0) socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
     }
     if (gameState === 'PAUSED' && e.button === 0) {
-        // ... (logika przycisków pauzy - bez zmian)
         socket.disconnect(); location.reload();   
     }
 });
@@ -86,7 +85,6 @@ window.startGame = (control, mode) => {
     document.getElementById('ui-layer').style.display = 'none';
     
     const name = document.getElementById('playerName').value || "Żołnierz";
-    // Kolor w trybie drużynowym jest nadawany przez SERWER, więc tu tylko rezerwujemy miejsce
     
     player = {
         x: 2000, y: 2000, score: 5, level: 1, name: name, color: '#fff', 
@@ -94,7 +92,6 @@ window.startGame = (control, mode) => {
         team: null 
     };
     
-    // Klient wysyła żądanie dołączenia do konkretnego trybu
     socket.emit('joinTeamGame', { name: name, mode: gameMode });
     gameState = 'PLAYING';
     gameLoop();
@@ -107,7 +104,7 @@ socket.on('initTeam', (data) => {
     if (player) {
         player.id = myId;
         player.team = myTeam;
-        player.color = data.color; // Serwer narzuca kolor!
+        player.color = data.color; // Serwer narzuca kolor
     }
 });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
@@ -119,13 +116,12 @@ socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: 
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
-    // ... (wyświetlanie ekranu śmierci - bez zmian)
 });
 
 socket.on('serverTick', (data) => {
     foods = data.foods; bots = data.bots; projectiles = data.projectiles || []; loots = data.loots || [];
     currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0;
-    castles = data.castles || []; // <--- Aktualizacja stanu zamków!
+    castles = data.castles || []; 
     
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
@@ -136,8 +132,6 @@ socket.on('serverTick', (data) => {
 });
 
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
-
-// ... (funkcja checkEquipmentUpgrades - bez zmian)
 
 function update() {
     if (gameState !== 'PLAYING') return;
@@ -154,7 +148,6 @@ function update() {
         player.x += Math.cos(moveAngle) * speed; player.y += Math.sin(moveAngle) * speed;
     }
     
-    // Bezpieczeństwo i obrażenia w zamkach oblicza SERWER, my tylko wysyłamy pozycję
     camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
     socket.emit('playerMovementTeam', { x: player.x, y: player.y, score: player.score, isShielding: player.isShielding });
 }
@@ -167,57 +160,124 @@ function gameLoop() {
     allEntities.sort((a,b) => b.score - a.score);
     
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
-        if (gameState === 'PLAYING') { update(); /* checkEquipmentUpgrades(); */ }
+        if (gameState === 'PLAYING') { update(); }
         
         ctx.save(); ctx.translate(-camera.x, -camera.y);
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
         // --- RYSOWANIE ZAMKÓW I OBLĘŻENIA ---
         castles.forEach(c => {
-            // Rysuj bazę
             ctx.fillStyle = c.color;
             ctx.globalAlpha = 0.3;
             ctx.beginPath(); ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2); ctx.fill();
             ctx.globalAlpha = 1.0;
             ctx.strokeStyle = c.color; ctx.lineWidth = 5; ctx.stroke();
 
-            // Pasek Przejmowania (Oblężenie)
             if (c.captureProgress > 0) {
                 ctx.fillStyle = 'black'; ctx.fillRect(c.x - 50, c.y - c.radius - 30, 100, 15);
-                ctx.fillStyle = c.captureProgress >= 100 ? '#e74c3c' : '#f1c40f'; // Zmienia kolor przy przejęciu
+                ctx.fillStyle = c.captureProgress >= 100 ? '#e74c3c' : '#f1c40f'; 
                 ctx.fillRect(c.x - 48, c.y - c.radius - 28, (c.captureProgress / 100) * 96, 11);
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
                 ctx.fillText(c.captureProgress >= 100 ? "PRZEJĘTO!" : "OBLĘŻENIE...", c.x, c.y - c.radius - 20);
             }
         });
         
+        // --- RYSOWANIE LOOTU (JEDZENIE I SKRZYNKI) ---
         foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
-        // ... (rysowanie lootu z poprzedniego kodu)
+        loots.forEach(l => { 
+            ctx.fillStyle = l.type === 'mass' ? '#f1c40f' : (l.type === 'skill' ? '#3498db' : '#e74c3c');
+            ctx.fillRect(l.x - 15, l.y - 15, 30, 30);
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(l.x - 15, l.y - 15, 30, 30);
+        });
         
         // --- GRAWERUNKI NA MIECZACH ---
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
             rot += (Date.now() / 100); 
             
-            // Rysowanie miecza
-            drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
+            if (typeof drawSwordModel === 'function') {
+                drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
+            } else {
+                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot);
+                ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-5, -20, 10, 40);
+                ctx.restore();
+            }
             
-            // Rysowanie inicjału drużyny na ostrzu!
             if (p.teamInitial) {
                 ctx.save();
                 ctx.translate(p.x, p.y);
                 ctx.rotate(rot);
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                ctx.fillText(p.teamInitial, 15, 0); // Odsunięte na środek ostrza
+                ctx.fillText(p.teamInitial, 15, 0); 
                 ctx.restore();
             }
         });
 
-        // ... (rysowanie botów i graczy bez zmian, dodaj im inicjały na tarczach jeśli p.team jest znany w przyszłości)
+        // --- RYSOWANIE GRACZY I BOTÓW ---
+        allEntities.forEach(e => {
+            ctx.save();
+            ctx.translate(e.x, e.y);
+            
+            let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
+            
+            // Tarcza z Q
+            if (e.isShielding) {
+                ctx.beginPath(); ctx.arc(0, 0, radius + 10, 0, Math.PI * 2);
+                ctx.strokeStyle = 'rgba(52, 152, 219, 0.8)'; ctx.lineWidth = 6; ctx.stroke();
+            }
+
+            // Ciało
+            ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2);
+            ctx.fillStyle = e.color || '#fff'; ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.stroke();
+
+            // Znak drużyny na brzuchu gracza
+            if (e.team) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.font = `bold ${Math.floor(radius)}px Arial`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(e.team, 0, 0);
+            }
+
+            // Nazwa
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.textAlign = 'center';
+            ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+            ctx.strokeText(e.name || 'Bot', 0, -radius - 10);
+            ctx.fillText(e.name || 'Bot', 0, -radius - 10);
+            
+            // Punkty
+            ctx.font = 'bold 12px Arial';
+            ctx.strokeText(Math.floor(e.score), 0, radius + 20);
+            ctx.fillText(Math.floor(e.score), 0, radius + 20);
+            
+            ctx.restore();
+        });
 
         ctx.restore(); 
         
-        // ... (Efekty pogody i UI jak w trybie FREE)
+        // --- EFEKTY POGODY I UI ---
+        if (currentEvent === 'TOXIC_RAIN') {
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`KWAŚNY DESZCZ: ${eventTimeLeft}s`, canvas.width / 2, 80);
+        } else if (currentEvent === 'BLIZZARD') {
+            ctx.fillStyle = 'rgba(236, 240, 241, 0.3)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
+        } else if (currentEvent === 'KING_HUNT') {
+            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
+        }
+
+        // EKRAN ŚMIERCI
+        if (gameState === 'GAMEOVER') {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center';
+            ctx.fillText("ZGŁADZONO CIĘ", canvas.width/2, canvas.height/2);
+            ctx.fillStyle = '#fff'; ctx.font = '24px Arial';
+            ctx.fillText(`Końcowa masa: ${Math.floor(player.score)}`, canvas.width/2, canvas.height/2 + 40);
+            ctx.fillText("Odśwież stronę, aby zagrać ponownie.", canvas.width/2, canvas.height/2 + 80);
+        }
     }
     requestAnimationFrame(gameLoop);
 }
