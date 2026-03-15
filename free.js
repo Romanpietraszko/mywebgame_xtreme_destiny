@@ -6,6 +6,8 @@ const socket = io();
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
+let loots = [];           // <--- NOWOŚĆ: Tablica skrzynek z serwera
+let currentEvent = null;  // <--- NOWOŚĆ: Info o evencie z serwera
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
 // Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
@@ -184,7 +186,12 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('serverTick', (data) => {
-    foods = data.foods; bots = data.bots; projectiles = data.projectiles || [];
+    foods = data.foods; 
+    bots = data.bots; 
+    projectiles = data.projectiles || [];
+    loots = data.loots || [];             // <--- Odbieramy skrzynki z serwera
+    currentEvent = data.activeEvent;      // <--- Odbieramy aktywny event
+    
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
         player.score = otherPlayers[myId].score;
@@ -270,6 +277,21 @@ function gameLoop() {
         foods.forEach(f => {
             ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
         });
+
+        // --- NOWOŚĆ: RYSOWANIE LOOTU (SKRZYNKI) ---
+        loots.forEach(l => {
+            ctx.save();
+            ctx.translate(l.x, l.y);
+            // Kolor zależny od zawartości (fioletowa = skill, złota = masa, czerwona = broń)
+            ctx.fillStyle = l.type === 'skill' ? '#8e44ad' : (l.type === 'mass' ? '#f1c40f' : '#e74c3c');
+            ctx.fillRect(-12, -10, 24, 20); 
+            ctx.fillStyle = '#7f8c8d';
+            ctx.fillRect(-14, -10, 28, 4); 
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText("?", 0, 2); 
+            ctx.restore();
+        });
         
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
@@ -317,8 +339,38 @@ function gameLoop() {
         if (player && gameState !== 'GAMEOVER') {
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
-        ctx.restore();
+        ctx.restore(); // Przywracamy układ do współrzędnych ekranu!
         
+        // --- NOWOŚĆ: RYSOWANIE EFEKTU KWAŚNEGO DESZCZU NA EKRANIE ---
+        if (currentEvent === 'TOXIC_RAIN') {
+            ctx.save();
+            // Zielonkawy filtr na całości
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.15)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Linie deszczu
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            let timeOffset = Date.now() / 5;
+            for(let i = 0; i < 150; i++) {
+                // Wyliczamy pozycje kropel
+                let rx = (Math.random() * canvas.width + timeOffset) % canvas.width;
+                let ry = (Math.random() * canvas.height + (Date.now() % canvas.height)) % canvas.height;
+                ctx.moveTo(rx, ry);
+                ctx.lineTo(rx - 10, ry + 20);
+            }
+            ctx.stroke();
+            
+            // Komunikat na środku ekranu
+            ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 30px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText("KWAŚNY DESZCZ! CHOWAJ SIĘ W ZAMKU!", canvas.width / 2, 80);
+            ctx.restore();
+        }
+
+        // --- RYSOWANIE UI ---
         if (gameState !== 'GAMEOVER') {
             ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
