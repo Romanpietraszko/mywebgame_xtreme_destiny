@@ -501,11 +501,13 @@ setInterval(() => {
     for (let i = bots.length - 1; i >= 0; i--) {
         let b = bots[i];
         
-        // --- SPADEK Prędkości podczas Śnieżycy dla botów ---
-        let currentBotSpeed = activeEvent === 'BLIZZARD' ? b.speed * 0.4 : b.speed;
+        let owner = b.ownerId ? players[b.ownerId] : null;
+
+        // --- SKALOWANIE PRĘDKOŚCI BOTA DO GRACZA ---
+        let baseBotSpeed = owner ? 2.5 + ((owner.skills.speed || 0) * 0.4) : b.speed;
+        let currentBotSpeed = activeEvent === 'BLIZZARD' ? baseBotSpeed * 0.4 : baseBotSpeed;
         
         if (b.ownerId) {
-            let owner = players[b.ownerId];
             if (owner && armies[b.ownerId]) {
                 // Wyciągamy informacje o roju gracza
                 let myIndex = armies[b.ownerId].indexOf(b);
@@ -588,17 +590,23 @@ setInterval(() => {
                         if (target) {
                             b.score -= stats.cost;
                             let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
+
+                            // --- SKALOWANIE OBRAŻEŃ BOTA DO GRACZA ---
+                            let botPierce = type === 'sword' ? (owner.weaponPath === 'piercing') : stats.piercing;
+                            let botFinalDmg = type === 'sword' ? stats.dmg + ((owner.skills.weapon || 0) * 1) : stats.dmg;
+
                             projectiles.push({
                                 id: ++entityIdCounter, ownerId: owner.id, ownerTeam: owner.team || null, teamInitial: owner.team || null,
                                 x: b.x, y: b.y, dx: Math.cos(aimAngle), dy: Math.sin(aimAngle),
                                 life: stats.life, speed: stats.speed, isBotSword: true,
-                                scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
+                                scoreAtThrow: b.score, isPiercing: botPierce, damage: botFinalDmg, isWinter: false, projType: type
                             });
                         }
                     }
                 }
 
-            } else {
+            } else if (!owner) {
+                // CZYSZCZENIE BOTÓW JEŚLI GRACZ WYSZEDŁ
                 b.ownerId = null;
                 b.team = null;
                 b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
