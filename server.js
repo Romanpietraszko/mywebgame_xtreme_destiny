@@ -312,14 +312,15 @@ setInterval(() => {
         }
     }
 
-    // --- SYSTEM EVENTÓW (Król lub Deszcz) ---
+    // --- SYSTEM EVENTÓW (Król, Deszcz lub Śnieżyca) ---
     eventTimer++;
     // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
+        let rand = Math.random();
         
-        // Losujemy typ eventu (50% szans na Króla, 50% na Deszcz)
-        if (Math.random() > 0.5 && playersArray.length > 0) {
+        // Losujemy typ eventu (33% szans na Króla, 33% na Deszcz, 33% na Śnieżycę)
+        if (rand < 0.33 && playersArray.length > 0) {
             // EVENT: Polowanie na Króla
             playersArray.sort((a, b) => b.score - a.score);
             let topPlayer = playersArray[0];
@@ -341,7 +342,7 @@ setInterval(() => {
             } else {
                 eventTimer = 0; 
             }
-        } else {
+        } else if (rand < 0.66) {
             // EVENT: Kwaśny Deszcz
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
@@ -351,6 +352,16 @@ setInterval(() => {
                 eventTimer = 0;
                 io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
             }, 25000); // 25 sekund deszczu
+        } else {
+            // EVENT: Zamięć Śnieżna (NOWOŚĆ)
+            activeEvent = 'BLIZZARD';
+            io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
+
+            setTimeout(() => {
+                activeEvent = null;
+                eventTimer = 0;
+                io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 });
+            }, 20000); // 20 sekund śniegu
         }
     }
 
@@ -376,6 +387,9 @@ setInterval(() => {
     // 1. Logika Ruchu Botów i Formacji
     for (let i = bots.length - 1; i >= 0; i--) {
         let b = bots[i];
+        
+        // --- SPADEK Prędkości podczas Śnieżycy dla botów ---
+        let currentBotSpeed = activeEvent === 'BLIZZARD' ? b.speed * 0.4 : b.speed;
         
         if (b.ownerId) {
             let owner = players[b.ownerId];
@@ -427,8 +441,8 @@ setInterval(() => {
                 if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
                     let speedMult = distToTarget > 120 ? 1.8 : (distToTarget > 40 ? 1.3 : 0.8);
-                    b.x += Math.cos(b.angle) * (b.speed * speedMult);
-                    b.y += Math.sin(b.angle) * (b.speed * speedMult);
+                    b.x += Math.cos(b.angle) * (currentBotSpeed * speedMult);
+                    b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
                 }
             } else {
                 b.ownerId = null;
@@ -448,8 +462,8 @@ setInterval(() => {
                 if (!king.isSafe) {
                     isHuntingKing = true;
                     b.angle = Math.atan2(king.y - b.y, king.x - b.x);
-                    b.x += Math.cos(b.angle) * (b.speed * 1.5);
-                    b.y += Math.sin(b.angle) * (b.speed * 1.5);
+                    b.x += Math.cos(b.angle) * (currentBotSpeed * 1.5);
+                    b.y += Math.sin(b.angle) * (currentBotSpeed * 1.5);
                     b.color = '#c0392b'; 
                 }
             }
@@ -457,8 +471,8 @@ setInterval(() => {
             // Normalny, losowy ruch
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
-                b.x += Math.cos(b.angle) * b.speed;
-                b.y += Math.sin(b.angle) * b.speed;
+                b.x += Math.cos(b.angle) * currentBotSpeed;
+                b.y += Math.sin(b.angle) * currentBotSpeed;
                 if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
 
@@ -653,8 +667,9 @@ setInterval(() => {
         if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
     });
 
-    // --- ZMIANA WYSYŁANIA: Dodano skrzynki i info o evencie ---
-    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent });
+    // --- NOWOŚĆ: WYSYŁANIE ODLICZANIA ---
+    let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
+    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft });
 }, 33);
 
 const PORT = process.env.PORT || 3000;
