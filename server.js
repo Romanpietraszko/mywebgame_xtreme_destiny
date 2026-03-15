@@ -19,11 +19,21 @@ let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
-// --- ZMIENNE EVENTOWE ---
+// --- ZMIENNE EVENTOWE I DRUŻYNOWE ---
 let activeEvent = null; 
 let eventTimer = 0;     
 let eventTickCounter = 0; // Pomocniczy zegar do zadawania obrażeń od deszczu
 let currentKingId = null; 
+
+const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
+
+// --- ZAMKI (BAZY DRUŻYNOWE) ---
+let castles = [
+    { id: 'N', team: 'N', x: 2000, y: 300, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: 'N' },
+    { id: 'S', team: 'S', x: 2000, y: 3700, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: 'S' },
+    { id: 'E', team: 'E', x: 3700, y: 2000, radius: 250, color: TEAM_COLORS['E'], captureProgress: 0, owner: 'E' },
+    { id: 'W', team: 'W', x: 300, y: 2000, radius: 250, color: TEAM_COLORS['W'], captureProgress: 0, owner: 'W' }
+];
 
 const weaponStats = {
     'sword': { dmg: 5, life: 60, speed: 18, cost: 2, piercing: false },
@@ -106,6 +116,7 @@ io.on('connection', (socket) => {
     console.log(`[SOCKET INFO] Nowe połączenie. ID: ${socket.id}`);
     console.log(`===========================================\n`);
 
+    // --- DOŁĄCZANIE (TRYB FREE) ---
     socket.on('joinGame', (data) => {
         players[socket.id] = {
             id: socket.id,
@@ -127,15 +138,46 @@ io.on('connection', (socket) => {
             // --- NOWOŚCI RTS ---
             isRecruiting: false, // Domyslnie pożera boty
             formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia, 3: Własna
-            moveAngle: 0         // Kierunek biegu gracza do formacji
+            moveAngle: 0,        // Kierunek biegu gracza do formacji
+            team: null
         };
         socket.emit('init', { id: socket.id });
 
         console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
-        console.log(`[NOWY GRACZ] >> ${players[socket.id].name} << wszedł do gry!`);
+        console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł do gry!`);
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
     });
 
+    // --- DOŁĄCZANIE (TRYB TEAMS) ---
+    socket.on('joinTeamGame', (data) => {
+        const teams = ['N', 'S', 'E', 'W'];
+        let teamCounts = { N: 0, S: 0, E: 0, W: 0 };
+        Object.values(players).forEach(p => { if (p.team) teamCounts[p.team]++; });
+        
+        let chosenTeam = teams.reduce((a, b) => teamCounts[a] <= teamCounts[b] ? a : b);
+
+        players[socket.id] = {
+            id: socket.id,
+            x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
+            skills: { speed: 0, strength: 0, weapon: 0 }, weaponPath: 'none', lastWinterUse: 0,   
+            color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
+            isSafe: false, isShielding: false, armorHits: 0,
+            inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
+            isRecruiting: false, formation: 0, moveAngle: 0,
+            team: chosenTeam, gameMode: data.mode 
+        };
+        
+        let base = castles.find(c => c.id === chosenTeam);
+        if (base) {
+            players[socket.id].x = base.x + (Math.random() * 100 - 50);
+            players[socket.id].y = base.y + (Math.random() * 100 - 50);
+        }
+
+        socket.emit('initTeam', { id: socket.id, team: chosenTeam, color: TEAM_COLORS[chosenTeam] });
+        console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
+    });
+
+    // --- RUCH (TRYB FREE) ---
     socket.on('playerMovement', (data) => {
         const p = players[socket.id];
         if (p) {
@@ -154,6 +196,17 @@ io.on('connection', (socket) => {
                 p.skillPoints++;
                 socket.emit('levelUp', { level: p.level, points: p.skillPoints });
             }
+        }
+    });
+
+    // --- RUCH (TRYB TEAMS) ---
+    socket.on('playerMovementTeam', (data) => {
+        const p = players[socket.id];
+        if (p) {
+            if (data.x !== p.x || data.y !== p.y) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
+            p.x = data.x; p.y = data.y; p.isShielding = data.isShielding; 
+            let newLevel = Math.floor(p.score / 20) + 1;
+            if (newLevel > p.level) { p.level = newLevel; p.skillPoints++; socket.emit('levelUp', { level: p.level, points: p.skillPoints }); }
         }
     });
 
@@ -264,7 +317,7 @@ io.on('connection', (socket) => {
                 let isPierce = type === 'sword' ? (p.weaponPath === 'piercing') : stats.piercing;
 
                 projectiles.push({
-                    id: ++entityIdCounter, ownerId: socket.id,
+                    id: ++entityIdCounter, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
                     x: data.x, y: data.y, dx: data.dx, dy: data.dy,
                     life: stats.life, speed: stats.speed, isBotSword: false,
                     scoreAtThrow: p.score, isPiercing: isPierce, damage: finalDmg, isWinter: false, projType: type 
@@ -281,7 +334,7 @@ io.on('connection', (socket) => {
             let winterDmg = 15 + (p.skills.weapon * 2);
 
             projectiles.push({
-                id: ++entityIdCounter, ownerId: socket.id,
+                id: ++entityIdCounter, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
                 x: p.x, y: p.y - 1000, dx: 0, dy: 1.5, life: 150, speed: 18,
                 isBotSword: false, scoreAtThrow: Math.max(700, p.score), isPiercing: true, isWinter: true, damage: winterDmg, projType: 'winter'
             });
@@ -311,6 +364,52 @@ setInterval(() => {
             killPlayer(pId);
         }
     }
+
+    // --- LOGIKA ZAMKÓW I OBLĘŻEŃ (TRYB TEAMS) ---
+    Object.values(players).forEach(p => { if (p.team) p.isSafe = false; }); // Reset przed sprawdzeniem
+
+    castles.forEach(c => {
+        let defenders = 0;
+        let attackers = 0;
+        let attackingTeam = null;
+
+        Object.values(players).forEach(p => {
+            if (!p.team) return; 
+            
+            let dist = Math.hypot(p.x - c.x, p.y - c.y);
+            if (dist < c.radius) {
+                if (p.team === c.owner) {
+                    defenders++;
+                    p.isSafe = true; // Bezpieczny
+                } else {
+                    attackers++;
+                    attackingTeam = p.team;
+                    
+                    // PARZENIE INTRUZÓW!
+                    if (eventTickCounter % 30 === 0) {
+                        let burnDamage = Math.max(2, Math.floor(p.score * 0.05)); 
+                        p.score -= burnDamage;
+                        if (p.score <= 1) killPlayer(p.id); 
+                    }
+                }
+            }
+        });
+
+        // Proces przejmowania (1 sekunda)
+        if (eventTickCounter % 30 === 0) {
+            if (attackers > defenders && c.owner !== attackingTeam) {
+                c.captureProgress += 3.4; // 100% / 3.4 = ~30 sekund
+                if (c.captureProgress >= 100) {
+                    c.owner = attackingTeam;
+                    c.color = TEAM_COLORS[attackingTeam];
+                    c.captureProgress = 0;
+                    io.emit('killEvent', { text: `🚩 Zamek ${c.id} zdobyty przez drużynę ${attackingTeam}!` });
+                }
+            } else if (c.captureProgress > 0) {
+                c.captureProgress = Math.max(0, c.captureProgress - 3.4); 
+            }
+        }
+    });
 
     // --- SYSTEM EVENTÓW (Król, Deszcz lub Śnieżyca) ---
     eventTimer++;
@@ -488,7 +587,7 @@ setInterval(() => {
             if (stats && b.score >= stats.cost + 5) {
                 b.score -= stats.cost;
                 projectiles.push({
-                    id: ++entityIdCounter, ownerId: b.ownerId || b.id,
+                    id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null,
                     x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
                     life: stats.life, speed: stats.speed, isBotSword: true,
                     scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
@@ -511,6 +610,12 @@ setInterval(() => {
             let b2 = bots[j];
             if (b1.ownerId && b1.ownerId === b2.ownerId) continue;
             
+            // --- BLOKADA FRIENDLY FIRE DLA BOTÓW W DRUŻYNIE ---
+            if (b1.ownerId && b2.ownerId) {
+                let p1 = players[b1.ownerId]; let p2 = players[b2.ownerId];
+                if (p1 && p2 && p1.team && p2.team && p1.team === p2.team) continue;
+            }
+
             let dist = Math.hypot(b1.x - b2.x, b1.y - b2.y);
             let r1 = 25 * (1 + Math.pow(Math.max(0, b1.score - 1), 0.45) * 0.15);
             let r2 = 25 * (1 + Math.pow(Math.max(0, b2.score - 1), 0.45) * 0.15);
@@ -564,33 +669,38 @@ setInterval(() => {
             let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
 
             if (!p.isSafe) {
-                if (dist < pRadius && p.score > b.score * 1.15 && b.ownerId !== p.id) {
-                    
-                    if (p.isRecruiting) {
-                        // TRYB WERBOWANIA
-                        io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
-                        b.ownerId = p.id;
-                        b.score = 5; 
-                        b.color = p.color; 
-                        b.name = `Wojownik`; 
-                        
-                        let dx = b.x - p.x;
-                        let dy = b.y - p.y;
-                        b.distOffset = Math.hypot(dx, dy);
-                        b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
+                if (b.ownerId !== p.id) {
+                    // --- BLOKADA JEDZENIA BOTÓW Z TEJ SAMEJ DRUŻYNY ---
+                    let ownerPlayer = players[b.ownerId];
+                    if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
 
-                    } else {
-                        // TRYB POŻERANIA
-                        io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
-                        p.score += Math.floor(b.score * 0.5);
-                        bots[bi] = spawnBot(); 
+                    if (dist < pRadius && p.score > b.score * 1.15) {
+                        if (p.isRecruiting) {
+                            // TRYB WERBOWANIA
+                            io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
+                            b.ownerId = p.id;
+                            b.score = 5; 
+                            b.color = p.color; 
+                            b.name = `Wojownik`; 
+                            
+                            let dx = b.x - p.x;
+                            let dy = b.y - p.y;
+                            b.distOffset = Math.hypot(dx, dy);
+                            b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
+
+                        } else {
+                            // TRYB POŻERANIA
+                            io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
+                            p.score += Math.floor(b.score * 0.5);
+                            bots[bi] = spawnBot(); 
+                        }
+                        io.to(p.id).emit('botEaten', { newScore: p.score });
                     }
-                    io.to(p.id).emit('botEaten', { newScore: p.score });
-                }
-                else if (dist < bRadius && b.score > p.score * 1.15 && b.ownerId !== p.id) {
-                    io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
-                    b.score += Math.floor(p.score * 0.5);
-                    killPlayer(p.id); 
+                    else if (dist < bRadius && b.score > p.score * 1.15) {
+                        io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
+                        b.score += Math.floor(p.score * 0.5);
+                        killPlayer(p.id); 
+                    }
                 }
             }
         });
@@ -603,6 +713,10 @@ setInterval(() => {
             let p1 = players[pKeys[i]];
             let p2 = players[pKeys[j]];
             if (!p1 || !p2 || p1.isSafe || p2.isSafe) continue; 
+            
+            // --- BLOKADA FRIENDLY FIRE ---
+            if (p1.team && p2.team && p1.team === p2.team) continue;
+
             let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
             let r1 = 25 * (1 + Math.pow(Math.max(0, p1.score - 1), 0.45) * 0.15);
             let r2 = 25 * (1 + Math.pow(Math.max(0, p2.score - 1), 0.45) * 0.15);
@@ -629,6 +743,9 @@ setInterval(() => {
         bots.forEach((b) => {
             let hitRange = p.isWinter ? 60 : 30; 
             if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
+                // Zapobiegaj biciu botów ze swojej drużyny
+                if (b.ownerId && players[b.ownerId] && p.ownerTeam === players[b.ownerId].team) return;
+
                 b.score = Math.max(1, b.score - p.damage);
                 if (!p.isPiercing) p.life = 0; 
             }
@@ -637,6 +754,9 @@ setInterval(() => {
         Object.values(players).forEach(pl => {
             let hitRange = p.isWinter ? 60 : 30;
             if (p.ownerId !== pl.id && Math.hypot(p.x - pl.x, p.y - pl.y) < hitRange) {
+                // --- BLOKADA FRIENDLY FIRE Z BRONI DYSTANSOWEJ ---
+                if (p.ownerTeam && p.ownerTeam === pl.team) return;
+
                 if (pl.isShielding && !p.isWinter) {
                     if (!p.isPiercing) p.life = 0; 
                 } else {
@@ -667,9 +787,9 @@ setInterval(() => {
         if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
     });
 
-    // --- NOWOŚĆ: WYSYŁANIE ODLICZANIA ---
+    // --- NOWOŚĆ: WYSYŁANIE ODLICZANIA I ZAMKÓW ---
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
-    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft });
+    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft, castles });
 }, 33);
 
 const PORT = process.env.PORT || 3000;
