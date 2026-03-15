@@ -8,13 +8,13 @@ app.use(express.static(__dirname));
 // --- KONFIGURACJA ŚWIATA ---
 const WORLD_SIZE = 4000;
 const MAX_FOODS = 200;
-const MAX_BOTS = 80; // <--- ZWIĘKSZONA LICZBA BOTÓW (PRAWDZIWA WOJNA!)
-const MAX_LOOTS = 15; // <--- NOWOŚĆ: Ilość skrzynek na mapie
+const MAX_BOTS = 80; // ZWIĘKSZONA LICZBA BOTÓW (PRAWDZIWA WOJNA!)
+const MAX_LOOTS = 15; // Ilość skrzynek na mapie
 
 const players = {};
 let foods = [];
 let bots = [];
-let loots = []; // <--- NOWOŚĆ: Tablica skrzynek
+let loots = []; // Tablica skrzynek
 let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
@@ -74,7 +74,6 @@ function spawnFood() {
     return { id: ++entityIdCounter, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
 }
 
-// --- NOWOŚĆ: Funkcja do spawnowania skrzynek ---
 function spawnLoot() {
     const types = ['mass', 'skill', 'weapon'];
     return {
@@ -97,6 +96,7 @@ function spawnBot() {
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
         ownerId: null, 
+        team: null, // Pamięć o przynależności do drużyny (Teams)
         // --- Pamięć formacji RTS ---
         angleOffset: 0, 
         distOffset: 0,  
@@ -285,6 +285,15 @@ io.on('connection', (socket) => {
             p.inventory[item] = 1;        
             p.activeWeapon = item;        
             socket.emit('shopSuccess', { item: item });
+            
+            // --- AKTUALIZACJA ZWERBOWANYCH BOTÓW ---
+            // Gdy kupisz sprzęt, przekaż go również zwerbowanym żołnierzom!
+            bots.forEach(b => {
+                if (b.ownerId === p.id) {
+                    b.inventory[item] = 1;
+                    b.activeWeapon = item;
+                }
+            });
         } else {
             socket.emit('shopError', { message: "Za mało punktów masy!" });
         }
@@ -298,6 +307,11 @@ io.on('connection', (socket) => {
             const types = ['shotgun', 'crossbow', 'diamond_bow', 'golden_bow', 'bow', 'cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife', 'explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'];
             for(let t of types) if(p.inventory[t]) { p.activeWeapon = t; break; }
         }
+        
+        // Zmiana broni rzutuje na żołnierzy
+        bots.forEach(b => {
+            if (b.ownerId === p.id) b.activeWeapon = p.activeWeapon;
+        });
     });
 
     socket.on('throwSword', (data) => {
@@ -452,7 +466,7 @@ setInterval(() => {
                 io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
             }, 25000); // 25 sekund deszczu
         } else {
-            // EVENT: Zamięć Śnieżna (NOWOŚĆ)
+            // EVENT: Zamięć Śnieżna
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
 
@@ -543,13 +557,57 @@ setInterval(() => {
                     b.x += Math.cos(b.angle) * (currentBotSpeed * speedMult);
                     b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
                 }
+                
+                // STRZELANIE BOTÓW ZWERBOWANYCH W STRONĘ CELÓW
+                if (Math.random() < 0.05) { // 5% szansy w każdej klatce na oddanie rzutu/strzału
+                    let type = b.activeWeapon;
+                    let stats = weaponStats[type];
+                    
+                    if (stats && b.score >= stats.cost + 5) { // Muszą mieć zapas punktów na rzut
+                        // Poszukiwanie najbliższego wroga w promieniu rażenia (nie z naszej drużyny)
+                        let target = null;
+                        let minBotDist = 400; // Zasięg "wzroku" botów
+                        
+                        Object.values(players).forEach(p2 => {
+                            if (p2.id !== owner.id && (!owner.team || owner.team !== p2.team)) {
+                                let d = Math.hypot(b.x - p2.x, b.y - p2.y);
+                                if (d < minBotDist) { minBotDist = d; target = p2; }
+                            }
+                        });
+                        
+                        if (!target) {
+                            bots.forEach(b2 => {
+                                if (b2.id !== b.id && b2.ownerId !== owner.id && (!owner.team || owner.team !== b2.team)) {
+                                    let d = Math.hypot(b.x - b2.x, b.y - b2.y);
+                                    if (d < minBotDist) { minBotDist = d; target = b2; }
+                                }
+                            });
+                        }
+
+                        // Jeżeli bot namierzył wroga, strzela w jego stronę
+                        if (target) {
+                            b.score -= stats.cost;
+                            let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
+                            projectiles.push({
+                                id: ++entityIdCounter, ownerId: owner.id, ownerTeam: owner.team || null, teamInitial: owner.team || null,
+                                x: b.x, y: b.y, dx: Math.cos(aimAngle), dy: Math.sin(aimAngle),
+                                life: stats.life, speed: stats.speed, isBotSword: true,
+                                scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
+                            });
+                        }
+                    }
+                }
+
             } else {
                 b.ownerId = null;
+                b.team = null;
                 b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
                 botNameCounter++;
                 b.name = `Bot AI #${botNameCounter}`;
                 b.targetX = 0;
                 b.targetY = 0;
+                b.inventory = { bow: 0, knife: 0, shuriken: 0 };
+                b.activeWeapon = 'sword';
             }
         } else {
             // --- AI DZIKICH BOTÓW ---
@@ -578,29 +636,40 @@ setInterval(() => {
             // Odbijanie od ścian
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
-        }
-
-        // Strzelanie dzikich botów
-        if (Math.random() < 0.01) {
-            let type = b.activeWeapon;
-            let stats = weaponStats[type];
-            if (stats && b.score >= stats.cost + 5) {
-                b.score -= stats.cost;
-                projectiles.push({
-                    id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null,
-                    x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
-                    life: stats.life, speed: stats.speed, isBotSword: true,
-                    scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
-                });
+            
+            // Strzelanie dzikich botów
+            if (Math.random() < 0.01) {
+                let type = b.activeWeapon;
+                let stats = weaponStats[type];
+                if (stats && b.score >= stats.cost + 5) {
+                    b.score -= stats.cost;
+                    projectiles.push({
+                        id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null, teamInitial: null,
+                        x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
+                        life: stats.life, speed: stats.speed, isBotSword: true,
+                        scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
+                    });
+                }
             }
         }
 
+        // --- Boty i Zwerbowane Boty Jedzą Kropki (Odp. na Twoje zgłoszenie!) ---
         foods.forEach((f, fi) => {
             if (Math.hypot(b.x - f.x, b.y - f.y) < 25) {
                 b.score += 1;
                 foods[fi] = spawnFood();
             }
         });
+        
+        // Zwerbowane boty oddają masę właścicielowi, jeśli urosły za duże!
+        if (b.ownerId && b.score > 15) {
+            let p = players[b.ownerId];
+            if (p) {
+                let transfer = Math.floor(b.score - 15);
+                b.score -= transfer;
+                p.score += transfer;
+            }
+        }
     }
 
     // 2. Bot zjada Bota 
@@ -679,10 +748,15 @@ setInterval(() => {
                             // TRYB WERBOWANIA
                             io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
                             b.ownerId = p.id;
+                            b.team = p.team; // Przejęcie koloru / drużyny (dla Teams)
                             b.score = 5; 
                             b.color = p.color; 
                             b.name = `Wojownik`; 
                             
+                            // Wyposaża od razu zwerbowanego bota w tę samą broń co gracz!
+                            b.activeWeapon = p.activeWeapon;
+                            if (p.activeWeapon !== 'sword') b.inventory[p.activeWeapon] = 1;
+
                             let dx = b.x - p.x;
                             let dy = b.y - p.y;
                             b.distOffset = Math.hypot(dx, dy);
@@ -745,6 +819,8 @@ setInterval(() => {
             if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
                 // Zapobiegaj biciu botów ze swojej drużyny
                 if (b.ownerId && players[b.ownerId] && p.ownerTeam === players[b.ownerId].team) return;
+                // Zapobiegaj zwerbowanym botom bicia dzikich botów, jeśli nie chcemy by się krzywdziły bezcelowo
+                if (p.ownerTeam && !b.team) return;
 
                 b.score = Math.max(1, b.score - p.damage);
                 if (!p.isPiercing) p.life = 0; 
@@ -787,7 +863,6 @@ setInterval(() => {
         if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
     });
 
-    // --- NOWOŚĆ: WYSYŁANIE ODLICZANIA I ZAMKÓW ---
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft, castles });
 }, 33);
