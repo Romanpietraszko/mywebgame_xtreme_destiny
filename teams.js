@@ -147,7 +147,12 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         if (currentEvent === 'BLIZZARD') speed *= 0.4; 
-        player.x += Math.cos(moveAngle) * speed; player.y += Math.sin(moveAngle) * speed;
+        player.x += Math.cos(moveAngle) * speed; 
+        player.y += Math.sin(moveAngle) * speed;
+
+        // --- TWARDE GRANICE MAPY (Zamiast śmierci od wylotu) ---
+        player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
+        player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
     }
     
     camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
@@ -155,13 +160,13 @@ function update() {
 }
 
 function gameLoop() {
-    // 1. Zmiana mapy na Mroczną Arenę (zamiast drawForestMap)
-    ctx.fillStyle = '#1e272e'; // Ciemny, kamienny kolor tła
+    // 1. Zmiana mapy na Ciemną Taktyczną Arenę z neonowo-zieloną siatką
+    ctx.fillStyle = '#1e272e'; 
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     ctx.save();
     ctx.translate(-camera.x % 100, -camera.y % 100);
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)'; // Neonowa zieleń do nawigacji
     ctx.lineWidth = 2;
     for (let i = -100; i <= canvas.width + 100; i += 100) {
         ctx.beginPath(); ctx.moveTo(i, -100); ctx.lineTo(i, canvas.height + 100); ctx.stroke();
@@ -202,10 +207,14 @@ function gameLoop() {
         
         // --- RYSOWANIE LOOTU (JEDZENIE I SKRZYNKI) ---
         foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
+        
         loots.forEach(l => { 
-            ctx.fillStyle = l.type === 'mass' ? '#f1c40f' : (l.type === 'skill' ? '#3498db' : '#e74c3c');
-            ctx.fillRect(l.x - 15, l.y - 15, 30, 30);
-            ctx.strokeStyle = '#000'; ctx.lineWidth = 2; ctx.strokeRect(l.x - 15, l.y - 15, 30, 30);
+            ctx.font = "30px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            if (l.type === 'mass') ctx.fillText("🎁", l.x, l.y);
+            else if (l.type === 'skill') ctx.fillText("📘", l.x, l.y);
+            else if (l.type === 'weapon') ctx.fillText("🗡️", l.x, l.y);
         });
         
         // --- GRAWERUNKI NA MIECZACH ---
@@ -252,29 +261,29 @@ function gameLoop() {
             ctx.restore();
         }
 
-        ctx.restore(); // Koniec przestrzeni świata gry, wracamy do ekranu
-        
-        // --- RYSOWANIE GRACZY I BOTÓW (Z Emotkami Diabłów!) ---
+        // --- RYSOWANIE GRACZY I BOTÓW ---
         allEntities.forEach(e => {
             if (e.isSafe && (!player || !player.isSafe)) return;
             
-            let scale = getScale(e.score);
-            // Rysujemy bazowego patyczaka z engine.js
+            // POPRAWKA: Prawidłowe skalowanie graczy wizualnie
+            let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
+            let scale = radius / 25; 
+            
+            // drawStickman po prostu dostaje e.x i e.y bo jesteśmy w świecie gry
             drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
 
             // Dodatki drużynowe
             if (e.team) {
                 ctx.save();
-                ctx.translate(e.x - camera.x, e.y - camera.y);
-                let radius = 25 * scale;
+                ctx.translate(e.x, e.y); // Pozycja w świecie bez minusowania kamery!
 
                 // Litera na brzuchu
-                ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                 ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
                 ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                 ctx.fillText(e.team, 0, 0);
 
-                // Emotka nad głową (każda drużyna ma swojego demona!)
+                // Emotka nad głową
                 const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' };
                 ctx.font = `${Math.floor(radius)}px Arial`;
                 ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 20);
@@ -282,6 +291,8 @@ function gameLoop() {
                 ctx.restore();
             }
         });
+        
+        ctx.restore(); // <--- Zmiana: Przywrócenie przestrzeni poza pętlą (naprawia dzikie boty!)
         
         // --- EFEKTY POGODY I UI ---
         if (currentEvent === 'TOXIC_RAIN') {
