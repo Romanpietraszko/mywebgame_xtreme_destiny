@@ -174,7 +174,7 @@
                 </div>
                 
                 <div class="input-group">
-                    <label>Kolor Gracza:</label><br>
+                    <label>Kolor Gracza (Dla trybu Free):</label><br>
                     <input type="color" id="playerColor" value="#ff4444" style="width: 100%; height: 40px; cursor: pointer;">
                 </div>
                 
@@ -182,19 +182,29 @@
             </div>
 
             <div id="step-2" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px;">Wybierz Tryb Gry:</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Free)</button>
+                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #8e44ad;">⚔️ Wojna Drużyn (PvP)</button>
+                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #27ae60;">🤖 Trening Drużynowy (PvE)</button>
+                </div>
+                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+            </div>
+
+            <div id="step-3" style="display: none;">
                 <h3>Wybierz sterowanie:</h3>
                 <div class="control-grid">
-                    <div class="control-card" onclick="startGame('WASD')">
+                    <div class="control-card" onclick="launchGame('WASD')">
                         <div class="keys-preview">W A S D</div>
                         <span>Klasyczne</span>
                     </div>
                     
-                    <div class="control-card" onclick="startGame('ARROWS')">
+                    <div class="control-card" onclick="launchGame('ARROWS')">
                         <div class="keys-preview">↑ ↓ ← →</div>
                         <span>Strzałki</span>
                     </div>
                 </div>
-                <button onclick="location.reload()" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
             </div>
 
             <div id="game-info" style="margin-top: 20px;">
@@ -238,32 +248,64 @@
     <script src="/socket.io/socket.io.js"></script>
     <script src="map.js"></script>
     <script src="engine.js"></script>
-    <script src="free.js"></script>
-    <script src="shop.js"></script>
     
     <script>
-        // Logika przełączania kroków w menu
+        // --- LOGIKA PRZEŁĄCZANIA KROKÓW W MENU ---
         const s1 = document.getElementById('step-1');
         const s2 = document.getElementById('step-2');
+        const s3 = document.getElementById('step-3');
         const next = document.getElementById('nextBtn');
         const nameInput = document.getElementById('playerName');
+        
+        let chosenMode = 'FREE'; // Domyślny tryb
 
         next.onclick = () => {
             if (nameInput.value.trim().length > 0) {
                 s1.style.display = 'none';
-                s2.style.display = 'block';
+                s2.style.display = 'block'; // Pokazuje wybór trybu
             } else {
                 nameInput.style.borderColor = 'red';
                 alert("Wpisz swój nick, aby kontynuować!");
             }
         };
 
-        // Obsługa Entera
         nameInput.addEventListener("keypress", (e) => {
             if (e.key === "Enter") next.click();
         });
 
-        // Nowe funkcje wysyłające komendy do serwera z interfejsu
+        // Funkcja przypisana do przycisków trybu gry
+        window.selectMode = (mode) => {
+            chosenMode = mode;
+            s2.style.display = 'none';
+            s3.style.display = 'block'; // Przejście do sterowania
+        };
+
+        // --- DYNAMICZNY LOADER SKRYPTÓW ---
+        // Ta funkcja zapobiega wysypaniu się gry! Ładuje tylko to, co jest potrzebne.
+        window.launchGame = (controlType) => {
+            document.getElementById('menu').innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
+
+            // Zależnie od wyboru, wczytujemy plik free.js albo teams.js
+            const scriptSrc = chosenMode === 'FREE' ? 'free.js' : 'teams.js';
+            const script = document.createElement('script');
+            script.src = scriptSrc;
+            
+            script.onload = () => {
+                // Sklep ładujemy DOPIERO po załadowaniu głównego pliku, bo wymaga globalnego 'socket'
+                const shopScript = document.createElement('script');
+                shopScript.src = 'shop.js';
+                shopScript.onload = () => {
+                    if (chosenMode === 'FREE') {
+                        startGame(controlType); // Start dla trybu free
+                    } else {
+                        startGame(controlType, chosenMode); // Start dla trybu drużynowego
+                    }
+                };
+                document.body.appendChild(shopScript);
+            };
+            document.body.appendChild(script);
+        };
+
         window.choosePath = (path) => {
             if (typeof socket !== 'undefined') {
                 socket.emit('chooseWeaponPath', path);
