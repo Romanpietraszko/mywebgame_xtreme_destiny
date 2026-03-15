@@ -6,9 +6,9 @@ const socket = io();
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
-let loots = [];           // <--- NOWOŚĆ: Tablica skrzynek z serwera
-let currentEvent = null;  // <--- NOWOŚĆ: Info o evencie z serwera
-let eventTimeLeft = 0;    // <--- NOWOŚĆ: Czas do kolejnego eventu
+let loots = [];            // Tablica skrzynek z serwera
+let currentEvent = null;   // Info o evencie z serwera
+let eventTimeLeft = 0;     // Czas do kolejnego eventu
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
 // Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
@@ -140,7 +140,10 @@ window.startGame = (type) => {
         name: name, color: color, isSafe: false,
         isShielding: false, aura: null, 
         inventory: { bow: 0, knife: 0, shuriken: 0 }, 
-        activeWeapon: 'sword' 
+        activeWeapon: 'sword',
+        // --- NAPRAWA RTS (stan zapamiętywany lokalnie) ---
+        isRecruiting: false,
+        formation: 0
     };
     if (myId) player.id = myId;
     socket.emit('joinGame', { name, color });
@@ -156,8 +159,16 @@ socket.on('skillUpdated', (data) => {
 });
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
-socket.on('recruitToggled', (state) => { killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
-socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); });
+
+// --- NAPRAWA PRZEŁĄCZNIKÓW RTS ---
+// Teraz serwer potwierdza zmianę, więc musimy to zapisać w kliencie, by gracz widział różnicę.
+socket.on('recruitToggled', (state) => { 
+    if (player) player.isRecruiting = state;
+    killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
+});
+socket.on('formationSwitched', (formName) => { 
+    killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
+});
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
@@ -190,15 +201,18 @@ socket.on('serverTick', (data) => {
     foods = data.foods; 
     bots = data.bots; 
     projectiles = data.projectiles || [];
-    loots = data.loots || [];             // <--- Odbieramy skrzynki z serwera
-    currentEvent = data.activeEvent;      // <--- Odbieramy aktywny event
-    eventTimeLeft = data.eventTimeLeft || 0; // <--- Odbieramy czas do eventu
+    loots = data.loots || [];              
+    currentEvent = data.activeEvent;       
+    eventTimeLeft = data.eventTimeLeft || 0; 
     
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
         player.score = otherPlayers[myId].score;
         player.inventory = otherPlayers[myId].inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword';
+        // Aktualizacja formacji serwer-klient (dla pewności, żeby się nie rozjechało)
+        if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
+        if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
     }
     delete otherPlayers[myId];
 });
@@ -245,9 +259,9 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        // --- NOWOŚĆ: Spowolnienie gracza podczas Śnieżycy! ---
+        // Spowolnienie gracza podczas Śnieżycy!
         if (currentEvent === 'BLIZZARD') {
-            speed *= 0.4; // 60% wolniej!
+            speed *= 0.4; 
         }
 
         player.x += Math.cos(moveAngle) * speed; 
@@ -286,11 +300,9 @@ function gameLoop() {
             ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
-        // --- NOWOŚĆ: RYSOWANIE LOOTU (SKRZYNKI) ---
         loots.forEach(l => {
             ctx.save();
             ctx.translate(l.x, l.y);
-            // Kolor zależny od zawartości (fioletowa = skill, złota = masa, czerwona = broń)
             ctx.fillStyle = l.type === 'skill' ? '#8e44ad' : (l.type === 'mass' ? '#f1c40f' : '#e74c3c');
             ctx.fillRect(-12, -10, 24, 20); 
             ctx.fillStyle = '#7f8c8d';
@@ -336,7 +348,7 @@ function gameLoop() {
 
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
-            drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); // Z pliku engine.js
+            drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); 
         });
 
         Object.values(otherPlayers).forEach(p => {
@@ -363,7 +375,6 @@ function gameLoop() {
             ctx.stroke();
             ctx.restore();
         } else if (currentEvent === 'BLIZZARD') { 
-            // --- NOWOŚĆ: Śnieg i Mgła ---
             ctx.save();
             ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; // Gęsta mgła
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -395,13 +406,18 @@ function gameLoop() {
 
             ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
             ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
+            
+            // Wskaźnik Rekrutacji pod punktami
+            if (player.isRecruiting !== undefined) {
+                ctx.font = 'bold 14px Arial';
+                ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c';
+                ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
+            }
 
-            // --- NOWOŚĆ: Rysowanie Odliczania / Statusu Eventu na środku ---
             ctx.save();
             ctx.textAlign = 'center';
             if (currentEvent === null) {
                 ctx.font = 'bold 20px Arial';
-                // Pomaluj na czerwono i lekko powiększ, jeśli zostało mało czasu
                 if (eventTimeLeft <= 10) {
                     ctx.fillStyle = '#e74c3c';
                     ctx.font = 'bold 24px Arial';
