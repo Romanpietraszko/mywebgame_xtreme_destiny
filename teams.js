@@ -129,6 +129,13 @@ socket.on('serverTick', (data) => {
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword'; player.isSafe = otherPlayers[myId].isSafe;
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
+        
+        // --- LOGIKA WYŚWIETLANIA SKLEPU ---
+        const shopUI = document.getElementById('shop'); 
+        if (shopUI) {
+            // Jeśli gracz jest bezpieczny, pokaż sklep. W przeciwnym razie schowaj.
+            shopUI.style.display = player.isSafe ? 'block' : 'none';
+        }
     }
     delete otherPlayers[myId];
 });
