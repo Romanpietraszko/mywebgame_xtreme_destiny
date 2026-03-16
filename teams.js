@@ -136,7 +136,7 @@ socket.on('serverTick', (data) => {
         
         // --- LOGIKA WYŚWIETLANIA SKLEPU ---
         // PAMIĘTAJ: Zmień 'shop' na takie ID, jakie masz wpisane w pliku HTML! (np. 'sklep', 'shopUI')
-        const shopUI = document.getElementById('shop'); 
+        const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) {
             shopUI.style.display = player.isSafe ? 'block' : 'none';
         }
