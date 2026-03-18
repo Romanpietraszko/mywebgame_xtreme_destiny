@@ -302,7 +302,12 @@ function gameLoop() {
 
         loots.forEach(l => {
             ctx.save();
-            ctx.translate(l.x, l.y);
+        // --- NOWY BLOK Z DODANYM SKALOWANIEM ---
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
+        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom)
+        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
+        // ----------------------------------------
             ctx.fillStyle = l.type === 'skill' ? '#8e44ad' : (l.type === 'mass' ? '#f1c40f' : '#e74c3c');
             ctx.fillRect(-12, -10, 24, 20); 
             ctx.fillStyle = '#7f8c8d';
