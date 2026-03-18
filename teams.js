@@ -162,33 +162,19 @@ function update() {
         if (currentEvent === 'BLIZZARD') speed *= 0.4; 
         player.x += Math.cos(moveAngle) * speed; 
         player.y += Math.sin(moveAngle) * speed;
-
-        // --- TWARDE GRANICE MAPY ---
-        player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
-        player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
     }
     
-    camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-    socket.emit('playerMovementTeam', { x: player.x, y: player.y, score: player.score, isShielding: player.isShielding });
+    // --- TWARDE GRANICE MAPY (ZE ŚMIERCIĄ NA MARGINESIE JAK W FREE) ---
+    if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
+        // Wysyłamy -100, żeby serwer potraktował to jako śmierć od ściany
+        socket.emit('playerMovementTeam', { x: -100, y: -100, score: player.score, isShielding: false });
+    } else {
+        camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
+        socket.emit('playerMovementTeam', { x: player.x, y: player.y, score: player.score, isShielding: player.isShielding });
+    }
 }
 
 function gameLoop() {
-    // 1. Ciemna Taktyczna Arena
-    ctx.fillStyle = '#1e272e'; 
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.save();
-    ctx.translate(-camera.x % 100, -camera.y % 100);
-    ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)';
-    ctx.lineWidth = 2;
-    for (let i = -100; i <= canvas.width + 100; i += 100) {
-        ctx.beginPath(); ctx.moveTo(i, -100); ctx.lineTo(i, canvas.height + 100); ctx.stroke();
-    }
-    for (let i = -100; i <= canvas.height + 100; i += 100) {
-        ctx.beginPath(); ctx.moveTo(-100, i); ctx.lineTo(canvas.width + 100, i); ctx.stroke();
-    }
-    ctx.restore();
-    
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
     allEntities.sort((a,b) => b.score - a.score);
@@ -198,7 +184,27 @@ function gameLoop() {
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         if (gameState === 'PLAYING') { update(); }
         
-        ctx.save(); ctx.translate(-camera.x, -camera.y);
+        // --- SKALOWANIE (ZOOM) KAMERY ---
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
+        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom) z engine.js
+        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
+
+        // 1. Ciemna Taktyczna Arena (Teraz wewnątrz skalowanego obszaru)
+        ctx.fillStyle = '#1e272e'; 
+        ctx.fillRect(camera.x - (canvas.width / globalScale) / 2, camera.y - (canvas.height / globalScale) / 2, canvas.width / globalScale * 2, canvas.height / globalScale * 2); // Poprawka na rysowanie tła poza ekranem by nie ucinało po oddaleniu
+        
+        ctx.save();
+        // ctx.translate(-camera.x % 100, -camera.y % 100); - USUNIĘTO, powodowało rozjazd z globalScale, siatka poniżej jest lepsza
+        ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)';
+        ctx.lineWidth = 2;
+        // Rysowanie stałej siatki względem mapy, a nie kamery (lepiej działa ze skalowaniem)
+        for (let i = 0; i <= WORLD_SIZE; i += 100) {
+            ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, WORLD_SIZE); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(WORLD_SIZE, i); ctx.stroke();
+        }
+        ctx.restore();
+
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
         // --- RYSOWANIE ZAMKÓW I OBLĘŻENIA ---
@@ -301,9 +307,9 @@ function gameLoop() {
             }
         });
         
-        ctx.restore(); 
+        ctx.restore(); // Przywracamy pozycję na ekran żeby rysować UI!
         
-        // --- EFEKTY POGODY I UI ---
+        // --- EFEKTY POGODY I UI (Nie skalowane, nakładka na ekran) ---
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
@@ -358,7 +364,7 @@ function gameLoop() {
             ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center';
             ctx.fillText("ZGŁADZONO CIĘ", canvas.width/2, canvas.height/2);
             ctx.fillStyle = '#fff'; ctx.font = '24px Arial';
-            ctx.fillText(`Końcowa masa: ${Math.floor(player.score)}`, canvas.width/2, canvas.height/2 + 40);
+            ctx.fillText(`Końcowa masa: ${Math.floor(player.score || 0)}`, canvas.width/2, canvas.height/2 + 40);
             ctx.fillText("Odśwież stronę, aby zagrać ponownie.", canvas.width/2, canvas.height/2 + 80);
         }
     }
