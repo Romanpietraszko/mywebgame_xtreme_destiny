@@ -289,6 +289,14 @@ function gameLoop() {
             update(); checkEquipmentUpgrades(); 
         }
 
+        // ==========================================
+        // NAPRAWA SMUG: Czyszczenie płótna przed klatką
+        // ==========================================
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#27ae60'; // Tło (zielone) dla marginesów 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // ==========================================
+
         // --- SKALOWANIE (ZOOM) KAMERY ---
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
