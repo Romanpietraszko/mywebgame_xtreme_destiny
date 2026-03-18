@@ -295,30 +295,35 @@ function gameLoop() {
             update(); checkEquipmentUpgrades(); 
         }
 
-        // --- WIRTUALNA KAMERA DLA TŁA (Naprawia znikające drzewa po bokach) ---
+        // ==============================================================
+        // 1. CZYSZCZENIE EKRANU I CIEMNY MARGINES POZA MAPĄ
+        // ==============================================================
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#111111'; // Czarna pustka za czerwoną linią
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Ustawiamy kamerę NA SZTYWNO wyśrodkowaną na graczu (brak problemów z lataniem botów)
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(globalScale, globalScale);
+        ctx.translate(-player.x, -player.y);
+
+        // ==============================================================
+        // 2. RYSOWANIE SAMEJ MAPY (Czysta Trawa)
+        // ==============================================================
+        ctx.fillStyle = '#27ae60';
+        ctx.fillRect(0, 0, WORLD_SIZE, WORLD_SIZE); // Rysuje trawę tylko do 4000x4000
+        
+        // ==============================================================
+        // 3. RYSOWANIE DRZEW (Z odpowiednio poszerzonym obszarem ładowania)
+        // ==============================================================
         let vWidth = canvas.width / globalScale;
         let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
+        drawForestMap(ctx, vCamera, vWidth, vHeight);
 
-        // 1. Czyszczenie ekranu
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#27ae60'; // Tło (zielone) dla marginesów 
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        // 2. Rysowanie Mapy (Z oszukaną, szerszą kamerą)
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.scale(globalScale, globalScale);
-        ctx.translate(-vWidth / 2, -vHeight / 2);
-        drawForestMap(ctx, vCamera, vWidth, vHeight); 
-        ctx.restore();
-
-        // 3. Rysowanie Graczy, Przedmiotów i Stref (Idealnie wyśrodkowane na graczu)
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2);
-        ctx.scale(globalScale, globalScale);
-        ctx.translate(-player.x, -player.y); 
-
+        // Rysujemy czerwoną barierę (Będzie super widoczna z czarnym tłem pod spodem)
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
@@ -390,6 +395,8 @@ function gameLoop() {
         ctx.restore(); 
         
         // --- EFEKTY WIZUALNE POGODY ---
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
+
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save();
             ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
