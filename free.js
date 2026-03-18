@@ -36,11 +36,13 @@ window.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
-        const mouseWorldX = mouseX + camera.x;
-        const mouseWorldY = mouseY + camera.y;
         
-        const playerScreenX = player.x - camera.x;
-        const playerScreenY = player.y - camera.y;
+        // POPRAWKA DLA ZOOMA: Obliczamy myszkę uwzględniając globalScale
+        const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
+        const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
+        
+        const playerScreenX = canvas.width / 2;
+        const playerScreenY = canvas.height / 2;
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
@@ -53,8 +55,12 @@ window.addEventListener('mousedown', (e) => {
     if (gameState === 'PLAYING' && player) { 
         if (e.button === 2) { 
             const rect = canvas.getBoundingClientRect();
-            const mouseWorldX = e.clientX - rect.left + camera.x;
-            const mouseWorldY = e.clientY - rect.top + camera.y;
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // POPRAWKA DLA ZOOMA
+            const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
+            const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
 
             let closestBot = null;
             let minDist = 80; 
@@ -289,22 +295,29 @@ function gameLoop() {
             update(); checkEquipmentUpgrades(); 
         }
 
-        // ==========================================
-        // NAPRAWA SMUG: Czyszczenie płótna przed klatką
-        // ==========================================
+        // --- WIRTUALNA KAMERA DLA TŁA (Naprawia znikające drzewa po bokach) ---
+        let vWidth = canvas.width / globalScale;
+        let vHeight = canvas.height / globalScale;
+        let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
+
+        // 1. Czyszczenie ekranu
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         ctx.fillStyle = '#27ae60'; // Tło (zielone) dla marginesów 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // ==========================================
 
-        // --- SKALOWANIE (ZOOM) KAMERY ---
+        // 2. Rysowanie Mapy (Z oszukaną, szerszą kamerą)
         ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
-        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom) z engine.js
-        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(globalScale, globalScale);
+        ctx.translate(-vWidth / 2, -vHeight / 2);
+        drawForestMap(ctx, vCamera, vWidth, vHeight); 
+        ctx.restore();
 
-        // Teraz rysujemy tło (żeby też było oddalone)
-        drawForestMap(ctx, camera, canvas.width, canvas.height); 
+        // 3. Rysowanie Graczy, Przedmiotów i Stref (Idealnie wyśrodkowane na graczu)
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2);
+        ctx.scale(globalScale, globalScale);
+        ctx.translate(-player.x, -player.y); 
 
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
@@ -374,7 +387,7 @@ function gameLoop() {
         if (player && gameState !== 'GAMEOVER') {
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
-        ctx.restore(); // Przywracamy układ do współrzędnych ekranu!
+        ctx.restore(); 
         
         // --- EFEKTY WIZUALNE POGODY ---
         if (currentEvent === 'TOXIC_RAIN') {
