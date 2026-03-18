@@ -8,6 +8,8 @@ const WORLD_SIZE = 4000;
 const camera = { x: 0, y: 0 };
 const keys = {};
 
+// NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
+let globalScale = 1;
 // Słownik pamiętający stan "przeżuwania" i emocji dla grafiki
 const visualStates = {}; 
 
@@ -346,6 +348,10 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
+    // Obliczamy "zoom" na podstawie wysokości okna. 
+    // Zakładamy, że gra była projektowana pod monitor o wysokości ~900px.
+    // Im mniejsze okno, tym bardziej oddalamy kamerę (mniejsza skala), żeby było widać więcej mapy.
+    globalScale = Math.min(1, window.innerHeight / 900);
 }
 window.onresize = resize;
 resize();
