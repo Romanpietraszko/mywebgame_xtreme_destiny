@@ -2,7 +2,7 @@
 // TEAMS.JS - Tryb Drużynowy (PvP & Trening)
 // ==========================================
 
-const socket = io();
+const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
