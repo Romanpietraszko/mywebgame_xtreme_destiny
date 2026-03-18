@@ -1,8 +1,15 @@
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-const io = require('socket.io')(http);
-
+// --- TUTAJ JEST MAGIA ---
+// Odblokowujemy serwer na ruch z zewnętrznych portali (CORS)
+const io = require('socket.io')(http, {
+    cors: {
+        origin: "*", // Wpuszcza graczy z CrazyGames i każdego innego portalu
+        methods: ["GET", "POST"]
+    }
+});
+// ------------------------
 app.use(express.static(__dirname));
 
 // --- KONFIGURACJA ŚWIATA ---
