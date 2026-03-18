@@ -278,8 +278,6 @@ function update() {
 }
 
 function gameLoop() {
-    drawForestMap(ctx, camera, canvas.width, canvas.height); // Z pliku map.js
-    
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
     allEntities.sort((a,b) => b.score - a.score);
@@ -290,7 +288,16 @@ function gameLoop() {
         if (gameState === 'PLAYING') {
             update(); checkEquipmentUpgrades(); 
         }
-        ctx.save(); ctx.translate(-camera.x, -camera.y);
+
+        // --- SKALOWANIE (ZOOM) KAMERY ---
+        ctx.save();
+        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
+        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom) z engine.js
+        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
+
+        // Teraz rysujemy tło (żeby też było oddalone)
+        drawForestMap(ctx, camera, canvas.width, canvas.height); 
+
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
@@ -302,12 +309,7 @@ function gameLoop() {
 
         loots.forEach(l => {
             ctx.save();
-        // --- NOWY BLOK Z DODANYM SKALOWANIEM ---
-        ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
-        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom)
-        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
-        // ----------------------------------------
+            ctx.translate(l.x, l.y);
             ctx.fillStyle = l.type === 'skill' ? '#8e44ad' : (l.type === 'mass' ? '#f1c40f' : '#e74c3c');
             ctx.fillRect(-12, -10, 24, 20); 
             ctx.fillStyle = '#7f8c8d';
