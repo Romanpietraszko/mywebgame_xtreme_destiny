@@ -184,6 +184,14 @@ function gameLoop() {
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         if (gameState === 'PLAYING') { update(); }
         
+        // ==========================================
+        // NAPRAWA SMUG W TEAMS.JS: Czyszczenie płótna
+        // ==========================================
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#1e272e'; // Tło areny dla marginesów 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        // ==========================================
+
         // --- SKALOWANIE (ZOOM) KAMERY ---
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
