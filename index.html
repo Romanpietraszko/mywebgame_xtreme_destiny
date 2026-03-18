@@ -5,6 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <script>
+    // To uruchomi SDK zanim załadują się reszta Twoich plików JS
+    (async function() {
+        try {
+            await window.CrazyGames.SDK.init();
+            console.log("CrazyGames SDK gotowe i czeka!");
+        } catch (e) {
+            console.error("Błąd SDK:", e);
+        }
+    })();
+</script>
     <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
         /* Szybkie style pomocnicze (reszta jest w style.css) */
