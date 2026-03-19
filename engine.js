@@ -210,8 +210,10 @@ function drawProShield(x, y, sc, tier) {
 }
 
 function drawStickman(e, x, y, sc, safe, kingId) {
+    // --- NOWOŚĆ: JEŚLI GRACZ LUB BOT WCHODZI DO ZAMKU (STREFA BEZPIECZNA), ZNIKA Z MAPY! ---
+    if (safe) return; 
+
     ctx.save(); 
-    if (safe) ctx.globalAlpha = 0.35;
     
     // --- AURA ---
     if (e.aura && e.aura.time > 0) { 
@@ -246,19 +248,14 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     const shieldTier = getTier(score, [50, 150, 300]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
 
-    // Sprawdzamy, czy rysujemy Ciebie (człowieka), czy Bota
     let isHuman = (e === player) || (e.id && e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
 
-    // Niestandardowe przesunięcia dla Duszka i dla Bota
     let wpnX = isHuman ? 28 : 18;
     let wpnY = isHuman ? 18 : 10;
     let shldX = isHuman ? 28 : 20;
     let shldY = isHuman ? 18 : -6;
 
     if (!isHuman) {
-        // --- KLASYCZNY WYGLĄD BOTA ---
-        
-        // 1. GRUBE ŁAPKI BOTÓW
         ctx.save();
         ctx.strokeStyle = e.color || '#000'; 
         ctx.lineWidth = 11 * sc; 
@@ -271,7 +268,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.stroke();
         ctx.restore();
 
-        // 2. NAKOLANNIKI BOTÓW
         if (score >= 200) { 
             const legTier = getTier(score, [200, 500, 900]); 
             ctx.strokeStyle = legTier === 3 ? '#f1c40f' : (legTier === 2 ? '#3498db' : '#95a5a6'); 
@@ -281,7 +277,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.stroke(); 
         }
 
-        // 3. BUTY BOTÓW
         if (score >= 350) { 
             ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#34495e'); 
             ctx.beginPath(); ctx.roundRect(x - 16 * sc, y + 26 * sc, 12 * sc, 8 * sc, 4); ctx.fill(); 
@@ -293,22 +288,15 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             } 
         }
     } else {
-        // --- WYGLĄD TWOJEGO DUSZKA ---
-        
-        // RĘKAWICE ZAMIAST BUTÓW
         if (score >= 350) {
             ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#34495e'); 
-            // Lewa rękawica (pod tarczę)
             ctx.beginPath(); ctx.arc(x - wpnX * sc, y + wpnY * sc, 7 * sc, 0, Math.PI * 2); ctx.fill();
-            // Prawa rękawica (pod miecz)
             ctx.beginPath(); ctx.arc(x + wpnX * sc, y + wpnY * sc, 7 * sc, 0, Math.PI * 2); ctx.fill();
         }
     }
 
-    // 4. ZBROJA (Dla wszystkich)
     if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
-    // 5. CIAŁO / TWARZ
     let eId = e.id || e.name || 'unknown'; 
     if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
     if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
@@ -318,7 +306,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     ctx.save();
     
     if (isHuman) {
-        // --- RYSOWANIE OŻYWIONEGO DUSZKA ---
         const spriteSize = 60 * sc; 
         let timeOffset = Date.now() + e.x; 
         let breatheX = 1 + Math.sin(timeOffset / 150) * 0.03;
@@ -337,30 +324,25 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', 25 * sc, -25 * sc);
         }
     } else {
-        // --- RYSOWANIE BOTA (Z oczami!) ---
         ctx.fillStyle = e.color || '#2ecc71';
         ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
         
-        // Białka oczu
         ctx.fillStyle = 'white';
         ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
         
-        // Czarne źrenice
         ctx.fillStyle = 'black';
         ctx.beginPath(); ctx.arc(x - 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
         ctx.beginPath(); ctx.arc(x + 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
 
-        // Groźne brwi
         ctx.strokeStyle = 'black';
         ctx.lineWidth = 1.5 * sc;
         ctx.lineCap = 'round';
         ctx.beginPath(); 
-        ctx.moveTo(x - 11 * sc, y - 11 * sc); ctx.lineTo(x - 4 * sc, y - 8 * sc); // Lewa brew
-        ctx.moveTo(x + 11 * sc, y - 11 * sc); ctx.lineTo(x + 4 * sc, y - 8 * sc); // Prawa brew
+        ctx.moveTo(x - 11 * sc, y - 11 * sc); ctx.lineTo(x - 4 * sc, y - 8 * sc); 
+        ctx.moveTo(x + 11 * sc, y - 11 * sc); ctx.lineTo(x + 4 * sc, y - 8 * sc); 
         ctx.stroke();
 
-        // CHMURKA EMOCJI (Rysowana tylko, gdy bot coś zje, obok głowy)
         if (visualStates[eId].eatTimer > 0) {
             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
@@ -370,24 +352,19 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     
     ctx.restore();
 
-    // 6. HEŁM
     if (helmetTier > 0) drawProHelmet(x, y, sc, helmetTier);
 
-    // 7. TARCZA
     if (e.isShielding) { 
         ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; ctx.beginPath(); 
         let shieldAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) : 0; 
         ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9); ctx.stroke(); ctx.restore(); 
     }
     if (score >= 50) { 
-        // Tarcza ląduje w odpowiednim miejscu zależnie od tego czy to Duszek czy Bot
         drawProShield(x - shldX * sc, y + shldY * sc, sc, shieldTier); 
     }
 
-    // 8. BRONIE W RĘCE
     if (score >= 15 || actWpn !== 'sword') {
         let weaponAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) + 0.5 : 0.5; 
-        // Broń ląduje idealnie w rękawicy
         let handX = x + wpnX * sc, handY = y + wpnY * sc; 
         
         if (actWpn === 'sword' && score >= 15) { e.isPiercing = (e === player) ? (weaponPath === 'piercing') : false; drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1); } 
@@ -398,17 +375,76 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         if (e === player && gameState === 'PLAYING') { ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + lastMoveDir.x * 45, y + lastMoveDir.y * 45); ctx.lineTo(x + lastMoveDir.x * 75, y + lastMoveDir.y * 75); ctx.stroke(); }
     }
 
-    // 9. BRONIE NA PLECACH
     if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) { ctx.save(); ctx.translate(x - 5 * sc, y + 2 * sc); ctx.rotate(-Math.PI / 6); ctx.fillStyle = '#4a235a'; ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc); ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc); ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc); ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc); if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') { ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc; ctx.beginPath(); ctx.moveTo(0, -16 * sc); ctx.lineTo(0, 16 * sc); ctx.stroke(); } ctx.restore(); }
     if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
     if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') { ctx.save(); ctx.translate(x - 10 * sc, y + 18 * sc); ctx.fillStyle = '#34495e'; for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); } ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     
-    // 10. KORONA I NICK
     if (kingId === eId && score >= 1) { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(x - 12 * sc, y - 35 * sc); ctx.lineTo(x - 12 * sc, y - 55 * sc); ctx.lineTo(x - 6 * sc, y - 45 * sc); ctx.lineTo(x, y - 55 * sc); ctx.lineTo(x + 6 * sc, y - 45 * sc); ctx.lineTo(x + 12 * sc, y - 55 * sc); ctx.lineTo(x + 12 * sc, y - 35 * sc); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill(); }
 
     ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * sc}px Arial`; ctx.textAlign = 'center';
     if (e.name !== 'Wojownik') { ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc); } else { ctx.fillText(`[${score}]`, x, y - 65 * sc); } 
     
+    ctx.restore();
+}
+
+// --- NOWOŚĆ: RYSOWANIE PRAWDZIWEGO ZAMKU ---
+function drawCastle(x, y, radius) {
+    ctx.save();
+    ctx.translate(x, y);
+
+    // 1. FOSA (Woda)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(41, 128, 185, 0.4)'; // półprzezroczysta woda na trawie
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = 'rgba(52, 152, 219, 0.6)';
+    ctx.stroke();
+
+    // 2. DREWNIANY MOST (Od dołu wejście)
+    ctx.fillStyle = '#5c4033'; 
+    ctx.fillRect(-25, radius - 10, 50, 60);
+    ctx.fillStyle = '#8b5a2b'; // deski
+    for(let i=0; i<5; i++) {
+        ctx.fillRect(-23, radius + i*10, 46, 6);
+    }
+
+    // 3. MURY (Zewnętrzny obwód)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#7f8c8d';
+    ctx.fill();
+    ctx.lineWidth = 8;
+    ctx.strokeStyle = '#2c3e50';
+    ctx.stroke();
+
+    // 4. BLANKI (Zębatki na murach)
+    ctx.fillStyle = '#95a5a6';
+    for(let i = 0; i < 12; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 / 12) * i);
+        ctx.fillRect(-15, -radius - 12, 30, 20);
+        ctx.strokeStyle = '#2c3e50';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-15, -radius - 12, 30, 20);
+        ctx.restore();
+    }
+
+    // 5. WNĘTRZE ZAMKU (Ciemny środek imitujący dach / mrok wewnątrz)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius - 15, 0, Math.PI * 2);
+    ctx.fillStyle = '#1a1a1a'; // Bardzo ciemne wnętrze, bo jesteś pod dachem!
+    ctx.fill();
+
+    // 6. IKONA SKLEPU NA ŚRODKU
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = `bold ${radius * 0.5}px Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('🏰', 0, -10);
+    ctx.font = `bold ${radius * 0.25}px Arial`;
+    ctx.fillText('WEJŚCIE', 0, 25);
+
     ctx.restore();
 }
 
