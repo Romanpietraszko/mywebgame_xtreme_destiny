@@ -8,9 +8,9 @@ const WORLD_SIZE = 4000;
 const camera = { x: 0, y: 0 };
 const keys = {};
 
-// ŁADOWANIE TWOJEJ AUTORSKIEJ POSTACI
+// ŁADOWANIE TWOJEJ AUTORSKIEJ POSTACI (.svg dla idealnej ostrości)
 const characterImg = new Image();
-characterImg.src = 'Xtreme_destiny_postac.png'; 
+characterImg.src = 'Xtreme_destiny_postac.svg'; 
 
 // NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
 let globalScale = 1;
@@ -287,7 +287,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     // 4. ZBROJA
     if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
-    // 5. !!! AKTUALIZACJA: TWOJA AUTORSKA POSTAĆ ZAMIAST EMOJI !!!
+    // 5. !!! AKTUALIZACJA: OŻYWIONY DUSZEK Z SVG !!!
     let eId = e.id || e.name || 'unknown'; 
     if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
     if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
@@ -296,33 +296,48 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
     ctx.save();
     
-    // Rysowanie Twojej grafiki duszka
-    // Ustawiamy rozmiar grafiki na podstawie aktualnej skali postaci
+    // --- MAGIA OŻYWIENIA ---
     const spriteSize = 60 * sc; 
+    let timeOffset = Date.now() + e.x; // Unikalne przesunięcie w czasie dla każdej postaci
+    
+    // Delikatne pulsowanie ("oddychanie")
+    let breatheX = 1 + Math.sin(timeOffset / 150) * 0.03;
+    let breatheY = 1 - Math.sin(timeOffset / 150) * 0.04;
+    
+    // Kołysanie się na boki ("marsz")
+    let wobble = Math.cos(timeOffset / 100) * 0.1;
+
+    ctx.translate(x, y); // Ustawiamy punkt odniesienia na środku gracza
+    ctx.rotate(wobble);  // Obracamy go
+    ctx.scale(breatheX, breatheY); // Skalujemy dla efektu oddychania
+
+    // Rysujemy grafikę duszka (z .svg) na nowym punkcie 0,0
     ctx.drawImage(
         characterImg, 
-        x - spriteSize / 2, 
-        y - spriteSize / 2, 
+        -spriteSize / 2, 
+        -spriteSize / 2, 
         spriteSize, 
         spriteSize
     );
-
+    
     // CHMURKA EMOCJI (Gdy postać coś zje)
+    // Jest rysowana poza obrotem, żeby chmurka zawsze była pionowo
     if (visualStates[eId].eatTimer > 0) {
-        ctx.save();
-        // Rysowanie białej chmurki nad duszkiem
+        // Resetujemy transformacje tylko dla chmurki
+        ctx.rotate(-wobble); 
+        ctx.scale(1/breatheX, 1/breatheY);
+
         ctx.fillStyle = 'white';
         ctx.beginPath();
-        ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2);
+        // Pozycja chmurki względem środka duszka
+        ctx.arc(25 * sc, -25 * sc, 18 * sc, 0, Math.PI * 2);
         ctx.fill();
         ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
         
-        // Emotka "mniam" w środku chmurki
         ctx.font = `${22 * sc}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
-        ctx.fillText('🤤', x + 25 * sc, y - 25 * sc);
-        ctx.restore();
+        ctx.fillText('🤤', 25 * sc, -25 * sc);
     }
     
     ctx.restore();
