@@ -337,15 +337,16 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', 25 * sc, -25 * sc);
         }
     } else {
-        // --- RYSOWANIE KLASYCZNEGO ZOMBIE (BOTA) ---
+        // --- RYSOWANIE KLASYCZNEGO BOTA (Czyste kółko, jak w oryginale) ---
         ctx.fillStyle = e.color || '#2ecc71';
         ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
         
-        ctx.font = `${28 * sc}px Arial`; 
-        ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        let emojiChar = visualStates[eId].eatTimer > 0 ? '🤤' : '🧟‍♂️'; 
-        if (e.name === 'Wojownik') emojiChar = '😠'; 
-        ctx.fillText(emojiChar, x, y); 
+        // CHMURKA EMOCJI (Rysowana tylko, gdy bot coś zje, obok głowy)
+        if (visualStates[eId].eatTimer > 0) {
+            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', x + 25 * sc, y - 25 * sc);
+        }
     }
     
     ctx.restore();
