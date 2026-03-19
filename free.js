@@ -53,6 +53,9 @@ window.addEventListener('mousemove', (e) => {
 
 window.addEventListener('mousedown', (e) => {
     if (gameState === 'PLAYING' && player) { 
+        // NOWOŚĆ: Blokada ataków, jeśli gracz jest w zamku (bezpieczna strefa)
+        if (player.isSafe) return; 
+
         if (e.button === 2) { 
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -331,11 +334,12 @@ function gameLoop() {
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        // Rysujemy czerwoną barierę (Będzie super widoczna z czarnym tłem pod spodem)
+        // Rysujemy czerwoną barierę
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        safeZones.forEach(z => drawCastle(ctx, z)); // Z pliku map.js
+        // NOWOŚĆ: Rysowanie Zamków (Wczytywanie prosto z map.js do Twojej nowej funkcji drawCastle z engine.js)
+        safeZones.forEach(z => drawCastle(z.x, z.y, z.radius)); 
         
         foods.forEach(f => {
             ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
