@@ -436,18 +436,15 @@ function drawCastle(x, y, radius) {
     ctx.fillStyle = '#1a1a1a'; // Bardzo ciemne wnętrze, bo jesteś pod dachem!
     ctx.fill();
 
-    // 6. IKONA SKLEPU NA ŚRODKU
+    // 6. IKONA SKLEPU NA ŚRODKU (Wyśrodkowana bez napisu)
     ctx.fillStyle = '#f1c40f';
-    ctx.font = `bold ${radius * 0.5}px Arial`;
+    ctx.font = `bold ${radius * 0.6}px Arial`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('🏰', 0, -10);
-    ctx.font = `bold ${radius * 0.25}px Arial`;
-    ctx.fillText('WEJŚCIE', 0, 25);
+    ctx.fillText('🏰', 0, 0);
 
     ctx.restore();
 }
-
 // Skalowanie płótna
 function resize() {
     canvas.width = window.innerWidth;
