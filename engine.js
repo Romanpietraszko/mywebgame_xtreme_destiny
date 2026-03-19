@@ -337,10 +337,29 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', 25 * sc, -25 * sc);
         }
     } else {
-        // --- RYSOWANIE KLASYCZNEGO BOTA (Czyste kółko, jak w oryginale) ---
+        // --- RYSOWANIE BOTA (Z oczami!) ---
         ctx.fillStyle = e.color || '#2ecc71';
         ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
         
+        // Białka oczu
+        ctx.fillStyle = 'white';
+        ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+        
+        // Czarne źrenice
+        ctx.fillStyle = 'black';
+        ctx.beginPath(); ctx.arc(x - 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(x + 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
+
+        // Groźne brwi
+        ctx.strokeStyle = 'black';
+        ctx.lineWidth = 1.5 * sc;
+        ctx.lineCap = 'round';
+        ctx.beginPath(); 
+        ctx.moveTo(x - 11 * sc, y - 11 * sc); ctx.lineTo(x - 4 * sc, y - 8 * sc); // Lewa brew
+        ctx.moveTo(x + 11 * sc, y - 11 * sc); ctx.lineTo(x + 4 * sc, y - 8 * sc); // Prawa brew
+        ctx.stroke();
+
         // CHMURKA EMOCJI (Rysowana tylko, gdy bot coś zje, obok głowy)
         if (visualStates[eId].eatTimer > 0) {
             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
