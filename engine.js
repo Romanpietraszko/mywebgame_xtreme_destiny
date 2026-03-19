@@ -8,6 +8,10 @@ const WORLD_SIZE = 4000;
 const camera = { x: 0, y: 0 };
 const keys = {};
 
+// ŁADOWANIE TWOJEJ AUTORSKIEJ POSTACI
+const characterImg = new Image();
+characterImg.src = 'Xtreme_destiny_postac.png'; 
+
 // NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
 let globalScale = 1;
 // Słownik pamiętający stan "przeżuwania" i emocji dla grafiki
@@ -283,28 +287,44 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     // 4. ZBROJA
     if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
-    // 5. TWARZ / EMOTKA
+    // 5. !!! AKTUALIZACJA: TWOJA AUTORSKA POSTAĆ ZAMIAST EMOJI !!!
     let eId = e.id || e.name || 'unknown'; 
     if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
     if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
     if (score < visualStates[eId].lastScore) { visualStates[eId].lastScore = score; } 
     if (visualStates[eId].eatTimer > 0) visualStates[eId].eatTimer--;
 
-    ctx.save(); 
-    ctx.font = `${42 * sc}px Arial`; 
-    ctx.textAlign = 'center'; 
-    ctx.textBaseline = 'middle';
+    ctx.save();
     
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
-    ctx.shadowBlur = 6 * sc;
-    ctx.shadowOffsetY = 2 * sc;
+    // Rysowanie Twojej grafiki duszka
+    // Ustawiamy rozmiar grafiki na podstawie aktualnej skali postaci
+    const spriteSize = 60 * sc; 
+    ctx.drawImage(
+        characterImg, 
+        x - spriteSize / 2, 
+        y - spriteSize / 2, 
+        spriteSize, 
+        spriteSize
+    );
 
-    let emojiChar = '🙂'; 
-    if (visualStates[eId].eatTimer > 0) emojiChar = '🤤'; 
-    else if (e.name === 'Wojownik') emojiChar = '😠'; 
-    else if (e.name && e.name.includes('Bot')) emojiChar = score >= 50 ? '💀' : '🧟‍♂️'; 
-    else if (e !== player) emojiChar = '👿';
-    ctx.fillText(emojiChar, x, y); 
+    // CHMURKA EMOCJI (Gdy postać coś zje)
+    if (visualStates[eId].eatTimer > 0) {
+        ctx.save();
+        // Rysowanie białej chmurki nad duszkiem
+        ctx.fillStyle = 'white';
+        ctx.beginPath();
+        ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
+        
+        // Emotka "mniam" w środku chmurki
+        ctx.font = `${22 * sc}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText('🤤', x + 25 * sc, y - 25 * sc);
+        ctx.restore();
+    }
+    
     ctx.restore();
 
     // 6. HEŁM
@@ -348,9 +368,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 function resize() {
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    // Obliczamy "zoom" na podstawie wysokości okna. 
-    // Zakładamy, że gra była projektowana pod monitor o wysokości ~900px.
-    // Im mniejsze okno, tym bardziej oddalamy kamerę (mniejsza skala), żeby było widać więcej mapy.
     globalScale = Math.min(1, window.innerHeight / 900);
 }
 window.onresize = resize;
