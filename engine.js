@@ -10,7 +10,7 @@ const keys = {};
 
 // ŁADOWANIE TWOJEJ AUTORSKIEJ POSTACI (.svg dla idealnej ostrości)
 const characterImg = new Image();
-characterImg.src = 'Xtreme_destiny_postac.svg'; 
+characterImg.src = 'xtreme-destiny-postac.png'; 
 
 // NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
 let globalScale = 1;
