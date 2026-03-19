@@ -135,7 +135,6 @@ socket.on('serverTick', (data) => {
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
         
         // --- LOGIKA WYŚWIETLANIA SKLEPU ---
-        // PAMIĘTAJ: Zmień 'shop' na takie ID, jakie masz wpisane w pliku HTML! (np. 'sklep', 'shopUI')
         const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) {
             shopUI.style.display = player.isSafe ? 'block' : 'none';
@@ -146,7 +145,7 @@ socket.on('serverTick', (data) => {
 
 // --- FUNKCJE DLA PRZYCISKÓW W HTML ---
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
-window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); }; // Umożliwia kupowanie
+window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
 
 function update() {
     if (gameState !== 'PLAYING') return;
@@ -166,7 +165,6 @@ function update() {
     
     // --- TWARDE GRANICE MAPY (ZE ŚMIERCIĄ NA MARGINESIE JAK W FREE) ---
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
-        // Wysyłamy -100, żeby serwer potraktował to jako śmierć od ściany
         socket.emit('playerMovementTeam', { x: -100, y: -100, score: player.score, isShielding: false });
     } else {
         camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
@@ -184,29 +182,22 @@ function gameLoop() {
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         if (gameState === 'PLAYING') { update(); }
         
-        // ==========================================
-        // NAPRAWA SMUG W TEAMS.JS: Czyszczenie płótna
-        // ==========================================
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#1e272e'; // Tło areny dla marginesów 
+        ctx.fillStyle = '#1e272e'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
-        // ==========================================
 
         // --- SKALOWANIE (ZOOM) KAMERY ---
         ctx.save();
-        ctx.translate(canvas.width / 2, canvas.height / 2); // 1. Przesuń na środek ekranu
-        ctx.scale(globalScale, globalScale);                // 2. Oddal kamerę (Zoom) z engine.js
-        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); // 3. Wycentruj na graczu
+        ctx.translate(canvas.width / 2, canvas.height / 2); 
+        ctx.scale(globalScale, globalScale);                
+        ctx.translate(-camera.x - (canvas.width / 2), -camera.y - (canvas.height / 2)); 
 
-        // 1. Ciemna Taktyczna Arena (Teraz wewnątrz skalowanego obszaru)
         ctx.fillStyle = '#1e272e'; 
-        ctx.fillRect(camera.x - (canvas.width / globalScale) / 2, camera.y - (canvas.height / globalScale) / 2, canvas.width / globalScale * 2, canvas.height / globalScale * 2); // Poprawka na rysowanie tła poza ekranem by nie ucinało po oddaleniu
+        ctx.fillRect(camera.x - (canvas.width / globalScale) / 2, camera.y - (canvas.height / globalScale) / 2, canvas.width / globalScale * 2, canvas.height / globalScale * 2); 
         
         ctx.save();
-        // ctx.translate(-camera.x % 100, -camera.y % 100); - USUNIĘTO, powodowało rozjazd z globalScale, siatka poniżej jest lepsza
         ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)';
         ctx.lineWidth = 2;
-        // Rysowanie stałej siatki względem mapy, a nie kamery (lepiej działa ze skalowaniem)
         for (let i = 0; i <= WORLD_SIZE; i += 100) {
             ctx.beginPath(); ctx.moveTo(i, 0); ctx.lineTo(i, WORLD_SIZE); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(0, i); ctx.lineTo(WORLD_SIZE, i); ctx.stroke();
@@ -309,15 +300,17 @@ function gameLoop() {
 
                 const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' };
                 ctx.font = `${Math.floor(radius)}px Arial`;
-                ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 20);
+                
+                // PODNIESIONY OFFSET, ABY NIE ZASŁANIAĆ DUSZKA I CHMURKI
+                ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 45); 
                 
                 ctx.restore();
             }
         });
         
-        ctx.restore(); // Przywracamy pozycję na ekran żeby rysować UI!
+        ctx.restore(); 
         
-        // --- EFEKTY POGODY I UI (Nie skalowane, nakładka na ekran) ---
+        // --- EFEKTY POGODY I UI ---
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
