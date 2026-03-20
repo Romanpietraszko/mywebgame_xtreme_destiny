@@ -24,6 +24,9 @@ let wasSafe = false;
 let killLogs = [];
 let lastWinterUseClient = 0; 
 
+// NOWOŚĆ: Tablica na unoszące się cyferki obrażeń!
+let damageTexts = [];
+
 // Zmienne do precyzyjnego przeciągania botów (RTS)
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
@@ -177,6 +180,19 @@ socket.on('recruitToggled', (state) => {
 });
 socket.on('formationSwitched', (formName) => { 
     killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
+});
+
+// NOWOŚĆ: Odbieranie informacji o obrażeniach
+socket.on('damageText', (data) => {
+    damageTexts.push({
+        x: data.x + (Math.random() * 20 - 10), // Lekki rozrzut na boki
+        y: data.y,
+        val: data.val,
+        color: data.color || '#ff4757', // Domyślnie czerwony
+        life: 1.0, // Zaczynamy od 100% życia animacji
+        vx: (Math.random() - 0.5) * 2, // Lekki ruch w bok
+        vy: -2 - Math.random() * 2 // Ruch do góry
+    });
 });
 
 socket.on('gameOver', (data) => {
@@ -338,7 +354,7 @@ function gameLoop() {
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        // NOWOŚĆ: Rysowanie Zamków (Wczytywanie prosto z map.js do Twojej nowej funkcji drawCastle z engine.js)
+        // Rysowanie Zamków (Wczytywanie prosto z map.js do Twojej nowej funkcji drawCastle z engine.js)
         safeZones.forEach(z => drawCastle(z.x, z.y, z.radius)); 
         
         foods.forEach(f => {
@@ -404,6 +420,39 @@ function gameLoop() {
         if (player && gameState !== 'GAMEOVER') {
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
+
+        // ==============================================================
+        // NOWOŚĆ: Rysowanie wyskakujących obrażeń (Combat Feedback)
+        // ==============================================================
+        for (let i = damageTexts.length - 1; i >= 0; i--) {
+            let dt = damageTexts[i];
+            
+            // Animacja pozycji i zanikania
+            dt.x += dt.vx;
+            dt.y += dt.vy;
+            dt.life -= 0.02; // Znikanie (około 50 klatek)
+
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, dt.life);
+            ctx.fillStyle = dt.color;
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 3;
+            // Czcionka rośnie podczas znikania (efekt 'pop')
+            let fontSize = 20 + (1 - dt.life) * 15;
+            ctx.font = `bold ${fontSize}px 'Permanent Marker', Arial`; 
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            ctx.strokeText(`-${dt.val}`, dt.x, dt.y); // Czarny obrys
+            ctx.fillText(`-${dt.val}`, dt.x, dt.y);   // Kolorowy środek
+            ctx.restore();
+
+            // Usuń, gdy zniknie całkowicie
+            if (dt.life <= 0) {
+                damageTexts.splice(i, 1);
+            }
+        }
+
         ctx.restore(); 
         
         // --- EFEKTY WIZUALNE POGODY ---
@@ -510,30 +559,73 @@ function gameLoop() {
             for(let t of types) { if(player.inventory && player.inventory[t]) { secText = t.replace('_', ' ').toUpperCase(); break; } }
             ctx.font = '9px Arial'; ctx.fillText(secText, startX + 65, startY + 40);
 
+            // ==============================================================
+            // NOWOŚĆ: Precyzyjne odliczanie cooldownu Zimowego Miecza
+            // ==============================================================
             if (weaponPath === 'winter') {
-                let winterProgress = Math.min(1, (Date.now() - lastWinterUseClient) / 15000);
+                let timePassed = Date.now() - lastWinterUseClient;
+                let cooldownTotal = 15000; // 15 sekund w milisekundach
+                let winterProgress = Math.min(1, timePassed / cooldownTotal);
+                let timeLeft = Math.ceil((cooldownTotal - timePassed) / 1000);
+
                 let btnX = startX + 120;
                 ctx.fillStyle = 'rgba(44, 62, 80, 0.8)'; ctx.fillRect(btnX, startY, 50, 50);
+                // Niebieski pasek postępu ładowania
                 ctx.fillStyle = 'rgba(52, 152, 219, 0.8)'; ctx.fillRect(btnX, startY + 50 * (1 - winterProgress), 50, 50 * winterProgress);
                 ctx.strokeStyle = winterProgress >= 1 ? '#3498db' : '#7f8c8d'; ctx.lineWidth = 2; ctx.strokeRect(btnX, startY, 50, 50);
+                
                 ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText('R', btnX + 25, startY + 18);
-                ctx.font = '10px Arial'; ctx.fillText(winterProgress >= 1 ? 'GOTOWE' : 'ŁADUJE', btnX + 25, startY + 40);
+                
+                // Rysowanie sekund lub GOTOWE
+                ctx.font = '10px Arial'; 
+                if (winterProgress >= 1) {
+                    ctx.fillText('GOTOWE', btnX + 25, startY + 40);
+                } else {
+                    ctx.fillStyle = '#e74c3c'; // Czerwone sekundy, gdy ładuje
+                    ctx.font = 'bold 14px Arial';
+                    ctx.fillText(`${timeLeft}s`, btnX + 25, startY + 40);
+                }
             }
             ctx.restore();
             
+            // ==============================================================
+            // LOGIKA MENU UMIEJĘTNOŚCI (Wyświetlane TYLKO gdy są punkty)
+            // ==============================================================
             const skillMenu = document.getElementById('skill-menu');
             if (skillPoints > 0) {
-                skillMenu.style.display = 'flex'; document.getElementById('sp-count').innerText = skillPoints;
+                // Pokazujemy menu, bo gracz zasłużył (ma punkty do wydania)
+                skillMenu.style.display = 'flex'; 
+                document.getElementById('sp-count').innerText = skillPoints;
+                
+                // Aktualizujemy wyświetlane poziomy na przyciskach
+                const lvlSpeed = document.getElementById('lvl-speed'); if(lvlSpeed) lvlSpeed.innerText = `Lv. ${playerSkills.speed}`;
+                const lvlStrength = document.getElementById('lvl-strength'); if(lvlStrength) lvlStrength.innerText = `Lv. ${playerSkills.strength}`;
+                const lvlWeapon = document.getElementById('lvl-weapon'); if(lvlWeapon) lvlWeapon.innerText = `Lv. ${playerSkills.weapon}`;
+
                 const btnStrength = document.getElementById('btn-strength'); const btnWeapon = document.getElementById('btn-weapon');
                 if (btnStrength) btnStrength.disabled = player.score < 100;
                 if (btnWeapon) btnWeapon.disabled = player.score < 15;
 
                 const weaponPathsDiv = document.getElementById('weapon-paths');
                 if (weaponPathsDiv) {
-                    if (playerSkills.weapon >= 5 && weaponPath === 'none') { weaponPathsDiv.style.display = 'flex'; } 
-                    else { weaponPathsDiv.style.display = 'none'; }
+                    weaponPathsDiv.style.display = 'flex';
+                    if (weaponPath !== 'none') {
+                        weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #27ae60;">AKTYWNA ŚCIEŻKA: ${weaponPath.toUpperCase()}</span>`;
+                    } else if (playerSkills.weapon >= 5) { 
+                        weaponPathsDiv.innerHTML = `
+                            <span style="font-size: 11px; font-weight: bold; text-align: center; color: #333;">WYBIERZ ŚCIEŻKĘ BRONI!</span>
+                            <button class="skill-btn" style="background: #e67e22;" onclick="choosePath('piercing')">💨 Przebicie</button>
+                            <button class="skill-btn" style="background: #3498db;" onclick="choosePath('winter')">❄️ Zimowy Miecz</button>
+                        `;
+                    } else { 
+                        // Kłódka informacyjna dopóki nie wbije Lv. 5
+                        weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #7f8c8d;">🔒 Ścieżka Broni (Wymaga: Broń Lv. 5)</span>`;
+                    }
                 }
-            } else { skillMenu.style.display = 'none'; }
+            } else { 
+                // Brak punktów = całe menu ukryte, gracz musi sobie zapracować!
+                skillMenu.style.display = 'none'; 
+            }
 
             if (player.isSafe && !wasSafe) {
                 const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'flex';
