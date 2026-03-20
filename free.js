@@ -21,8 +21,8 @@ let playerSkills = { speed: 0, strength: 0, weapon: 0 };
 // --- NOWOŚĆ: Nowy obiekt z 3 ścieżkami ---
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 
-// --- POPRAWKA: Utrzymujemy starą zmienną dla engine.js, żeby się nie psuł! ---
-let weaponPath = 'none'; 
+// --- NAPRAWA: Zmienna globalna dla engine.js, żeby się nie psuł i widział miecze! ---
+window.weaponPath = 'none'; 
 
 let lastMoveDir = { x: 1, y: 0 }; 
 let lastCalculatedTier = 0; 
@@ -67,6 +67,13 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
+    // ==========================================================
+    // TARCZA ANTY-KLIKOWA: Jeśli klikamy w menu, ignoruj strzał!
+    // ==========================================================
+    if (e.target.closest('#skill-menu') || e.target.closest('#castle-shop') || e.target.closest('button')) {
+        return; 
+    }
+
     if (gameState === 'PLAYING' && player) { 
         // Blokada ataków, jeśli gracz jest w zamku (bezpieczna strefa)
         if (player.isSafe) return; 
@@ -192,7 +199,7 @@ socket.on('skillUpdated', (data) => {
     playerSkills = data.skills; 
     skillPoints = data.points; 
     paths = data.paths || paths; 
-    weaponPath = paths.weapon; // --- POPRAWKA: Synchronizacja ze starą zmienną dla rysowania miecza! ---
+    window.weaponPath = paths.weapon; // --- POPRAWKA: Synchronizacja ze starą zmienną! ---
 });
 
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
@@ -427,15 +434,21 @@ function gameLoop() {
 
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
+            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
+            b.weaponPath = b.paths ? b.paths.weapon : 'none';
             drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); 
         });
 
         Object.values(otherPlayers).forEach(p => {
             if (p.isSafe && (!player || !player.isSafe)) return;
+            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
+            p.weaponPath = p.paths ? p.paths.weapon : 'none';
             drawStickman(p, p.x, p.y, getScale(p.score), p.isSafe, currentKingId);
         });
         
         if (player && gameState !== 'GAMEOVER') {
+            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
+            player.weaponPath = paths.weapon || 'none';
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
 
