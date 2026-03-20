@@ -668,7 +668,7 @@ setInterval(() => {
             }
         }
 
-        // --- Boty i Zwerbowane Boty Jedzą Kropki (Odp. na Twoje zgłoszenie!) ---
+        // --- Boty i Zwerbowane Boty Jedzą Kropki ---
         foods.forEach((f, fi) => {
             if (Math.hypot(b.x - f.x, b.y - f.y) < 25) {
                 b.score += 1;
@@ -758,6 +758,18 @@ setInterval(() => {
                     let ownerPlayer = players[b.ownerId];
                     if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
 
+                    // ========================================================
+                    // NOWOŚĆ: KAMIKAZE BOTY NA KRÓLA (Koniec darmowego jedzenia!)
+                    // ========================================================
+                    if (activeEvent === 'KING_HUNT' && p.id === currentKingId && b.ownerId !== p.id) {
+                        if (dist < pRadius) {
+                            p.score = Math.max(10, p.score - 15); // Bot wgryza się w Króla zabierając masę
+                            io.emit('damageText', { x: p.x, y: p.y - 30, val: 15, color: '#f1c40f' });
+                            bots[bi] = spawnBot(); // Bot ginie w ataku samobójczym
+                            return; // Przerywamy logikę jedzenia, Król nie dostaje z niego masy
+                        }
+                    }
+
                     if (dist < pRadius && p.score > b.score * 1.15) {
                         if (p.isRecruiting) {
                             // TRYB WERBOWANIA
@@ -838,6 +850,9 @@ setInterval(() => {
                 if (p.ownerTeam && !b.team) return;
 
                 b.score = Math.max(1, b.score - p.damage);
+                // NOWOŚĆ: Obrażenia po trafieniu bota rzucane do wszystkich graczy!
+                io.emit('damageText', { x: b.x, y: b.y - 20, val: p.damage, color: '#fff' });
+
                 if (!p.isPiercing) p.life = 0; 
             }
         });
@@ -862,6 +877,10 @@ setInterval(() => {
                     if (p.isWinter) damage = p.damage;
 
                     pl.score = Math.max(1, pl.score - Math.floor(damage));
+                    
+                    // NOWOŚĆ: Obrażenia po trafieniu gracza
+                    io.emit('damageText', { x: pl.x, y: pl.y - 30, val: Math.floor(damage), color: '#ff4757' });
+                    
                     if (!p.isPiercing) p.life = 0;
                 }
             }
