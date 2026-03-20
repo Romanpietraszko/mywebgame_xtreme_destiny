@@ -24,6 +24,9 @@ let wasSafe = false;
 let killLogs = [];
 let lastWinterUseClient = 0; 
 
+// Zmienna do śledzenia stanu menu (żeby nie odświeżać przycisków 60x na sekundę!)
+let lastWeaponPathState = '';
+
 // NOWOŚĆ: Tablica na unoszące się cyferki obrażeń!
 let damageTexts = [];
 
@@ -592,11 +595,13 @@ function gameLoop() {
             ctx.restore();
             
             // ==============================================================
-            // LOGIKA MENU UMIEJĘTNOŚCI (Wyświetlane TYLKO gdy są punkty)
+            // NAPRAWIONA LOGIKA MENU UMIEJĘTNOŚCI I WYBORU ŚCIEŻKI
             // ==============================================================
             const skillMenu = document.getElementById('skill-menu');
-            if (skillPoints > 0) {
-                // Pokazujemy menu, bo gracz zasłużył (ma punkty do wydania)
+            let needsToChoosePath = (playerSkills.weapon >= 5 && weaponPath === 'none');
+
+            // Pokazuj menu jeśli są punkty LUB jeśli trzeba wybrać ścieżkę broni
+            if (skillPoints > 0 || needsToChoosePath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
                 
@@ -605,28 +610,41 @@ function gameLoop() {
                 const lvlStrength = document.getElementById('lvl-strength'); if(lvlStrength) lvlStrength.innerText = `Lv. ${playerSkills.strength}`;
                 const lvlWeapon = document.getElementById('lvl-weapon'); if(lvlWeapon) lvlWeapon.innerText = `Lv. ${playerSkills.weapon}`;
 
-                const btnStrength = document.getElementById('btn-strength'); const btnWeapon = document.getElementById('btn-weapon');
-                if (btnStrength) btnStrength.disabled = player.score < 100;
-                if (btnWeapon) btnWeapon.disabled = player.score < 15;
+                // Wyłączaj same przyciski jeśli nie ma punktów
+                const btnSpeed = document.getElementById('btn-speed');
+                const btnStrength = document.getElementById('btn-strength'); 
+                const btnWeapon = document.getElementById('btn-weapon');
+                
+                if (btnSpeed) btnSpeed.disabled = skillPoints <= 0;
+                if (btnStrength) btnStrength.disabled = (skillPoints <= 0 || player.score < 100);
+                if (btnWeapon) btnWeapon.disabled = (skillPoints <= 0 || player.score < 15);
 
                 const weaponPathsDiv = document.getElementById('weapon-paths');
                 if (weaponPathsDiv) {
                     weaponPathsDiv.style.display = 'flex';
-                    if (weaponPath !== 'none') {
-                        weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #27ae60;">AKTYWNA ŚCIEŻKA: ${weaponPath.toUpperCase()}</span>`;
-                    } else if (playerSkills.weapon >= 5) { 
-                        weaponPathsDiv.innerHTML = `
-                            <span style="font-size: 11px; font-weight: bold; text-align: center; color: #333;">WYBIERZ ŚCIEŻKĘ BRONI!</span>
-                            <button class="skill-btn" style="background: #e67e22;" onclick="choosePath('piercing')">💨 Przebicie</button>
-                            <button class="skill-btn" style="background: #3498db;" onclick="choosePath('winter')">❄️ Zimowy Miecz</button>
-                        `;
-                    } else { 
-                        // Kłódka informacyjna dopóki nie wbije Lv. 5
-                        weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #7f8c8d;">🔒 Ścieżka Broni (Wymaga: Broń Lv. 5)</span>`;
+                    
+                    let currentState = 'locked';
+                    if (weaponPath !== 'none') currentState = 'active';
+                    else if (playerSkills.weapon >= 5) currentState = 'choice';
+
+                    // Odśwież DOM tylko jeśli faktycznie zmienia się stan, blokuje to problem gubienia kliknięć
+                    if (lastWeaponPathState !== currentState) {
+                        lastWeaponPathState = currentState;
+                        if (currentState === 'active') {
+                            weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #27ae60;">AKTYWNA ŚCIEŻKA: ${weaponPath.toUpperCase()}</span>`;
+                        } else if (currentState === 'choice') { 
+                            weaponPathsDiv.innerHTML = `
+                                <span style="font-size: 11px; font-weight: bold; text-align: center; color: #333;">WYBIERZ ŚCIEŻKĘ BRONI!</span>
+                                <button class="skill-btn" style="background: #e67e22;" onclick="choosePath('piercing')">💨 Przebicie</button>
+                                <button class="skill-btn" style="background: #3498db;" onclick="choosePath('winter')">❄️ Zimowy Miecz</button>
+                            `;
+                        } else { 
+                            weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #7f8c8d;">🔒 Ścieżka Broni (Wymaga: Broń Lv. 5)</span>`;
+                        }
                     }
                 }
             } else { 
-                // Brak punktów = całe menu ukryte, gracz musi sobie zapracować!
+                // Brak punktów = całe menu ukryte
                 skillMenu.style.display = 'none'; 
             }
 
