@@ -133,7 +133,7 @@ io.on('connection', (socket) => {
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
-            // --- NOWOŚĆ: SYSTEM 3 ŚCIEŻEK (zamienione weaponPath na paths) ---
+            // --- NOWOŚĆ: SYSTEM 3 ŚCIEŻEK ---
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0,   
             lastDashUse: 0, // Do umiejętności ZRYW
@@ -278,29 +278,36 @@ io.on('connection', (socket) => {
         }
     });
 
+    // =========================================================
+    // POPRAWKA: ULEPSZANIE UMIEJĘTNOŚCI (Zwracamy pełny stan)
+    // =========================================================
     socket.on('upgradeSkill', (skillName) => {
         const p = players[socket.id];
         if (p && p.skillPoints > 0) {
             if (skillName === 'strength' && p.score < 100) return; 
             if (skillName === 'weapon' && p.score < 15) return;   
 
-            // --- NOWOŚĆ: TWARDY LIMIT 20 POZIOMÓW DLA KAŻDEJ ŚCIEŻKI ---
+            // LIMIT 20 POZIOMÓW
             let maxLevel = 20;
 
             if (p.skills[skillName] !== undefined && p.skills[skillName] < maxLevel) {
                 p.skills[skillName]++;
                 p.skillPoints--;
+                // Wysyłamy klientowi CAŁY zaktualizowany obiekt
                 socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
             }
         }
     });
 
-    // --- NOWOŚĆ: FUNKCJA WYBORU NOWYCH ŚCIEŻEK ---
+    // =========================================================
+    // POPRAWKA: WYBÓR ŚCIEŻEK (Zwracamy pełny stan)
+    // =========================================================
     socket.on('chooseSkillPath', (data) => {
         const p = players[socket.id];
         // data.category = 'weapon'|'speed'|'strength', data.path = 'piercing'|'dash' itp.
         if (p && p.skills[data.category] >= 5 && p.paths[data.category] === 'none') {
             p.paths[data.category] = data.path;
+            // Wysyłamy klientowi CAŁY zaktualizowany obiekt
             socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
         }
     });
