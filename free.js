@@ -244,6 +244,9 @@ socket.on('serverTick', (data) => {
 
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 
+// NOWOŚĆ: Funkcja do wybierania ścieżki broni (teraz łączy się z serwerem!)
+window.choosePath = (path) => { socket.emit('chooseWeaponPath', path); };
+
 function checkEquipmentUpgrades() {
     if (!player) return;
     let total = 0;
