@@ -17,15 +17,20 @@ initMap(WORLD_SIZE);
 // Statystyki RPG, Ekwipunek
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
-let weaponPath = 'none'; 
+
+// --- NOWOŚĆ: SYSTEM 3 ŚCIEŻEK ---
+let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
+
 let lastMoveDir = { x: 1, y: 0 }; 
 let lastCalculatedTier = 0; 
 let wasSafe = false; 
 let killLogs = [];
+
 let lastWinterUseClient = 0; 
+let lastDashUseClient = 0; // --- NOWOŚĆ: Cooldown dla Dasha ---
 
 // Zmienna do śledzenia stanu menu (żeby nie odświeżać przycisków 60x na sekundę!)
-let lastWeaponPathState = '';
+let lastSkillMenuState = ''; // Zmieniono nazwę na ogólną
 
 // NOWOŚĆ: Tablica na unoszące się cyferki obrażeń!
 let damageTexts = [];
@@ -127,12 +132,23 @@ window.onkeydown = (e) => {
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         
-        if (e.code === 'KeyR' && weaponPath === 'winter') {
+        // --- NOWOŚĆ: Aktualizacja na paths.weapon ---
+        if (e.code === 'KeyR' && paths.weapon === 'winter') {
             const now = Date.now();
             if (now - lastWinterUseClient >= 15000) {
                 lastWinterUseClient = now; socket.emit('throwWinterSword');
             }
         }
+
+        // --- NOWOŚĆ: DASH (ZRYW) POD SHIFTEM ---
+        if (e.code === 'ShiftLeft' && paths.speed === 'dash') {
+            const now = Date.now();
+            if (now - lastDashUseClient >= 3000) { // 3 sekundy cooldownu
+                lastDashUseClient = now; 
+                socket.emit('dash', lastMoveDir);
+            }
+        }
+
         if (e.code === 'KeyQ' && player.score >= 50) player.isShielding = true;
         if (e.code === 'KeyP') socket.emit('toggleRecruit');
         if (e.code === 'KeyC') socket.emit('switchFormation');
@@ -170,13 +186,14 @@ window.startGame = (type) => {
 socket.on('init', (data) => { myId = data.id; if (player) player.id = myId; });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 socket.on('skillUpdated', (data) => {
-    playerSkills = data.skills; skillPoints = data.points; weaponPath = data.weaponPath || 'none';
+    playerSkills = data.skills; 
+    skillPoints = data.points; 
+    paths = data.paths || paths; // --- NOWOŚĆ ---
 });
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
 
 // --- NAPRAWA PRZEŁĄCZNIKÓW RTS ---
-// Teraz serwer potwierdza zmianę, więc musimy to zapisać w kliencie, by gracz widział różnicę.
 socket.on('recruitToggled', (state) => { 
     if (player) player.isRecruiting = state;
     killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
@@ -185,16 +202,16 @@ socket.on('formationSwitched', (formName) => {
     killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
 });
 
-// NOWOŚĆ: Odbieranie informacji o obrażeniach
+// Odbieranie informacji o obrażeniach
 socket.on('damageText', (data) => {
     damageTexts.push({
-        x: data.x + (Math.random() * 20 - 10), // Lekki rozrzut na boki
+        x: data.x + (Math.random() * 20 - 10), 
         y: data.y,
         val: data.val,
-        color: data.color || '#ff4757', // Domyślnie czerwony
-        life: 1.0, // Zaczynamy od 100% życia animacji
-        vx: (Math.random() - 0.5) * 2, // Lekki ruch w bok
-        vy: -2 - Math.random() * 2 // Ruch do góry
+        color: data.color || '#ff4757', 
+        life: 1.0, 
+        vx: (Math.random() - 0.5) * 2, 
+        vy: -2 - Math.random() * 2 
     });
 });
 
@@ -247,8 +264,8 @@ socket.on('serverTick', (data) => {
 
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 
-// NOWOŚĆ: Funkcja do wybierania ścieżki broni (teraz łączy się z serwerem!)
-window.choosePath = (path) => { socket.emit('chooseWeaponPath', path); };
+// --- NOWOŚĆ: Funkcja do wybierania ścieżek we wszystkich 3 kategoriach ---
+window.choosePath = (category, pathName) => { socket.emit('chooseSkillPath', { category: category, path: pathName }); };
 
 function checkEquipmentUpgrades() {
     if (!player) return;
@@ -290,9 +307,11 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        // Spowolnienie gracza podczas Śnieżycy!
+        // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ ŚNIEŻYCĘ ---
         if (currentEvent === 'BLIZZARD') {
-            speed *= 0.4; 
+            if (paths.speed !== 'lightweight') {
+                speed *= 0.4; 
+            }
         }
 
         player.x += Math.cos(moveAngle) * speed; 
@@ -360,7 +379,7 @@ function gameLoop() {
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        // Rysowanie Zamków (Wczytywanie prosto z map.js do Twojej nowej funkcji drawCastle z engine.js)
+        // Rysowanie Zamków
         safeZones.forEach(z => drawCastle(z.x, z.y, z.radius)); 
         
         foods.forEach(f => {
@@ -566,9 +585,9 @@ function gameLoop() {
             ctx.font = '9px Arial'; ctx.fillText(secText, startX + 65, startY + 40);
 
             // ==============================================================
-            // NOWOŚĆ: Precyzyjne odliczanie cooldownu Zimowego Miecza
+            // NOWOŚĆ: Aktualizacja na paths.weapon (Winter Sword Cooldown)
             // ==============================================================
-            if (weaponPath === 'winter') {
+            if (paths.weapon === 'winter') {
                 let timePassed = Date.now() - lastWinterUseClient;
                 let cooldownTotal = 15000; // 15 sekund w milisekundach
                 let winterProgress = Math.min(1, timePassed / cooldownTotal);
@@ -592,61 +611,66 @@ function gameLoop() {
                     ctx.fillText(`${timeLeft}s`, btnX + 25, startY + 40);
                 }
             }
-            ctx.restore();
-            
+
             // ==============================================================
-            // NAPRAWIONA LOGIKA MENU UMIEJĘTNOŚCI I WYBORU ŚCIEŻKI
+            // NOWOŚĆ: DYNAMICZNE MENU UMIEJĘTNOŚCI (Szybkość, Siła, Broń)
             // ==============================================================
             const skillMenu = document.getElementById('skill-menu');
-            let needsToChoosePath = (playerSkills.weapon >= 5 && weaponPath === 'none');
+            let needsWeaponPath = (playerSkills.weapon >= 5 && paths.weapon === 'none');
+            let needsSpeedPath = (playerSkills.speed >= 5 && paths.speed === 'none');
+            let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
 
-            // Pokazuj menu jeśli są punkty LUB jeśli trzeba wybrać ścieżkę broni
-            if (skillPoints > 0 || needsToChoosePath) {
+            // Pokazuj menu jeśli są punkty LUB jeśli trzeba wybrać JAKĄKOLWIEK ścieżkę
+            if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
                 
-                // Aktualizujemy wyświetlane poziomy na przyciskach
-                const lvlSpeed = document.getElementById('lvl-speed'); if(lvlSpeed) lvlSpeed.innerText = `Lv. ${playerSkills.speed}`;
-                const lvlStrength = document.getElementById('lvl-strength'); if(lvlStrength) lvlStrength.innerText = `Lv. ${playerSkills.strength}`;
-                const lvlWeapon = document.getElementById('lvl-weapon'); if(lvlWeapon) lvlWeapon.innerText = `Lv. ${playerSkills.weapon}`;
+                const categories = [
+                    { id: 'speed', icon: '⚡', name: 'Szybkość', req: 0, path1: 'dash', path1Name: '💨 Zryw', path2: 'lightweight', path2Name: '🪶 Lekkie Stopy' },
+                    { id: 'strength', icon: '💪', name: 'Siła', req: 100, path1: 'thorns', path1Name: '🌵 Kolce', path2: 'titan', path2Name: '🛡️ Tytan' },
+                    { id: 'weapon', icon: '⚔️', name: 'Broń', req: 15, path1: 'piercing', path1Name: '🏹 Przebicie', path2: 'winter', path2Name: '❄️ Zim. Miecz' }
+                ];
 
-                // Wyłączaj same przyciski jeśli nie ma punktów
-                const btnSpeed = document.getElementById('btn-speed');
-                const btnStrength = document.getElementById('btn-strength'); 
-                const btnWeapon = document.getElementById('btn-weapon');
+                let currentUIState = skillPoints + "|" + JSON.stringify(playerSkills) + "|" + JSON.stringify(paths) + "|" + player.score;
                 
-                if (btnSpeed) btnSpeed.disabled = skillPoints <= 0;
-                if (btnStrength) btnStrength.disabled = (skillPoints <= 0 || player.score < 100);
-                if (btnWeapon) btnWeapon.disabled = (skillPoints <= 0 || player.score < 15);
-
-                const weaponPathsDiv = document.getElementById('weapon-paths');
-                if (weaponPathsDiv) {
-                    weaponPathsDiv.style.display = 'flex';
+                if (lastSkillMenuState !== currentUIState) {
+                    lastSkillMenuState = currentUIState;
                     
-                    let currentState = 'locked';
-                    if (weaponPath !== 'none') currentState = 'active';
-                    else if (playerSkills.weapon >= 5) currentState = 'choice';
-
-                    // Odśwież DOM tylko jeśli faktycznie zmienia się stan, blokuje to problem gubienia kliknięć
-                    if (lastWeaponPathState !== currentState) {
-                        lastWeaponPathState = currentState;
-                        if (currentState === 'active') {
-                            weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #27ae60;">AKTYWNA ŚCIEŻKA: ${weaponPath.toUpperCase()}</span>`;
-                        } else if (currentState === 'choice') { 
-                            weaponPathsDiv.innerHTML = `
-                                <span style="font-size: 11px; font-weight: bold; text-align: center; color: #333;">WYBIERZ ŚCIEŻKĘ BRONI!</span>
-                                <button class="skill-btn" style="background: #e67e22;" onclick="choosePath('piercing')">💨 Przebicie</button>
-                                <button class="skill-btn" style="background: #3498db;" onclick="choosePath('winter')">❄️ Zimowy Miecz</button>
-                            `;
-                        } else { 
-                            weaponPathsDiv.innerHTML = `<span style="font-size: 11px; font-weight: bold; text-align: center; color: #7f8c8d;">🔒 Ścieżka Broni (Wymaga: Broń Lv. 5)</span>`;
+                    let html = '';
+                    categories.forEach(cat => {
+                        let lvl = playerSkills[cat.id];
+                        let currentPath = paths[cat.id];
+                        let canUpgrade = skillPoints > 0 && player.score >= cat.req && lvl < 20; // Blokada do max Lv 20
+                        
+                        html += `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
+                                    <span style="font-size: 24px;">${cat.icon}</span>
+                                    <div style="flex-grow: 1;">
+                                        <div style="font-weight: bold; font-size: 14px; display: flex; justify-content: space-between;">
+                                            <span>${cat.name} (Lv. ${lvl}/20)</span>
+                                            <button class="skill-btn" ${!canUpgrade ? 'disabled' : ''} onclick="upgrade('${cat.id}')">➕</button>
+                                        </div>`;
+                        
+                        if (currentPath !== 'none') {
+                            html += `<div style="font-size: 11px; color: #27ae60; font-weight: bold; margin-top: 2px;">ŚCIEŻKA: ${currentPath.toUpperCase()}</div>`;
+                        } else if (lvl >= 5) {
+                            html += `<div style="display: flex; gap: 5px; margin-top: 5px;">
+                                        <button class="skill-btn" style="background: #e67e22; flex:1;" onclick="choosePath('${cat.id}', '${cat.path1}')">${cat.path1Name}</button>
+                                        <button class="skill-btn" style="background: #3498db; flex:1;" onclick="choosePath('${cat.id}', '${cat.path2}')">${cat.path2Name}</button>
+                                     </div>`;
+                        } else {
+                            html += `<div style="font-size: 10px; color: #7f8c8d; margin-top: 2px;">Odblokowanie Ścieżki na Lv. 5</div>`;
                         }
-                    }
+                        html += `</div></div>`;
+                    });
+                    
+                    // Wrzucamy kod HTML prosto w DIV'a kontenera (Patrz niżej info o index.html)
+                    let targetDiv = document.getElementById('skills-container');
+                    if (targetDiv) targetDiv.innerHTML = html;
                 }
             } else { 
-                // Brak punktów = całe menu ukryte
                 skillMenu.style.display = 'none'; 
             }
+            ctx.restore();
 
             if (player.isSafe && !wasSafe) {
                 const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'flex';
