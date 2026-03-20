@@ -133,8 +133,12 @@ io.on('connection', (socket) => {
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
-            weaponPath: 'none', 
+            // --- NOWOŚĆ: SYSTEM 3 ŚCIEŻEK (zamienione weaponPath na paths) ---
+            paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0,   
+            lastDashUse: 0, // Do umiejętności ZRYW
+            isMoving: false, // Do umiejętności TYTAN
+            idleTime: 0,     // Do umiejętności TYTAN
             color: data.color || '#000',
             name: data.name || 'Gracz',
             isSafe: false,
@@ -166,7 +170,9 @@ io.on('connection', (socket) => {
         players[socket.id] = {
             id: socket.id,
             x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
-            skills: { speed: 0, strength: 0, weapon: 0 }, weaponPath: 'none', lastWinterUse: 0,   
+            skills: { speed: 0, strength: 0, weapon: 0 }, 
+            paths: { speed: 'none', strength: 'none', weapon: 'none' }, // NOWOŚĆ
+            lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
             color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
@@ -188,8 +194,11 @@ io.on('connection', (socket) => {
     socket.on('playerMovement', (data) => {
         const p = players[socket.id];
         if (p) {
+            p.isMoving = (data.x !== p.x || data.y !== p.y);
+            if (p.isMoving) p.idleTime = 0; // NOWOŚĆ: Reset licznika postoju dla Tytana
+
             // Obliczamy kąt ruchu dla formacji
-            if (data.x !== p.x || data.y !== p.y) {
+            if (p.isMoving) {
                 p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
             }
             p.x = data.x;
@@ -210,10 +219,30 @@ io.on('connection', (socket) => {
     socket.on('playerMovementTeam', (data) => {
         const p = players[socket.id];
         if (p) {
-            if (data.x !== p.x || data.y !== p.y) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
+            p.isMoving = (data.x !== p.x || data.y !== p.y);
+            if (p.isMoving) p.idleTime = 0;
+
+            if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
             p.x = data.x; p.y = data.y; p.isShielding = data.isShielding; 
             let newLevel = Math.floor(p.score / 20) + 1;
             if (newLevel > p.level) { p.level = newLevel; p.skillPoints++; socket.emit('levelUp', { level: p.level, points: p.skillPoints }); }
+        }
+    });
+
+    // --- NOWOŚĆ: ZRYW (DASH) ---
+    socket.on('dash', (dir) => {
+        const p = players[socket.id];
+        const now = Date.now();
+        // Zryw działa tylko jeśli wybrałeś ścieżkę 'dash' i minął cooldown 3s
+        if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
+            p.lastDashUse = now;
+            let dashDist = 150;
+            p.x += dir.x * dashDist;
+            p.y += dir.y * dashDist;
+            // Zabezpieczenie przed wypadnięciem za mapę
+            p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
+            p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
+            io.emit('killEvent', { text: `💨 Zryw!`, time: 100 });
         }
     });
 
@@ -255,23 +284,24 @@ io.on('connection', (socket) => {
             if (skillName === 'strength' && p.score < 100) return; 
             if (skillName === 'weapon' && p.score < 15) return;   
 
-            let maxLevel = (skillName === 'speed') ? 10 : 100;
+            // --- NOWOŚĆ: TWARDY LIMIT 20 POZIOMÓW DLA KAŻDEJ ŚCIEŻKI ---
+            let maxLevel = 20;
 
             if (p.skills[skillName] !== undefined && p.skills[skillName] < maxLevel) {
                 p.skills[skillName]++;
                 p.skillPoints--;
-                socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
+                socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
             }
         }
     });
 
-    socket.on('chooseWeaponPath', (path) => {
+    // --- NOWOŚĆ: FUNKCJA WYBORU NOWYCH ŚCIEŻEK ---
+    socket.on('chooseSkillPath', (data) => {
         const p = players[socket.id];
-        if (p && p.skills.weapon >= 5 && p.weaponPath === 'none') {
-            if (path === 'piercing' || path === 'winter') {
-                p.weaponPath = path;
-                socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
-            }
+        // data.category = 'weapon'|'speed'|'strength', data.path = 'piercing'|'dash' itp.
+        if (p && p.skills[data.category] >= 5 && p.paths[data.category] === 'none') {
+            p.paths[data.category] = data.path;
+            socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
         }
     });
 
@@ -335,7 +365,8 @@ io.on('connection', (socket) => {
             if (canShoot) {
                 p.score -= stats.cost;
                 let finalDmg = type === 'sword' ? stats.dmg + (p.skills.weapon * 1) : stats.dmg;
-                let isPierce = type === 'sword' ? (p.weaponPath === 'piercing') : stats.piercing;
+                // --- NOWOŚĆ: ZMIANA Z p.weaponPath NA p.paths.weapon ---
+                let isPierce = type === 'sword' ? (p.paths.weapon === 'piercing') : stats.piercing;
 
                 projectiles.push({
                     id: ++entityIdCounter, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
@@ -350,7 +381,8 @@ io.on('connection', (socket) => {
     socket.on('throwWinterSword', () => {
         const p = players[socket.id];
         const now = Date.now();
-        if (p && p.weaponPath === 'winter' && now - p.lastWinterUse >= 15000) {
+        // --- NOWOŚĆ: ZMIANA Z p.weaponPath NA p.paths.weapon ---
+        if (p && p.paths.weapon === 'winter' && now - p.lastWinterUse >= 15000) {
             p.lastWinterUse = now;
             let winterDmg = 15 + (p.skills.weapon * 2);
 
@@ -488,10 +520,26 @@ setInterval(() => {
     // Obrażenia od deszczu (Co około 1 sekundę = 30 ticków)
     if (activeEvent === 'TOXIC_RAIN' && eventTickCounter % 30 === 0) {
         Object.values(players).forEach(p => {
-            if (!p.isSafe && p.score > 5) p.score -= 2;
+            if (!p.isSafe && p.score > 5) {
+                // --- NOWOŚĆ: TYTAN OTRZYMUJE MNIEJ OBRAŻEŃ OD DESZCZU ---
+                let dmg = p.paths.strength === 'titan' ? 1 : 2;
+                p.score -= dmg;
+            }
         });
         bots.forEach(b => {
             if (!b.isSafe && b.score > 5) b.score -= 1;
+        });
+    }
+
+    // --- NOWOŚĆ: REGENERACJA TYTANA (Gdy stoi w miejscu) ---
+    if (eventTickCounter % 30 === 0) { // Co 1 sekundę
+        Object.values(players).forEach(p => {
+            if (p.paths.strength === 'titan') {
+                if (!p.isMoving) p.idleTime++;
+                if (p.idleTime >= 3) { // Jeśli stoi 3 sekundy
+                    p.score += 2;      // Leczy +2 co sekundę
+                }
+            }
         });
     }
 
@@ -512,7 +560,10 @@ setInterval(() => {
 
         // --- SKALOWANIE PRĘDKOŚCI BOTA DO GRACZA ---
         let baseBotSpeed = owner ? 2.5 + ((owner.skills.speed || 0) * 0.4) : b.speed;
-        let currentBotSpeed = activeEvent === 'BLIZZARD' ? baseBotSpeed * 0.4 : baseBotSpeed;
+        
+        // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ SPADKI SZYBKOŚCI W ŚNIEŻYCY ---
+        let isLightweight = owner && owner.paths.speed === 'lightweight';
+        let currentBotSpeed = (activeEvent === 'BLIZZARD' && !isLightweight) ? baseBotSpeed * 0.4 : baseBotSpeed;
         
         if (b.ownerId) {
             if (owner && armies[b.ownerId]) {
@@ -599,7 +650,8 @@ setInterval(() => {
                             let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
 
                             // --- SKALOWANIE OBRAŻEŃ BOTA DO GRACZA ---
-                            let botPierce = type === 'sword' ? (owner.weaponPath === 'piercing') : stats.piercing;
+                            // ZMIANA: p.weaponPath zaktualizowane do owner.paths.weapon
+                            let botPierce = type === 'sword' ? (owner.paths.weapon === 'piercing') : stats.piercing;
                             let botFinalDmg = type === 'sword' ? stats.dmg + ((owner.skills.weapon || 0) * 1) : stats.dmg;
 
                             projectiles.push({
@@ -850,7 +902,6 @@ setInterval(() => {
                 if (p.ownerTeam && !b.team) return;
 
                 b.score = Math.max(1, b.score - p.damage);
-                // NOWOŚĆ: Obrażenia po trafieniu bota rzucane do wszystkich graczy!
                 io.emit('damageText', { x: b.x, y: b.y - 20, val: p.damage, color: '#fff' });
 
                 if (!p.isPiercing) p.life = 0; 
@@ -878,9 +929,22 @@ setInterval(() => {
 
                     pl.score = Math.max(1, pl.score - Math.floor(damage));
                     
-                    // NOWOŚĆ: Obrażenia po trafieniu gracza
+                    // Obrażenia po trafieniu gracza
                     io.emit('damageText', { x: pl.x, y: pl.y - 30, val: Math.floor(damage), color: '#ff4757' });
                     
+                    // ========================================================
+                    // NOWOŚĆ: UMIEJĘTNOŚĆ KOLCE (THORNS) - ODBIJA 25% OBRAŻEŃ
+                    // ========================================================
+                    if (pl.paths.strength === 'thorns') {
+                        let attacker = players[p.ownerId];
+                        if (attacker) {
+                            let reflectDmg = Math.max(1, Math.floor(damage * 0.25));
+                            attacker.score = Math.max(1, attacker.score - reflectDmg);
+                            // Pomarańczowe obrażenia jako sygnał odbicia
+                            io.emit('damageText', { x: attacker.x, y: attacker.y - 30, val: reflectDmg, color: '#e67e22' });
+                        }
+                    }
+
                     if (!p.isPiercing) p.life = 0;
                 }
             }
@@ -891,10 +955,11 @@ setInterval(() => {
     Object.values(players).forEach(p => {
         let skillsChanged = false;
         if (p.score < 100 && p.skills.strength > 0) { p.skills.strength = 0; skillsChanged = true; }
-        if (p.score < 15 && (p.skills.weapon > 0 || p.weaponPath !== 'none' || p.activeWeapon !== 'sword')) {
-            p.skills.weapon = 0; p.weaponPath = 'none'; p.activeWeapon = 'sword'; skillsChanged = true;
+        // ZMIANA na paths.weapon
+        if (p.score < 15 && (p.skills.weapon > 0 || p.paths.weapon !== 'none' || p.activeWeapon !== 'sword')) {
+            p.skills.weapon = 0; p.paths.weapon = 'none'; p.activeWeapon = 'sword'; skillsChanged = true;
         }
-        if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, weaponPath: p.weaponPath });
+        if (skillsChanged) io.to(p.id).emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
     });
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
