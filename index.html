@@ -457,13 +457,6 @@
             };
             document.body.appendChild(script);
         };
-
-        // --- ZAKTUALIZOWANA FUNKCJA: Teraz przyjmuje 2 parametry, żeby współpracować z nowym free.js! ---
-        window.choosePath = (category, pathName) => {
-            if (typeof socket !== 'undefined') {
-                socket.emit('chooseSkillPath', { category: category, path: pathName });
-            }
-        };
     </script>
 </body>
 </html>
