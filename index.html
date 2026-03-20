@@ -144,7 +144,7 @@
             gap: 8px;
             font-family: Arial, sans-serif;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            min-width: 220px; /* Zwiększono nieco szerokość na levele */
+            min-width: 300px; /* Zwiększone, by pomieścić nowy system 3 ścieżek */
             z-index: 90;
         }
 
@@ -157,7 +157,7 @@
             cursor: pointer;
             font-weight: bold;
             transition: 0.2s;
-            text-align: left;
+            text-align: center; /* Wyśrodkowane dla nowych przycisków! */
             position: relative;
             width: 100%;
         }
@@ -182,7 +182,6 @@
             transform: none;
         }
 
-        /* NOWOŚĆ: Etykieta poziomu */
         .lvl-badge {
             float: right;
             background: rgba(0,0,0,0.3);
@@ -311,28 +310,14 @@
             </div>
 
             <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [R] Zimowy Miecz</small>
+                <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
             </div>
         </div>
     </div>
 
     <div id="skill-menu">
         <div class="sp-label">Punkty Umiejętności: <span id="sp-count" style="color:#000; background:#f1c40f; padding: 2px 8px; border-radius: 10px;">0</span></div>
-        
-        <button id="btn-speed" class="skill-btn" onclick="upgrade('speed')">
-            ⚡ Szybkość <span class="lvl-badge" id="lvl-speed">Lv. 0</span><br>
-            <small>Ulepsz (+1)</small>
-        </button>
-        <button id="btn-strength" class="skill-btn" onclick="upgrade('strength')">
-            🛡️ Siła <span class="lvl-badge" id="lvl-strength">Lv. 0</span><br>
-            <small>Wymaga: Zbroja (100 pkt)</small>
-        </button>
-        <button id="btn-weapon" class="skill-btn" onclick="upgrade('weapon')">
-            ⚔️ Broń <span class="lvl-badge" id="lvl-weapon">Lv. 0</span><br>
-            <small>Wymaga: Miecz (15 pkt)</small>
-        </button>
-
-        <div id="weapon-paths" style="display: none; flex-direction: column; gap: 5px; margin-top: 5px; border-top: 1px solid #ccc; padding-top: 10px;">
+        <div id="skills-container">
             </div>
     </div>
 
@@ -462,7 +447,6 @@
                 shopScript.src = 'shop.js';
                 shopScript.onload = () => {
                     if (chosenMode === 'FREE') {
-                        // Tutaj bierzemy domyślny (ukryty) kolor, by nie wysypać gry!
                         const safeColor = document.getElementById('playerColor').value || '#ffffff';
                         startGame(controlType, safeColor); 
                     } else {
@@ -474,9 +458,10 @@
             document.body.appendChild(script);
         };
 
-        window.choosePath = (path) => {
+        // --- ZAKTUALIZOWANA FUNKCJA: Teraz przyjmuje 2 parametry, żeby współpracować z nowym free.js! ---
+        window.choosePath = (category, pathName) => {
             if (typeof socket !== 'undefined') {
-                socket.emit('chooseWeaponPath', path);
+                socket.emit('chooseSkillPath', { category: category, path: pathName });
             }
         };
     </script>
