@@ -150,13 +150,24 @@ io.on('connection', (socket) => {
             isRecruiting: false, // Domyslnie pożera boty
             formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia, 3: Własna
             moveAngle: 0,        // Kierunek biegu gracza do formacji
-            team: null
+            team: null,
+            // --- NOWOŚĆ: PAMIĘĆ MIDASA (TUTORIAL) ---
+            isTutorialActive: true,
+            tutorialText: "Ładowanie porady z serwera...",
+            got100MassTutorial: false
         };
         socket.emit('init', { id: socket.id });
 
         console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
         console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł do gry!`);
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
+
+        // --- WYWOŁANIE MIDASA PO DOŁĄCZENIU ---
+        getTutorialMessage(players[socket.id].name, 'join', players[socket.id].score).then(msg => {
+            if (players[socket.id]) { // Upewniamy się, że gracz się nie rozłączył w międzyczasie
+                io.to(socket.id).emit('tutorialTick', { text: msg });
+            }
+        });
     });
 
     // --- DOŁĄCZANIE (TRYB TEAMS) ---
@@ -549,6 +560,17 @@ setInterval(() => {
             }
         });
     }
+
+    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA ---
+    Object.values(players).forEach(p => {
+        // Jeśli gracz wbił 100 masy i jeszcze nie dostał gratulacji od Midasa
+        if (p.score >= 100 && p.isTutorialActive && !p.got100MassTutorial) {
+            p.got100MassTutorial = true;
+            getTutorialMessage(p.name, '100mass', p.score).then(msg => {
+                io.to(p.id).emit('tutorialTick', { text: msg });
+            });
+        }
+    });
 
     // --- BUDOWA STRUKTURY ARMII DO OBLICZEŃ FORMACJI ---
     let armies = {};
@@ -972,6 +994,36 @@ setInterval(() => {
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft, castles });
 }, 33);
+
+// ==========================================
+// NOWOŚĆ: INTEGRACJA Z OLLAMĄ (PHI3) DLA MIDASA
+// ==========================================
+async function getTutorialMessage(playerName, eventType, currentScore) {
+    let prompt = `Jesteś Midasem, virtualnym asystentem i przewodnikiem w grze .io brawler Xtreme Destiny (XD). Masz złote okulary i jesteś mądry, ale wesoły. Zwracasz się bezpośrednio do gracza. Twoim celem jest krótko uczyć gracza przetrwania. Gracz: ${playerName}, Masa: ${currentScore}. `;
+    
+    if (eventType === 'join') {
+        prompt += "Witaj gracza w grze w 2 krótkich zdaniach. Przypomnij mu, żeby zbierał pomarańczowe kropki, by rosnąć.";
+    } else if (eventType === '100mass') {
+        prompt += "Pogratuluj graczowi wbicia 100 masy. Powiedz w 1 zdaniu, żeby szybko kliknął menu po lewej i wybrał ścieżkę umiejętności, bo inaczej zginie.";
+    }
+    
+    try {
+        const response = await fetch('http://localhost:11434/api/generate', { // Twój lokalny adres Ollamy
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'phi3:latest',
+                prompt: prompt,
+                stream: false
+            })
+        });
+        const data = await response.json();
+        return data.response;
+    } catch (e) {
+        console.error("Błąd Ollamy (Midas milczy):", e);
+        return "Hej! Coś zerwało moje połączenie z serwerem wiedzy, ale walcz dzielnie, " + playerName + "!";
+    }
+}
 
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
