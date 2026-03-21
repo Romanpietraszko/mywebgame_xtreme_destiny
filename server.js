@@ -151,10 +151,10 @@ io.on('connection', (socket) => {
             formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia, 3: Własna
             moveAngle: 0,        // Kierunek biegu gracza do formacji
             team: null,
-            // --- NOWOŚĆ: PAMIĘĆ MIDASA (TUTORIAL) ---
+            // --- NOWOŚĆ: PAMIĘĆ MIDASA (TUTORIAL SEKWENCYJNY) ---
             isTutorialActive: true,
-            tutorialText: "Ładowanie porady z serwera...",
-            got100MassTutorial: false
+            tutorialFlags: { m15: false, m50: false, m100: false },
+            tutorialText: ""
         };
         socket.emit('init', { id: socket.id });
 
@@ -163,11 +163,9 @@ io.on('connection', (socket) => {
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
 
         // --- WYWOŁANIE MIDASA PO DOŁĄCZENIU ---
-        getTutorialMessage(players[socket.id].name, 'join', players[socket.id].score).then(msg => {
-            if (players[socket.id]) { // Upewniamy się, że gracz się nie rozłączył w międzyczasie
-                io.to(socket.id).emit('tutorialTick', { text: msg });
-            }
-        });
+        let msg = getTutorialMessage(data.name, 'join');
+        players[socket.id].tutorialText = msg;
+        io.to(socket.id).emit('tutorialTick', { text: msg });
     });
 
     // --- DOŁĄCZANIE (TRYB TEAMS) ---
@@ -517,6 +515,11 @@ setInterval(() => {
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
             
+            // Midas ostrzega graczy:
+            Object.values(players).forEach(p => {
+                if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'toxic_rain') });
+            });
+
             setTimeout(() => {
                 activeEvent = null;
                 eventTimer = 0;
@@ -526,6 +529,11 @@ setInterval(() => {
             // EVENT: Zamięć Śnieżna
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
+
+            // Midas ostrzega graczy:
+            Object.values(players).forEach(p => {
+                if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'blizzard') });
+            });
 
             setTimeout(() => {
                 activeEvent = null;
@@ -561,14 +569,21 @@ setInterval(() => {
         });
     }
 
-    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA ---
+    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA (SEKWENCJE MIDASA) ---
     Object.values(players).forEach(p => {
-        // Jeśli gracz wbił 100 masy i jeszcze nie dostał gratulacji od Midasa
-        if (p.score >= 100 && p.isTutorialActive && !p.got100MassTutorial) {
-            p.got100MassTutorial = true;
-            getTutorialMessage(p.name, '100mass', p.score).then(msg => {
-                io.to(p.id).emit('tutorialTick', { text: msg });
-            });
+        if (!p.isTutorialActive || !p.tutorialFlags) return;
+
+        if (p.score >= 15 && !p.tutorialFlags.m15) {
+            p.tutorialFlags.m15 = true;
+            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass15') });
+        }
+        else if (p.score >= 50 && !p.tutorialFlags.m50) {
+            p.tutorialFlags.m50 = true;
+            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass50') });
+        }
+        else if (p.score >= 100 && !p.tutorialFlags.m100) {
+            p.tutorialFlags.m100 = true;
+            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass100') });
         }
     });
 
@@ -996,33 +1011,18 @@ setInterval(() => {
 }, 33);
 
 // ==========================================
-// NOWOŚĆ: INTEGRACJA Z OLLAMĄ (PHI3) DLA MIDASA
+// MIDAS - WIRTUALNY PRZEWODNIK (ZAPROGRAMOWANY)
 // ==========================================
-async function getTutorialMessage(playerName, eventType, currentScore) {
-    let prompt = `Jesteś Midasem, virtualnym asystentem i przewodnikiem w grze .io brawler Xtreme Destiny (XD). Masz złote okulary i jesteś mądry, ale wesoły. Zwracasz się bezpośrednio do gracza. Twoim celem jest krótko uczyć gracza przetrwania. Gracz: ${playerName}, Masa: ${currentScore}. `;
-    
-    if (eventType === 'join') {
-        prompt += "Witaj gracza w grze w 2 krótkich zdaniach. Przypomnij mu, żeby zbierał pomarańczowe kropki, by rosnąć.";
-    } else if (eventType === '100mass') {
-        prompt += "Pogratuluj graczowi wbicia 100 masy. Powiedz w 1 zdaniu, żeby szybko kliknął menu po lewej i wybrał ścieżkę umiejętności, bo inaczej zginie.";
-    }
-    
-    try {
-        const response = await fetch('http://localhost:11434/api/generate', { // Twój lokalny adres Ollamy
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                model: 'phi3:latest',
-                prompt: prompt,
-                stream: false
-            })
-        });
-        const data = await response.json();
-        return data.response;
-    } catch (e) {
-        console.error("Błąd Ollamy (Midas milczy):", e);
-        return "Hej! Coś zerwało moje połączenie z serwerem wiedzy, ale walcz dzielnie, " + playerName + "!";
-    }
+function getTutorialMessage(playerName, eventType) {
+    const messages = {
+        'join': `Witaj na arenie XD, ${playerName}! Jestem Midas. Zbieraj pomarańczowe kropki i skrzynki z "?", by urosnąć. Uciekaj przed większymi!`,
+        'mass15': `Świetnie, masz 15 masy! Odblokowałeś Rzut Mieczem. Kliknij LPM (Myszka), by rzucić. Koszt: 2 pkt masy. Celuj uważnie!`,
+        'mass50': `Połowa drogi do potęgi (50 masy)! Możesz teraz używać Tarczy. Przytrzymaj [Q], by odbijać ataki.`,
+        'mass100': `Niesamowite, 100 masy (5 poziom)! Szybko, użyj plusików po lewej i wybierz klasę (np. Zryw pod [SHIFT] lub Zimowy Miecz [R]).`,
+        'toxic_rain': `Uwaga! Kwaśny Deszcz! 🌧️ Szybko chowaj się pod dachem Zamku, inaczej deszcz wypali Twoją masę!`,
+        'blizzard': `Brrr... Śnieżyca! ❄️ Wszyscy zwalniają. To idealny moment, by rzucać mieczami w powolne cele!`
+    };
+    return messages[eventType] || `Walcz dzielnie, ${playerName}!`;
 }
 
 const PORT = process.env.PORT || 3000;
