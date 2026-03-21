@@ -182,7 +182,8 @@ window.startGame = (type) => {
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     player = {
-        x: 2000, y: 2000, score: 5, level: 1,
+        // --- ZMIANA BALANSU: Gracz startuje od zera ---
+        x: 2000, y: 2000, score: 0, level: 1, 
         name: name, color: color, isSafe: false,
         isShielding: false, aura: null, 
         inventory: { bow: 0, knife: 0, shuriken: 0 }, 
@@ -629,6 +630,33 @@ function gameLoop(currentTime) {
                     ctx.fillStyle = '#e74c3c'; 
                     ctx.font = 'bold 14px Arial';
                     ctx.fillText(`${timeLeft}s`, btnX + 25, startY + 40);
+                }
+            }
+            
+            // =========================================================
+            // --- NOWOŚĆ: RYSOWANIE COOLDOWNU DLA ZRYWU (SHIFT) ---
+            // =========================================================
+            if (paths.speed === 'dash') {
+                let timePassedD = Date.now() - lastDashUseClient;
+                let cooldownTotalD = 3000; 
+                let dashProgress = Math.min(1, timePassedD / cooldownTotalD);
+                let timeLeftD = Math.ceil((cooldownTotalD - timePassedD) / 1000);
+
+                let btnXD = startX + 180; // Przesunięte w prawo od przycisku R
+                ctx.fillStyle = 'rgba(44, 62, 80, 0.8)'; ctx.fillRect(btnXD, startY, 50, 50);
+                // Zielony pasek ładowania dla szybkości
+                ctx.fillStyle = 'rgba(46, 204, 113, 0.8)'; ctx.fillRect(btnXD, startY + 50 * (1 - dashProgress), 50, 50 * dashProgress);
+                ctx.strokeStyle = dashProgress >= 1 ? '#2ecc71' : '#7f8c8d'; ctx.lineWidth = 2; ctx.strokeRect(btnXD, startY, 50, 50);
+                
+                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.fillText('SHIFT', btnXD + 25, startY + 18);
+                
+                ctx.font = '10px Arial'; 
+                if (dashProgress >= 1) {
+                    ctx.fillText('GOTOWE', btnXD + 25, startY + 40);
+                } else {
+                    ctx.fillStyle = '#e74c3c'; 
+                    ctx.font = 'bold 14px Arial';
+                    ctx.fillText(`${timeLeftD}s`, btnXD + 25, startY + 40);
                 }
             }
             ctx.restore();
