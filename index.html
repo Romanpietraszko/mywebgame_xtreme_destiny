@@ -6,6 +6,10 @@
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <script>
+    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
+    // Definiujemy zmienną globalnie jako PIERWSZĄ RZECZ w grze, zanim jeszcze załaduje się silnik rysowania.
+    window.weaponPath = 'none';
+
     // To uruchomi SDK zanim załadują się reszta Twoich plików JS
     (async function() {
         try {
@@ -123,11 +127,18 @@
         .paint-x { color: #e74c3c; } 
         .paint-d { color: #3498db; } 
 
-        #menu p {
-            font-size: 18px;
+        #menu p.subtitle {
+            font-size: 16px;
             color: #555;
-            margin-bottom: 25px;
+            margin-bottom: 15px;
             font-weight: bold;
+        }
+
+        /* --- PORADNIK DLA GRACZA --- */
+        .tutorial-box {
+            background: rgba(0, 0, 0, 0.05); padding: 15px; border-radius: 10px;
+            margin-bottom: 20px; font-size: 13px; text-align: left; line-height: 1.5;
+            border-left: 4px solid #f1c40f; color: #333;
         }
 
         /* --- MENU UMIEJĘTNOŚCI --- */
@@ -144,7 +155,7 @@
             gap: 8px;
             font-family: Arial, sans-serif;
             box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            min-width: 300px; /* Zwiększone, by pomieścić nowy system 3 ścieżek */
+            min-width: 300px; 
             z-index: 90;
         }
 
@@ -157,7 +168,7 @@
             cursor: pointer;
             font-weight: bold;
             transition: 0.2s;
-            text-align: center; /* Wyśrodkowane dla nowych przycisków! */
+            text-align: center; 
             position: relative;
             width: 100%;
         }
@@ -270,7 +281,16 @@
 
         <div id="menu">
             <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
-            <p>Walcz, baw się i ulepszaj sprzęt – pełen freestyle na arenie!</p>
+            <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
+
+            <div class="tutorial-box">
+                <b>📜 Szybki poradnik:</b><br>
+                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
+                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
+                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
+                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!<br>
+                💀 Uwaga: Zderzenie z czerwoną granicą mapy to pewna śmierć!
+            </div>
 
             <div id="step-1">
                 <div class="input-group">
