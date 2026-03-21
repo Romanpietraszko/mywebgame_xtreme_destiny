@@ -12,6 +12,12 @@ const keys = {};
 const characterImg = new Image();
 characterImg.src = 'xtreme-destiny-postac.png'; 
 
+// --- NOWOŚĆ: ŁADOWANIE ASYSTENTA MIDASA ---
+const skins = {
+    midas: new Image()
+};
+skins.midas.src = 'xtreme-destiny-midas.png';
+
 // NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
 let globalScale = 1;
 // Słownik pamiętający stan "przeżuwania" i emocji dla grafiki
@@ -456,6 +462,26 @@ function drawCastle(x, y, radius) {
 
     ctx.restore();
 }
+
+// --- POMOCNICZA FUNKCJA DO ZAWIJANIA TEKSTU (TUTORIAL MIDASA) ---
+window.wrapText = function(context, text, x, y, maxWidth, lineHeight) {
+    if (!text) return;
+    let words = text.split(' ');
+    let line = '';
+    for(let n = 0; n < words.length; n++) {
+        let testLine = line + words[n] + ' ';
+        let metrics = context.measureText(testLine);
+        let testWidth = metrics.width;
+        if (testWidth > maxWidth && n > 0) {
+            context.fillText(line, x, y);
+            line = words[n] + ' ';
+            y += lineHeight;
+        } else {
+            line = testLine;
+        }
+    }
+    context.fillText(line, x, y);
+};
 
 // Skalowanie płótna
 function resize() {
