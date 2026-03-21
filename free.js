@@ -139,6 +139,12 @@ window.addEventListener('mouseup', (e) => {
 // --- OBSŁUGA KLAWIATURY ---
 window.onkeydown = (e) => {
     keys[e.code] = true; // Tablica keys pochodzi z engine.js
+    
+    // --- NOWOŚĆ: UKRYWANIE/POKAZYWANIE TUTORIALA ---
+    if (e.code === 'KeyH' && player) {
+        player.isTutorialActive = !player.isTutorialActive;
+    }
+
     if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) {
         gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
     }
@@ -189,7 +195,10 @@ window.startGame = (type) => {
         inventory: { bow: 0, knife: 0, shuriken: 0 }, 
         activeWeapon: 'sword',
         isRecruiting: false,
-        formation: 0
+        formation: 0,
+        // --- NOWOŚĆ: PAMIĘĆ TUTORIALA ---
+        isTutorialActive: true,
+        tutorialText: "Ładowanie porady z serwera wiedzy..."
     };
     if (myId) player.id = myId;
     socket.emit('joinGame', { name, color });
@@ -213,6 +222,14 @@ socket.on('skillUpdated', (data) => {
 
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
+
+// --- NOWOŚĆ: ODBIERANIE WIADOMOŚCI OD MIDASA (PHI3) ---
+socket.on('tutorialTick', (data) => {
+    if (player) {
+        player.tutorialText = data.text;
+        player.isTutorialActive = true;
+    }
+});
 
 // --- PRZEŁĄCZNIKI RTS ---
 socket.on('recruitToggled', (state) => { 
@@ -540,6 +557,47 @@ function gameLoop(currentTime) {
         }
 
         // --- RYSOWANIE UI ---
+
+        // ==========================================================
+        // RYSOWANIE MIDASA (ASYSTENTA AI) - TUTORIAL
+        // ==========================================================
+        if (gameState === 'PLAYING' && player && player.isTutorialActive) {
+            ctx.save();
+            let tutorialX = 20; 
+            let tutorialY = canvas.height - 200; 
+            
+            // Tło okienka dialogowego
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
+            ctx.fillRect(tutorialX, tutorialY, 380, 110);
+            ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; 
+            ctx.strokeRect(tutorialX, tutorialY, 380, 110);
+            
+            // Portret Midasa (sprawdzamy czy obrazek się załadował i obiekt istnieje)
+            if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
+                ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
+            }
+            
+            // Imię Asystenta
+            ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
+            ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
+            
+            // Wiadomość od Ollamy (używamy wrapText z engine.js)
+            ctx.fillStyle = '#000'; ctx.font = '13px Arial';
+            if (player.tutorialText) {
+                if (window.wrapText) {
+                    window.wrapText(ctx, player.tutorialText, tutorialX + 110, tutorialY + 50, 250, 18); 
+                } else {
+                    ctx.fillText(player.tutorialText.substring(0, 50) + "...", tutorialX + 110, tutorialY + 50);
+                }
+            }
+            
+            // Instrukcja ukrycia
+            ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial';
+            ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
+            
+            ctx.restore();
+        }
+
         if (gameState !== 'GAMEOVER') {
             ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
