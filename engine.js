@@ -214,6 +214,17 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     if (safe) return; 
 
     ctx.save(); 
+
+    // --- NOWOŚĆ: BLOB SHADOW (Miękki owalny cień pod postacią) ---
+    // Rysujemy cień przed czymkolwiek innym, żeby był "na podłodze"
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; // Ciemny, półprzezroczysty
+    // Używamy elipsy: szersza na boki (x), węższa w pionie (y) dając iluzję płaskiego cienia na ziemi
+    // Przesuwamy go lekko w dół (y + 25 * sc) i w prawo, by pasował do światła drzew
+    ctx.beginPath();
+    ctx.ellipse(x + 5 * sc, y + 25 * sc, 20 * sc, 8 * sc, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
     
     // --- AURA ---
     if (e.aura && e.aura.time > 0) { 
@@ -445,6 +456,7 @@ function drawCastle(x, y, radius) {
 
     ctx.restore();
 }
+
 // Skalowanie płótna
 function resize() {
     canvas.width = window.innerWidth;
