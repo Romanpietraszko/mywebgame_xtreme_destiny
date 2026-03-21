@@ -43,6 +43,11 @@ let damageTexts = [];
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
 
+// --- NOWOŚĆ: ZMIENNE DO LIMITOWANIA FPS (Nagrywanie bez ścin) ---
+let lastFrameTime = performance.now();
+const targetFPS = 60;
+const frameDuration = 1000 / targetFPS; // Ok. 16.66ms na klatkę
+
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- OBSŁUGA MYSZKI ---
@@ -188,7 +193,10 @@ window.startGame = (type) => {
     if (myId) player.id = myId;
     socket.emit('joinGame', { name, color });
     gameState = 'PLAYING';
-    gameLoop();
+    
+    // Zapewniamy, że czas startu do ograniczania klatek jest prawidłowy
+    lastFrameTime = performance.now();
+    requestAnimationFrame(gameLoop);
 };
 
 // --- KOMUNIKACJA Z SERWEREM ---
@@ -338,7 +346,23 @@ function update() {
     }
 }
 
-function gameLoop() {
+// ==========================================
+// LIMITOWANIE FPS DO 60 W GŁÓWNEJ PĘTLI
+// ==========================================
+function gameLoop(currentTime) {
+    // Obliczamy ile czasu minęło od ostatniej klatki
+    const deltaTime = currentTime - lastFrameTime;
+
+    // Jeśli minęło mniej czasu niż wymaga tego 60 FPS (16.6ms), czekamy i prosimy o kolejną klatkę
+    if (deltaTime < frameDuration) {
+        requestAnimationFrame(gameLoop);
+        return;
+    }
+
+    // Jeśli czas minął, ustalamy nowy punkt startowy dla kolejnej klatki
+    // Zdejmujemy resztę z dzielenia (tzw. "overhang"), żeby klatki szły równomiernie i się nie nawarstwiały
+    lastFrameTime = currentTime - (deltaTime % frameDuration);
+
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
     allEntities.sort((a,b) => b.score - a.score);
@@ -690,3 +714,5 @@ function gameLoop() {
     }
     requestAnimationFrame(gameLoop);
 }
+
+// OSTRZEŻENIE: Wywołanie pętli znajduje się teraz w funkcji startGame!
