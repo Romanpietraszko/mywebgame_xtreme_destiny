@@ -543,8 +543,11 @@ function gameLoop(currentTime) {
             ctx.globalAlpha = Math.max(0, p.life);
             ctx.fillStyle = p.color;
             ctx.beginPath();
-            // Rozmiar maleje wraz ze znikaniem
-            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            
+            // --- ZABEZPIECZENIE: Promień nie może być ujemny! ---
+            let currentRadius = Math.max(0, p.size * p.life);
+            ctx.arc(p.x, p.y, currentRadius, 0, Math.PI * 2);
+            
             ctx.fill();
             ctx.restore();
 
