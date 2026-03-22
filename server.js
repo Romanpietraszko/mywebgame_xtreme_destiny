@@ -125,11 +125,29 @@ io.on('connection', (socket) => {
 
     // --- DOŁĄCZANIE (TRYB FREE) ---
     socket.on('joinGame', (data) => {
+        // --- NOWOŚĆ: USTAWIENIA KLASY (PASYWKI) ---
+        const skinType = data.skin || 'standard';
+        let baseHealth = 100;
+        let baseSpeed = 5;
+        let massGainMult = 1.0; 
+        
+        // Zwykła postać dostaje bonus do masy w logice jedzenia (1.02)
+        if (skinType === 'arystokrata') {
+            baseHealth = 85;    
+            baseSpeed = 4.8;     
+            massGainMult = 1.15; // 15% bonusu!
+        } else if (skinType === 'ninja') {
+            baseHealth = 75;     
+            baseSpeed = 5.5;      
+        }
+
         players[socket.id] = {
             id: socket.id,
             x: 2000,
             y: 2000,
-            score: 0, 
+            score: baseHealth, // NOWOŚĆ: Startowa masa (zdrowie) zależy od klasy
+            baseSpeed: baseSpeed, // NOWOŚĆ: Pamięć bazowej prędkości klasy
+            massMultiplier: massGainMult, // NOWOŚĆ: Pamięć mnożnika zdobywanej masy
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
@@ -141,6 +159,7 @@ io.on('connection', (socket) => {
             idleTime: 0,     // Do umiejętności TYTAN
             color: data.color || '#000',
             name: data.name || 'Gracz',
+            skin: skinType, // NOWOŚĆ: Zapisujemy skórkę gracza
             isSafe: false,
             isShielding: false,
             armorHits: 0,
@@ -159,11 +178,11 @@ io.on('connection', (socket) => {
         socket.emit('init', { id: socket.id });
 
         console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
-        console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł do gry!`);
+        console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł jako ${skinType.toUpperCase()}!`);
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
 
-        // --- WYWOŁANIE MIDASA PO DOŁĄCZENIU ---
-        let msg = getTutorialMessage(data.name, 'join');
+        // --- WYWOŁANIE MIDASA PO DOŁĄCZENIU (WITAJĄCE RÓŻNE KLASY) ---
+        let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
     });
@@ -331,7 +350,12 @@ io.on('connection', (socket) => {
             'shuriken': 20, 'golden_shuriken': 80, 'diamond_shuriken': 200, 'chakram': 500, 'explosive_kunai': 1000
         };
 
-        const price = shopPrices[item];
+        let price = shopPrices[item];
+        
+        // --- NOWOŚĆ: PASYWKA ARYSTOKRATY (-5% W SKLEPIE) ---
+        if (p.skin === 'arystokrata') {
+            price = Math.floor(price * 0.95);
+        }
 
         if (price && p.score >= price) {
             p.score -= price;              
@@ -603,7 +627,8 @@ setInterval(() => {
         let owner = b.ownerId ? players[b.ownerId] : null;
 
         // --- SKALOWANIE PRĘDKOŚCI BOTA DO GRACZA ---
-        let baseBotSpeed = owner ? 2.5 + ((owner.skills.speed || 0) * 0.4) : b.speed;
+        let botSpeedFromOwner = owner ? owner.baseSpeed : 2.5; // Uwzględnia pasywkę Ninji!
+        let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
         
         // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ SPADKI SZYBKOŚCI W ŚNIEŻYCY ---
         let isLightweight = owner && owner.paths.speed === 'lightweight';
@@ -820,7 +845,11 @@ setInterval(() => {
 
         foods.forEach((f, fi) => {
             if (Math.hypot(p.x - f.x, p.y - f.y) < pRadius) {
-                p.score += 1;
+                // --- NOWOŚĆ: PASYWKA STANDARDOWEJ POSTACI (+2% Masy) LUB ARYSTOKRATY (+15%) ---
+                let massGain = 1 * p.massMultiplier;
+                if (p.skin === 'standard') massGain = 1.02; 
+                
+                p.score += massGain;
                 foods[fi] = spawnFood();
             }
         });
@@ -829,8 +858,13 @@ setInterval(() => {
         loots.forEach((l, li) => {
             if (Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
                 if (l.type === 'mass') {
-                    p.score += 100;
-                    io.emit('killEvent', { text: `🎁 ${p.name} znalazł złoże Masy (+100)!` }); 
+                    // Arystokrata ma też bonus do skrzynek!
+                    let baseLoot = 30; // --- POPRAWKA: Skrzynki dają teraz maks 30 masy ---
+                    let lootMass = baseLoot * p.massMultiplier;
+                    if (p.skin === 'standard') lootMass = baseLoot * 1.02; 
+                    
+                    p.score += lootMass;
+                    io.emit('killEvent', { text: `🎁 ${p.name} znalazł złoże Masy (+${Math.floor(lootMass)})!` }); 
                 } else if (l.type === 'skill') {
                     p.skillPoints++;
                     io.to(p.id).emit('levelUp', { level: p.level, points: p.skillPoints });
@@ -1015,6 +1049,9 @@ setInterval(() => {
 // ==========================================
 function getTutorialMessage(playerName, eventType) {
     const messages = {
+        'join_standard': `Witaj na arenie XD, ${playerName}! Jako Zwykły Wojownik rośniesz odrobinę szybciej. Zbieraj pomarańczowe kropki i skrzynki!`,
+        'join_ninja': `Witaj w cieniach, ${playerName}. Jesteś zwinny jak Ninja, ale uważaj, jesteś bardzo delikatny na starcie! Zbieraj kropki, by przetrwać!`,
+        'join_arystokrata': `Ah, Wasza Wysokość ${playerName}! Witamy na arenie. Jako Arystokrata masz zniżki w Zamkowym Sklepie i zbijasz fortunę na kropkach!`,
         'join': `Witaj na arenie XD, ${playerName}! Jestem Midas. Zbieraj pomarańczowe kropki i skrzynki z "?", by urosnąć. Uciekaj przed większymi!`,
         'mass15': `Świetnie, masz 15 masy! Odblokowałeś Rzut Mieczem. Kliknij LPM (Myszka), by rzucić. Koszt: 2 pkt masy. Celuj uważnie!`,
         'mass50': `Połowa drogi do potęgi (50 masy)! Możesz teraz używać Tarczy. Przytrzymaj [Q], by odbijać ataki.`,
