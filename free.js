@@ -38,6 +38,8 @@ let lastSkillMenuState = '';
 
 // Tablica na unoszące się cyferki obrażeń!
 let damageTexts = [];
+// NOWOŚĆ: Tablica na efekty cząsteczkowe (krew, iskry)
+let particles = [];
 
 // Zmienne do precyzyjnego przeciągania botów (RTS)
 let draggedBotId = null; 
@@ -198,10 +200,14 @@ window.startGame = (type) => {
         formation: 0,
         // --- NOWOŚĆ: PAMIĘĆ TUTORIALA ---
         isTutorialActive: true,
-        tutorialText: "Ładowanie porady z serwera wiedzy..."
+        tutorialText: "Ładowanie porady z serwera wiedzy...",
+        // --- NOWOŚĆ: Przesyłamy wybraną skórkę z interfejsu (lub domyślną) ---
+        skin: window.playerSkin || 'standard'
     };
     if (myId) player.id = myId;
-    socket.emit('joinGame', { name, color });
+    
+    // --- NOWOŚĆ: Wysyłamy wybrany skin do serwera! ---
+    socket.emit('joinGame', { name, color, skin: player.skin });
     gameState = 'PLAYING';
     
     // Zapewniamy, że czas startu do ograniczania klatek jest prawidłowy
@@ -240,8 +246,9 @@ socket.on('formationSwitched', (formName) => {
     killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
 });
 
-// Odbieranie informacji o obrażeniach
+// Odbieranie informacji o obrażeniach i GENEROWANIE CZĄSTECZEK
 socket.on('damageText', (data) => {
+    // 1. Dodajemy tekst obrażeń
     damageTexts.push({
         x: data.x + (Math.random() * 20 - 10), 
         y: data.y,
@@ -251,6 +258,25 @@ socket.on('damageText', (data) => {
         vx: (Math.random() - 0.5) * 2, 
         vy: -2 - Math.random() * 2 
     });
+
+    // 2. NOWOŚĆ: Dodajemy eksplozję cząsteczek (Particles)
+    let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
+    let count = data.val > 20 ? 12 : 6; // Mocniejsze uderzenie = więcej krwi/iskier!
+    
+    for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 6 + 2; // Siła rozbryzgu
+        particles.push({
+            x: data.x,
+            y: data.y,
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed,
+            life: 1.0,
+            decay: Math.random() * 0.05 + 0.02, // Szybkość znikania
+            color: particleColor,
+            size: Math.random() * 4 + 2 // Losowy rozmiar kropelki
+        });
+    }
 });
 
 socket.on('gameOver', (data) => {
@@ -344,6 +370,11 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
+        // --- NOWOŚĆ: PASYWKA KLASY NINJA ---
+        if (player.skin === 'ninja') {
+            speed *= 1.05; // 5% szybciej!
+        }
+
         // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ SPADKI SZYBKOŚCI W ŚNIEŻYCY ---
         if (currentEvent === 'BLIZZARD') {
             if (paths.speed !== 'lightweight') {
@@ -492,6 +523,33 @@ function gameLoop(currentTime) {
             // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
             player.weaponPath = paths.weapon || 'none';
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
+        }
+
+        // =========================================================
+        // NOWOŚĆ: Rysowanie fizyki cząsteczek (Krew / Iskry)
+        // =========================================================
+        for (let i = particles.length - 1; i >= 0; i--) {
+            let p = particles[i];
+            
+            // Fizyka
+            p.x += p.vx;
+            p.y += p.vy;
+            p.vx *= 0.85; // Tarcie - cząsteczki drastycznie zwalniają
+            p.vy *= 0.85; 
+            p.life -= p.decay; // Starzenie się
+
+            // Rysowanie
+            ctx.save();
+            ctx.globalAlpha = Math.max(0, p.life);
+            ctx.fillStyle = p.color;
+            ctx.beginPath();
+            // Rozmiar maleje wraz ze znikaniem
+            ctx.arc(p.x, p.y, p.size * p.life, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Usuwanie martwych cząsteczek
+            if (p.life <= 0) particles.splice(i, 1);
         }
 
         // Rysowanie wyskakujących obrażeń (Combat Feedback)
