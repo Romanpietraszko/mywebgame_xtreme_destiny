@@ -142,8 +142,9 @@ function drawProArmor(x, y, sc, tier, strengthLvl) {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * sc; ctx.stroke();
     } else if (strengthLvl >= 55) {
         ctx.fillStyle = '#00ffff';
-        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * ctx.fill();
-        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * ctx.fill();
+        // --- NAPRAWIONY BŁĄD SKŁADNI! ---
+        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * sc); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * sc); ctx.fill();
         ctx.fillRect(x - 4 * sc, y, 8 * sc, 10 * sc);
     } else if (strengthLvl >= 20) {
         ctx.fillStyle = '#bdc3c7';
