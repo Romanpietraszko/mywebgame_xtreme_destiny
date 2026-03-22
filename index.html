@@ -141,6 +141,18 @@
             border-left: 4px solid #f1c40f; color: #333;
         }
 
+        /* --- KARTY POSTACI --- */
+        .char-grid { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+        .char-card {
+            background: #fff; border: 3px solid #bdc3c7; border-radius: 10px; padding: 15px;
+            cursor: pointer; transition: 0.3s; width: 120px; text-align: center; position: relative;
+        }
+        .char-card:hover { border-color: #f1c40f; transform: translateY(-5px); }
+        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 15px rgba(46, 204, 113, 0.5); }
+        .char-card h4 { margin: 0 0 5px 0; font-size: 15px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
+        .char-card p { margin: 0; font-size: 11px; color: #7f8c8d; font-weight: bold; }
+        .char-card img { width: 60px; height: 60px; margin-bottom: 10px; object-fit: contain; }
+
         /* --- MENU UMIEJĘTNOŚCI --- */
         #skill-menu {
             position: fixed;
@@ -329,6 +341,29 @@
                 <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
             </div>
 
+            <div id="step-4" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px;">Wybierz swoją Klasę:</h3>
+                <div class="char-grid">
+                    <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
+                        <img src="xtreme-destiny-postac.png" alt="Standard">
+                        <h4>Standard</h4>
+                        <p>+2% zysku Masy</p>
+                    </div>
+                    <div class="char-card" id="char-ninja" onclick="selectSkin('ninja')">
+                        <img src="ninja-transparent.png" alt="Ninja">
+                        <h4>Ninja</h4>
+                        <p>+5% Szybkości</p>
+                    </div>
+                    <div class="char-card" id="char-arystokrata" onclick="selectSkin('arystokrata')">
+                        <img src="postac-bez-tla.png" alt="Arystokrata">
+                        <h4>Arystokrata</h4>
+                        <p>-5% Cen w Sklepie</p>
+                    </div>
+                </div>
+                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71; width: 100%;">WEJDŹ NA ARENĘ</button>
+                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
+            </div>
+
             <div id="game-info" style="margin-top: 20px;">
                 <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
             </div>
@@ -424,6 +459,8 @@
         const nameInput = document.getElementById('playerName');
         
         let chosenMode = 'FREE'; 
+        let chosenSkin = 'standard';
+        let chosenControlType = 'WASD';
 
         next.onclick = () => {
             if (nameInput.value.trim().length > 0) {
@@ -445,9 +482,24 @@
             s3.style.display = 'block'; 
         };
 
+        window.selectSkin = (skin) => {
+            chosenSkin = skin;
+            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('char-' + skin).classList.add('selected');
+        };
+
         window.launchGame = (controlType) => {
+            chosenControlType = controlType;
             document.getElementById('step-3').style.display = 'none';
+            document.getElementById('step-4').style.display = 'block'; 
+        };
+
+        window.launchGameFinal = () => {
+            document.getElementById('step-4').style.display = 'none';
             document.getElementById('game-info').style.display = 'none'; 
+            
+            // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
+            window.playerSkin = chosenSkin; 
             
             let loadingDiv = document.getElementById('loading-step');
             if (!loadingDiv) {
@@ -468,9 +520,9 @@
                 shopScript.onload = () => {
                     if (chosenMode === 'FREE') {
                         const safeColor = document.getElementById('playerColor').value || '#ffffff';
-                        startGame(controlType, safeColor); 
+                        startGame(chosenControlType, safeColor); 
                     } else {
-                        startGame(controlType, chosenMode); 
+                        startGame(chosenControlType, chosenMode); 
                     }
                 };
                 document.body.appendChild(shopScript);
