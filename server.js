@@ -127,17 +127,14 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         // --- NOWOŚĆ: USTAWIENIA KLASY (PASYWKI) ---
         const skinType = data.skin || 'standard';
-        let baseHealth = 100;
         let baseSpeed = 5;
         let massGainMult = 1.0; 
         
         // Zwykła postać dostaje bonus do masy w logice jedzenia (1.02)
         if (skinType === 'arystokrata') {
-            baseHealth = 85;    
             baseSpeed = 4.8;     
             massGainMult = 1.15; // 15% bonusu!
         } else if (skinType === 'ninja') {
-            baseHealth = 75;     
             baseSpeed = 5.5;      
         }
 
@@ -145,7 +142,7 @@ io.on('connection', (socket) => {
             id: socket.id,
             x: 2000,
             y: 2000,
-            score: baseHealth, // NOWOŚĆ: Startowa masa (zdrowie) zależy od klasy
+            score: 0, // CZYSTE ZERO DLA KAŻDEGO! (Naprawiono błąd startowych punktów)
             baseSpeed: baseSpeed, // NOWOŚĆ: Pamięć bazowej prędkości klasy
             massMultiplier: massGainMult, // NOWOŚĆ: Pamięć mnożnika zdobywanej masy
             level: 1,
@@ -202,6 +199,7 @@ io.on('connection', (socket) => {
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, // NOWOŚĆ
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
             color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
+            skin: 'standard', // W drużynach na razie standard (do ew. rozbudowy)
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
             isRecruiting: false, formation: 0, moveAngle: 0,
@@ -352,7 +350,7 @@ io.on('connection', (socket) => {
 
         let price = shopPrices[item];
         
-        // --- NOWOŚĆ: PASYWKA ARYSTOKRATY (-5% W SKLEPIE) ---
+        // --- PASYWKA ARYSTOKRATY (-5% W SKLEPIE) ---
         if (p.skin === 'arystokrata') {
             price = Math.floor(price * 0.95);
         }
