@@ -500,6 +500,17 @@
             
             // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
             window.playerSkin = chosenSkin; 
+
+            // --- AKTUALIZACJA WIZUALNA CEN W SKLEPIE DLA ARYSTOKRATY ---
+            if (chosenSkin === 'arystokrata') {
+                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95';
+                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47';
+                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19';
+            } else {
+                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100';
+                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50';
+                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20';
+            }
             
             let loadingDiv = document.getElementById('loading-step');
             if (!loadingDiv) {
