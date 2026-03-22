@@ -8,14 +8,17 @@ const WORLD_SIZE = 4000;
 const camera = { x: 0, y: 0 };
 const keys = {};
 
-// ŁADOWANIE TWOJEJ AUTORSKIEJ POSTACI (.svg dla idealnej ostrości)
-const characterImg = new Image();
-characterImg.src = 'xtreme-destiny-postac.png'; 
-
-// --- NOWOŚĆ: ŁADOWANIE ASYSTENTA MIDASA ---
+// --- NOWOŚĆ: ŁADOWANIE TWOICH AUTORSKICH POSTACI I ASYSTENTA ---
 const skins = {
+    standard: new Image(),
+    ninja: new Image(),
+    arystokrata: new Image(),
     midas: new Image()
 };
+// Dokładne nazwy plików z Figmy:
+skins.standard.src = 'xtreme-destiny-postac.png'; 
+skins.ninja.src = 'ninja-transparent.png';
+skins.arystokrata.src = 'postac-bez-tla.png';
 skins.midas.src = 'xtreme-destiny-midas.png';
 
 // NOWOŚĆ: Ta zmienna będzie trzymała informację o przybliżeniu/oddaleniu
@@ -139,8 +142,8 @@ function drawProArmor(x, y, sc, tier, strengthLvl) {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * sc; ctx.stroke();
     } else if (strengthLvl >= 55) {
         ctx.fillStyle = '#00ffff';
-        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * sc); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * sc); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * ctx.fill();
         ctx.fillRect(x - 4 * sc, y, 8 * sc, 10 * sc);
     } else if (strengthLvl >= 20) {
         ctx.fillStyle = '#bdc3c7';
@@ -332,7 +335,13 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.translate(x, y); 
         ctx.rotate(wobble);  
         ctx.scale(breatheX, breatheY); 
-        ctx.drawImage(characterImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        
+        // --- NOWOŚĆ: WYBÓR SKÓRKI DLA RYSOWANIA ---
+        let currentSkinImg = skins.standard;
+        if (e.skin === 'ninja') currentSkinImg = skins.ninja;
+        else if (e.skin === 'arystokrata') currentSkinImg = skins.arystokrata;
+        
+        ctx.drawImage(currentSkinImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
         
         if (visualStates[eId].eatTimer > 0) {
             ctx.rotate(-wobble); ctx.scale(1/breatheX, 1/breatheY);
