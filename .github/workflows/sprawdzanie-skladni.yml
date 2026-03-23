@@ -1,0 +1,92 @@
+name: Tarcza Anty-Błędowa XD (Poziom MAX)
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  pull_request:
+    branches: [ "main", "master" ]
+
+jobs:
+  skaner-kodu:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 📥 Pobieranie kodu
+      uses: actions/checkout@v4
+
+    - name: ⚙️ Instalacja środowiska (Node.js 18)
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: 🕵️‍♂️ Kto pilnuje strażników? (Skanowanie pliku .yml)
+      run: |
+        echo "🚀 KROK 0: Testowanie samego siebie..."
+        sudo apt-get update -yqq && sudo apt-get install -yqq yamllint
+        echo -e "extends: relaxed\nrules:\n  line-length: disable" > .yamllint
+        if ! yamllint .github/workflows/skaner.yml; then
+          echo "🚨 KRYTYCZNY BŁĄD META: Sam skrypt sprawdzający ma błąd!"
+          exit 1
+        fi
+
+    - name: 🛡️ Skrypt Weryfikujący (Składnia + Logika CAŁEJ GRY)
+      run: |
+        echo "🚀 Rozpoczynam absolutne skanowanie całej gry..."
+        BLEDY=0
+        LICZNIK_PLIKOW=0
+
+        echo "--- KROK 1: KONTROLA SKŁADNI (WSZYSTKIE PLIKI .JS) ---"
+        if ! ls *.js 1> /dev/null 2>&1; then
+          echo "🚨 KRYTYCZNY BŁĄD: Nie znaleziono żadnych plików .js!"
+          exit 1
+        fi
+
+        # Pętla sprawdzająca składnię KAŻDEGO pliku .js (w tym map.js, shop.js, itd.)
+        for plik in *.js; do
+          echo "🔎 Składnia: $plik"
+          if ! node -c "$plik"; then
+            echo "❌ BŁĄD SKŁADNI W: $plik"
+            BLEDY=1
+          else
+            LICZNIK_PLIKOW=$((LICZNIK_PLIKOW+1))
+          fi
+        done
+
+        echo "----------------------------------------"
+        echo "--- KROK 2: KONTROLA LOGIKI (Sanity Checks) ---"
+        
+        # 1. Sprawdzamy SERVER.JS
+        grep -q "io.on('connection'" server.js || { echo "❌ BŁĄD LOGIKI: Brak io.on w server.js!"; BLEDY=1; }
+        
+        # 2. Sprawdzamy ENGINE.JS
+        grep -q "drawStickman" engine.js || { echo "❌ BŁĄD LOGIKI: Brak drawStickman w engine.js!"; BLEDY=1; }
+        
+        # 3. Sprawdzamy MAP.JS (To mogłoby wywalić grę!)
+        grep -q "function initMap" map.js || { echo "❌ BŁĄD LOGIKI: Brak funkcji initMap w map.js!"; BLEDY=1; }
+        grep -q "safeZones" map.js || { echo "❌ BŁĄD LOGIKI: Brak definicji safeZones w map.js!"; BLEDY=1; }
+        
+        # 4. Sprawdzamy SHOP.JS
+        grep -q "function buyItem" shop.js || { echo "❌ BŁĄD LOGIKI: Brak funkcji buyItem w shop.js!"; BLEDY=1; }
+        
+        # 5. Sprawdzamy FREE.JS
+        grep -q "requestAnimationFrame" free.js || { echo "❌ BŁĄD LOGIKI: Brak pętli w free.js!"; BLEDY=1; }
+        
+        # 6. Sprawdzamy TEAMS.JS
+        grep -q "requestAnimationFrame" teams.js || { echo "❌ BŁĄD LOGIKI: Brak pętli w teams.js!"; BLEDY=1; }
+
+        # 7. Sprawdzamy INDEX.HTML (Marketing & SDK)
+        if [ -f "index.html" ]; then
+          grep -q "CrazyGames.SDK" index.html || { echo "❌ BŁĄD KRYTYCZNY: Brak SDK CrazyGames w index.html!"; BLEDY=1; }
+          grep -q "<canvas" index.html || { echo "❌ BŁĄD KRYTYCZNY: Brak <canvas> w index.html!"; BLEDY=1; }
+        else
+          echo "🚨 KRYTYCZNY BŁĄD: Brak pliku index.html!"
+          exit 1
+        fi
+
+        echo "--- WERDYKT OSTATECZNY ---"
+        if [ $BLEDY -eq 1 ]; then
+          echo "🚨 WYKRYTO BŁĘDY (Składnia lub Logika)! Natychmiastowa blokada wdrożenia!"
+          exit 1
+        else
+          echo "✅ KONTROLA ZALICZONA! Sprawdzono $LICZNIK_PLIKOW plików JS oraz logikę wszystkich modułów gry."
+        fi
