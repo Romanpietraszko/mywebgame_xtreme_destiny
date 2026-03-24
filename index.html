@@ -318,9 +318,10 @@
             <div id="step-2" style="display: none;">
                 <h3 style="color: #333; margin-bottom: 15px;">Wybierz Tryb Gry:</h3>
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Free)</button>
+                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #f1c40f; color: #2c3e50; border: 2px solid #e67e22; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);">👑 KAMPANIA: Od zera do Króla (RPG)</button>
+                    
+                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Multiplayer)</button>
                     <button class="main-btn" onclick="selectMode('PvP')" style="background: #8e44ad;">⚔️ Wojna Drużyn (PvP)</button>
-                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #27ae60;">🤖 Trening Drużynowy (PvE)</button>
                 </div>
                 <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
             </div>
@@ -521,7 +522,11 @@
             }
             loadingDiv.style.display = 'block';
 
-            const scriptSrc = chosenMode === 'FREE' ? 'free.js' : 'teams.js';
+            // --- NOWOŚĆ: WYBÓR SKRYPTU ---
+            let scriptSrc = 'free.js';
+            if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
+            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; // <- Ładujemy nasz nowy skrypt RPG!
+
             const script = document.createElement('script');
             script.src = scriptSrc;
             
@@ -529,12 +534,8 @@
                 const shopScript = document.createElement('script');
                 shopScript.src = 'shop.js';
                 shopScript.onload = () => {
-                    if (chosenMode === 'FREE') {
-                        const safeColor = document.getElementById('playerColor').value || '#ffffff';
-                        startGame(chosenControlType, safeColor); 
-                    } else {
-                        startGame(chosenControlType, chosenMode); 
-                    }
+                    const safeColor = document.getElementById('playerColor').value || '#ffffff';
+                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
                 };
                 document.body.appendChild(shopScript);
             };
