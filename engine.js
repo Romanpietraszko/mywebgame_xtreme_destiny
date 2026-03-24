@@ -142,7 +142,6 @@ function drawProArmor(x, y, sc, tier, strengthLvl) {
         ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * sc; ctx.stroke();
     } else if (strengthLvl >= 55) {
         ctx.fillStyle = '#00ffff';
-        // --- NAPRAWIONY BŁĄD SKŁADNI! ---
         ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * sc); ctx.fill();
         ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * sc); ctx.fill();
         ctx.fillRect(x - 4 * sc, y, 8 * sc, 10 * sc);
@@ -220,23 +219,19 @@ function drawProShield(x, y, sc, tier) {
 }
 
 function drawStickman(e, x, y, sc, safe, kingId) {
-    // --- NOWOŚĆ: JEŚLI GRACZ LUB BOT WCHODZI DO ZAMKU (STREFA BEZPIECZNA), ZNIKA Z MAPY! ---
     if (safe) return; 
 
     ctx.save(); 
 
-    // --- NOWOŚĆ: BLOB SHADOW (Miękki owalny cień pod postacią) ---
-    // Rysujemy cień przed czymkolwiek innym, żeby był "na podłodze"
+    // BLOB SHADOW
     ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; // Ciemny, półprzezroczysty
-    // Używamy elipsy: szersza na boki (x), węższa w pionie (y) dając iluzję płaskiego cienia na ziemi
-    // Przesuwamy go lekko w dół (y + 25 * sc) i w prawo, by pasował do światła drzew
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
     ctx.beginPath();
     ctx.ellipse(x + 5 * sc, y + 25 * sc, 20 * sc, 8 * sc, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
     
-    // --- AURA ---
+    // AURA
     if (e.aura && e.aura.time > 0) { 
         ctx.save(); 
         let progress = 1 - (e.aura.time / e.aura.maxTime); 
@@ -258,10 +253,13 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.restore(); 
     }
 
+    // BEZPIECZNA INICJALIZACJA (Tarcza Anty-Crashowa)
+    const isPlayer = (typeof player !== 'undefined' && e === player);
     const score = e.score || 0; 
-    const skills = e.skills || (e === player ? playerSkills : { speed: 0, strength: 0, weapon: 0 }); 
+    const skills = e.skills || (isPlayer && typeof playerSkills !== 'undefined' ? playerSkills : { speed: 0, strength: 0, weapon: 0 }); 
     const inv = e.inventory || { bow: 0, knife: 0, shuriken: 0 }; 
     const actWpn = e.activeWeapon || 'sword';
+    const moveDir = (typeof lastMoveDir !== 'undefined') ? lastMoveDir : {x: 1, y: 0};
 
     const armorTier = getTier(score, [100, 450, 850]); 
     const helmetTier = getTier(score, [500, 800, 1150]); 
@@ -269,7 +267,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     const shieldTier = getTier(score, [50, 150, 300]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
 
-    let isHuman = (e === player) || (e.id && e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
+    let isHuman = isPlayer || (e.id && e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
 
     let wpnX = isHuman ? 28 : 18;
     let wpnY = isHuman ? 18 : 10;
@@ -337,7 +335,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.rotate(wobble);  
         ctx.scale(breatheX, breatheY); 
         
-        // --- NOWOŚĆ: WYBÓR SKÓRKI DLA RYSOWANIA ---
         let currentSkinImg = skins.standard;
         if (e.skin === 'ninja') currentSkinImg = skins.ninja;
         else if (e.skin === 'arystokrata') currentSkinImg = skins.arystokrata;
@@ -383,7 +380,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
     if (e.isShielding) { 
         ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; ctx.beginPath(); 
-        let shieldAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) : 0; 
+        let shieldAngle = isPlayer ? Math.atan2(moveDir.y, moveDir.x) : 0; 
         ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9); ctx.stroke(); ctx.restore(); 
     }
     if (score >= 50) { 
@@ -391,15 +388,22 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     }
 
     if (score >= 15 || actWpn !== 'sword') {
-        let weaponAngle = (e === player) ? Math.atan2(lastMoveDir.y, lastMoveDir.x) + 0.5 : 0.5; 
+        let weaponAngle = isPlayer ? Math.atan2(moveDir.y, moveDir.x) + 0.5 : 0.5; 
         let handX = x + wpnX * sc, handY = y + wpnY * sc; 
         
-        if (actWpn === 'sword' && score >= 15) { e.isPiercing = (e === player) ? (weaponPath === 'piercing') : false; drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1); } 
+        if (actWpn === 'sword' && score >= 15) { 
+            e.isPiercing = isPlayer ? (typeof weaponPath !== 'undefined' ? weaponPath === 'piercing' : false) : false; 
+            drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1); 
+        } 
         else if (actWpn.includes('bow') || actWpn === 'crossbow' || actWpn === 'shotgun') { drawBowModel(handX, handY, weaponAngle, sc); } 
         else if (actWpn.includes('knife') || actWpn === 'cleaver') { drawKnifeModel(handX, handY, weaponAngle, sc); } 
         else if (actWpn.includes('shuriken') || actWpn === 'chakram' || actWpn === 'explosive_kunai') { drawShurikenModel(handX, handY, weaponAngle, sc); }
         
-        if (e === player && gameState === 'PLAYING') { ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(x + lastMoveDir.x * 45, y + lastMoveDir.y * 45); ctx.lineTo(x + lastMoveDir.x * 75, y + lastMoveDir.y * 75); ctx.stroke(); }
+        if (isPlayer && typeof gameState !== 'undefined' && gameState === 'PLAYING') { 
+            ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); 
+            ctx.moveTo(x + moveDir.x * 45, y + moveDir.y * 45); 
+            ctx.lineTo(x + moveDir.x * 75, y + moveDir.y * 75); ctx.stroke(); 
+        }
     }
 
     if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) { ctx.save(); ctx.translate(x - 5 * sc, y + 2 * sc); ctx.rotate(-Math.PI / 6); ctx.fillStyle = '#4a235a'; ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc); ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc); ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc); ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc); if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') { ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc; ctx.beginPath(); ctx.moveTo(0, -16 * sc); ctx.lineTo(0, 16 * sc); ctx.stroke(); } ctx.restore(); }
@@ -414,8 +418,16 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     ctx.restore();
 }
 
-// --- NOWOŚĆ: RYSOWANIE PRAWDZIWEGO ZAMKU ---
+// --- NOWOŚĆ: RYSOWANIE PRAWDZIWEGO ZAMKU (Zabezpieczone pod Map.js i Engine.js) ---
 function drawCastle(x, y, radius) {
+    // Tarcza przed konfliktem z plikiem map.js (który podaje ctx jako x)
+    if (typeof x === 'object' && y && y.radius !== undefined) {
+        radius = y.radius;
+        let tempX = y.x;
+        y = y.y;
+        x = tempX;
+    }
+
     ctx.save();
     ctx.translate(x, y);
 
