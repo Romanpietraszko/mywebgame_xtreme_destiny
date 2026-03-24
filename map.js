@@ -1,34 +1,65 @@
 // --- KONFIGURACJA ŚRODOWISKA ---
-const safeZones = [
-    { x: 1000, y: 1000, radius: 250 },
-    { x: 3000, y: 3000, radius: 250 }
-];
-
+const safeZones = []; // Usunięto sztywne pozycje, tablica jest wypełniana dynamicznie przez initMap!
 const mapData = { trees: [], roads: [] };
 
-function initMap(worldSize) {
-    // Generujemy przecinające się drogi
-    mapData.roads.push({ x: worldSize / 2 - 120, y: 0, width: 240, height: worldSize });
-    mapData.roads.push({ x: 0, y: worldSize / 2 - 120, width: worldSize, height: 240 });
+function initMap(worldSize, mapType = 'default') {
+    // Czyścimy mapę przed startem (ważne przy zmianie trybów gry z Menu)
+    mapData.roads.length = 0;
+    mapData.trees.length = 0;
+    safeZones.length = 0;
+
+    if (mapType === 'campaign_1') {
+        // ==========================================
+        // MAPA FABULARNA: "Szepczący Las" (Akt 1)
+        // ==========================================
+        safeZones.push({ x: 2000, y: 3800, radius: 250 }); // Baza Midasa (Respawn) na południu
+
+        // Jedna główna droga przecinająca mapę z dołu na północ (Trakt Fabularny)
+        mapData.roads.push({ x: worldSize / 2 - 120, y: 200, width: 240, height: worldSize - 200 });
+    } else {
+        // ==========================================
+        // MAPA MULTIPLAYER (Free / PvP)
+        // ==========================================
+        safeZones.push({ x: 1000, y: 1000, radius: 250 });
+        safeZones.push({ x: 3000, y: 3000, radius: 250 });
+
+        // Generujemy przecinające się drogi
+        mapData.roads.push({ x: worldSize / 2 - 120, y: 0, width: 240, height: worldSize });
+        mapData.roads.push({ x: 0, y: worldSize / 2 - 120, width: worldSize, height: 240 });
+    }
 
     // Proceduralne generowanie drzew
-    const NUM_TREES = 350; 
+    // W kampanii sadzimy więcej drzew (450), bo chcemy zrobić ciasny las
+    const NUM_TREES = mapType === 'campaign_1' ? 450 : 350; 
+    
     for (let i = 0; i < NUM_TREES; i++) {
         const r = 35 + Math.random() * 40; 
-        let tx, ty, onRoad;
+        let tx, ty, invalidPos;
         do {
-            onRoad = false;
+            invalidPos = false;
             tx = Math.random() * worldSize;
             ty = Math.random() * worldSize;
-            for(let road of mapData.roads) {
-                if (tx > road.x - r && tx < road.x + road.width + r &&
-                    ty > road.y - r && ty < road.y + road.height + r) {
-                    onRoad = true; break;
+
+            // --- REŻYSERIA MAPY KAMPANII ---
+            if (mapType === 'campaign_1') {
+                // 1. Robimy wielką "Polanę Bossa" w centrum (brak drzew)
+                if (tx > 1300 && tx < 2700 && ty > 1300 && ty < 2700) invalidPos = true;
+                // 2. Czysty teren wokół bazy startowej (żeby gracz nie zaciął się w drzewach)
+                if (Math.hypot(tx - 2000, ty - 3800) < 500) invalidPos = true; 
+            }
+
+            // Drzewa nie mogą rosnąć na drogach
+            if (!invalidPos) {
+                for(let road of mapData.roads) {
+                    if (tx > road.x - r && tx < road.x + road.width + r &&
+                        ty > road.y - r && ty < road.y + road.height + r) {
+                        invalidPos = true; break;
+                    }
                 }
             }
-        } while(onRoad);
+        } while(invalidPos);
         
-        // --- NOWOŚĆ: Generowanie "puszystej" korony (clusters) ---
+        // --- Generowanie "puszystej" korony (clusters) ---
         let clusters = [];
         let numClusters = 4 + Math.floor(Math.random() * 4); // 4 do 7 dodatkowych "bąbli" liści
         for (let j = 0; j < numClusters; j++) {
