@@ -1,546 +1,546 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
-    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
-    <script>
-    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
-    // Definiujemy zmienną globalnie jako PIERWSZĄ RZECZ w grze, zanim jeszcze załaduje się silnik rysowania.
-    window.weaponPath = 'none';
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <script>
+    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
+    // Definiujemy zmienną globalnie jako PIERWSZĄ RZECZ w grze, zanim jeszcze załaduje się silnik rysowania.
+    window.weaponPath = 'none';
 
-    // To uruchomi SDK zanim załadują się reszta Twoich plików JS
-    (async function() {
-        try {
-            await window.CrazyGames.SDK.init();
-            console.log("CrazyGames SDK gotowe i czeka!");
-        } catch (e) {
-            console.error("Błąd SDK:", e);
-        }
-    })();
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-    <style>
-        /* Szybkie style pomocnicze (reszta jest w style.css) */
-        #ui-layer {
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle, #1a2a4e 0%, #0a1128 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            z-index: 100;
-            overflow: hidden; 
-        }
+    // To uruchomi SDK zanim załadują się reszta Twoich plików JS
+    (async function() {
+        try {
+            await window.CrazyGames.SDK.init();
+            console.log("CrazyGames SDK gotowe i czeka!");
+        } catch (e) {
+            console.error("Błąd SDK:", e);
+        }
+    })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
+    <style>
+        /* Szybkie style pomocnicze (reszta jest w style.css) */
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle, #1a2a4e 0%, #0a1128 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            overflow: hidden; 
+        }
 
-        /* --- Tło z dynamicznymi obiektami --- */
-        #stars-container, #planets-container, #comets-container {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; 
-            z-index: 1; 
-        }
+        /* --- Tło z dynamicznymi obiektami --- */
+        #stars-container, #planets-container, #comets-container {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            pointer-events: none; 
+            z-index: 1; 
+        }
 
-        /* GWIAZDY (Migoczące) */
-        .star {
-            position: absolute;
-            background-color: white;
-            border-radius: 50%;
-            animation: twinkle linear infinite;
-            box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
-        }
+        /* GWIAZDY (Migoczące) */
+        .star {
+            position: absolute;
+            background-color: white;
+            border-radius: 50%;
+            animation: twinkle linear infinite;
+            box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
+        }
 
-        @keyframes twinkle {
-            0% { opacity: 0; transform: scale(0.5); }
-            50% { opacity: 1; transform: scale(1.5); box-shadow: 0 0 12px rgba(255, 255, 255, 1); }
-            100% { opacity: 0; transform: scale(0.5); }
-        }
+        @keyframes twinkle {
+            0% { opacity: 0; transform: scale(0.5); }
+            50% { opacity: 1; transform: scale(1.5); box-shadow: 0 0 12px rgba(255, 255, 255, 1); }
+            100% { opacity: 0; transform: scale(0.5); }
+        }
 
-        /* PLANETY (Powolne) */
-        .planet {
-            position: absolute;
-            border-radius: 50%;
-            animation: planetAppear ease-in-out;
-            opacity: 0;
-        }
+        /* PLANETY (Powolne) */
+        .planet {
+            position: absolute;
+            border-radius: 50%;
+            animation: planetAppear ease-in-out;
+            opacity: 0;
+        }
 
-        @keyframes planetAppear {
-            0% { opacity: 0; transform: scale(0); }
-            10% { opacity: 0.7; transform: scale(1); }
-            90% { opacity: 0.7; transform: scale(1); }
-            100% { opacity: 0; transform: scale(0); }
-        }
+        @keyframes planetAppear {
+            0% { opacity: 0; transform: scale(0); }
+            10% { opacity: 0.7; transform: scale(1); }
+            90% { opacity: 0.7; transform: scale(1); }
+            100% { opacity: 0; transform: scale(0); }
+        }
 
-        /* KOMETY (Szybkie) */
-        .comet {
-            position: absolute;
-            pointer-events: none;
-            animation: cometFly linear;
-            opacity: 0;
-        }
+        /* KOMETY (Szybkie) */
+        .comet {
+            position: absolute;
+            pointer-events: none;
+            animation: cometFly linear;
+            opacity: 0;
+        }
 
-        .comet-head {
-            width: 5px; height: 5px;
-            background: white; border-radius: 50%;
-            box-shadow: 0 0 8px white;
-        }
+        .comet-head {
+            width: 5px; height: 5px;
+            background: white; border-radius: 50%;
+            box-shadow: 0 0 8px white;
+        }
 
-        .comet-tail {
-            width: 50px; height: 2px;
-            background: linear-gradient(to right, white, transparent);
-            margin-top: -3px; margin-left: -52px;
-            transform: rotate(-10deg);
-        }
+        .comet-tail {
+            width: 50px; height: 2px;
+            background: linear-gradient(to right, white, transparent);
+            margin-top: -3px; margin-left: -52px;
+            transform: rotate(-10deg);
+        }
 
-        @keyframes cometFly {
-            0% { opacity: 0; transform: translate(100vw, -100vh) rotate(45deg); }
-            5% { opacity: 1; }
-            95% { opacity: 1; }
-            100% { opacity: 0; transform: translate(-100vw, 100vh) rotate(45deg); }
-        }
+        @keyframes cometFly {
+            0% { opacity: 0; transform: translate(100vw, -100vh) rotate(45deg); }
+            5% { opacity: 1; }
+            95% { opacity: 1; }
+            100% { opacity: 0; transform: translate(-100vw, 100vh) rotate(45deg); }
+        }
 
-        /* --- MENU --- */
-        #menu {
-            position: relative;
-            z-index: 10; 
-            background: rgba(255, 255, 255, 0.98); 
-            padding: 40px;
-            border-radius: 15px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-            text-align: center;
-            max-width: 500px;
-        }
+        /* --- MENU --- */
+        #menu {
+            position: relative;
+            z-index: 10; 
+            background: rgba(255, 255, 255, 0.98); 
+            padding: 40px;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+            text-align: center;
+            max-width: 500px;
+        }
 
-        #menu h1 {
-            font-family: 'Permanent Marker', cursive;
-            font-size: 55px;
-            margin-top: 0;
-            margin-bottom: 10px;
-            letter-spacing: 2px;
-            color: #2c3e50;
-            text-shadow: 3px 3px 0px rgba(0,0,0,0.2);
-            transform: rotate(-2deg); 
-        }
-        
-        .paint-x { color: #e74c3c; } 
-        .paint-d { color: #3498db; } 
+        #menu h1 {
+            font-family: 'Permanent Marker', cursive;
+            font-size: 55px;
+            margin-top: 0;
+            margin-bottom: 10px;
+            letter-spacing: 2px;
+            color: #2c3e50;
+            text-shadow: 3px 3px 0px rgba(0,0,0,0.2);
+            transform: rotate(-2deg); 
+        }
+        
+        .paint-x { color: #e74c3c; } 
+        .paint-d { color: #3498db; } 
 
-        #menu p.subtitle {
-            font-size: 16px;
-            color: #555;
-            margin-bottom: 15px;
-            font-weight: bold;
-        }
+        #menu p.subtitle {
+            font-size: 16px;
+            color: #555;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
 
-        /* --- PORADNIK DLA GRACZA --- */
-        .tutorial-box {
-            background: rgba(0, 0, 0, 0.05); padding: 15px; border-radius: 10px;
-            margin-bottom: 20px; font-size: 13px; text-align: left; line-height: 1.5;
-            border-left: 4px solid #f1c40f; color: #333;
-        }
+        /* --- PORADNIK DLA GRACZA --- */
+        .tutorial-box {
+            background: rgba(0, 0, 0, 0.05); padding: 15px; border-radius: 10px;
+            margin-bottom: 20px; font-size: 13px; text-align: left; line-height: 1.5;
+            border-left: 4px solid #f1c40f; color: #333;
+        }
 
-        /* --- KARTY POSTACI --- */
-        .char-grid { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
-        .char-card {
-            background: #fff; border: 3px solid #bdc3c7; border-radius: 10px; padding: 15px;
-            cursor: pointer; transition: 0.3s; width: 120px; text-align: center; position: relative;
-        }
-        .char-card:hover { border-color: #f1c40f; transform: translateY(-5px); }
-        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 15px rgba(46, 204, 113, 0.5); }
-        .char-card h4 { margin: 0 0 5px 0; font-size: 15px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
-        .char-card p { margin: 0; font-size: 11px; color: #7f8c8d; font-weight: bold; }
-        .char-card img { width: 60px; height: 60px; margin-bottom: 10px; object-fit: contain; }
+        /* --- KARTY POSTACI --- */
+        .char-grid { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
+        .char-card {
+            background: #fff; border: 3px solid #bdc3c7; border-radius: 10px; padding: 15px;
+            cursor: pointer; transition: 0.3s; width: 120px; text-align: center; position: relative;
+        }
+        .char-card:hover { border-color: #f1c40f; transform: translateY(-5px); }
+        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 15px rgba(46, 204, 113, 0.5); }
+        .char-card h4 { margin: 0 0 5px 0; font-size: 15px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
+        .char-card p { margin: 0; font-size: 11px; color: #7f8c8d; font-weight: bold; }
+        .char-card img { width: 60px; height: 60px; margin-bottom: 10px; object-fit: contain; }
 
-        /* --- MENU UMIEJĘTNOŚCI --- */
-        #skill-menu {
-            position: fixed;
-            left: 20px;
-            bottom: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border: 2px solid #333;
-            border-radius: 12px;
-            display: none; 
-            flex-direction: column;
-            gap: 8px;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            min-width: 300px; 
-            z-index: 90;
-        }
+        /* --- MENU UMIEJĘTNOŚCI --- */
+        #skill-menu {
+            position: fixed;
+            left: 20px;
+            bottom: 20px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border: 2px solid #333;
+            border-radius: 12px;
+            display: none; 
+            flex-direction: column;
+            gap: 8px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
+            min-width: 300px; 
+            z-index: 90;
+        }
 
-        .skill-btn {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-            text-align: center; 
-            position: relative;
-            width: 100%;
-        }
+        .skill-btn {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            text-align: center; 
+            position: relative;
+            width: 100%;
+        }
 
-        .skill-btn small {
-            display: block;
-            font-size: 10px;
-            font-weight: normal;
-            opacity: 0.9;
-            margin-top: 4px;
-        }
+        .skill-btn small {
+            display: block;
+            font-size: 10px;
+            font-weight: normal;
+            opacity: 0.9;
+            margin-top: 4px;
+        }
 
-        .skill-btn:hover:not(:disabled) {
-            background: #45a049;
-            transform: scale(1.05);
-        }
+        .skill-btn:hover:not(:disabled) {
+            background: #45a049;
+            transform: scale(1.05);
+        }
 
-        .skill-btn:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-            opacity: 0.6;
-            transform: none;
-        }
+        .skill-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            opacity: 0.6;
+            transform: none;
+        }
 
-        .lvl-badge {
-            float: right;
-            background: rgba(0,0,0,0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 11px;
-        }
+        .lvl-badge {
+            float: right;
+            background: rgba(0,0,0,0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-size: 11px;
+        }
 
-        .sp-label {
-            font-weight: bold;
-            color: #d35400;
-            text-align: center;
-            margin-bottom: 5px;
-            font-size: 1.1em;
-            text-shadow: 1px 1px 0px #fff;
-        }
+        .sp-label {
+            font-weight: bold;
+            color: #d35400;
+            text-align: center;
+            margin-bottom: 5px;
+            font-size: 1.1em;
+            text-shadow: 1px 1px 0px #fff;
+        }
 
-        /* --- TAJNY SKLEP ZAMKOWY --- */
-        #castle-shop {
-            position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(44, 62, 80, 0.95);
-            border: 3px solid #f1c40f;
-            border-radius: 12px;
-            padding: 20px;
-            display: none; 
-            flex-direction: column;
-            gap: 10px;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
-            z-index: 90;
-            color: white;
-            text-align: center;
-        }
+        /* --- TAJNY SKLEP ZAMKOWY --- */
+        #castle-shop {
+            position: fixed;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: rgba(44, 62, 80, 0.95);
+            border: 3px solid #f1c40f;
+            border-radius: 12px;
+            padding: 20px;
+            display: none; 
+            flex-direction: column;
+            gap: 10px;
+            font-family: Arial, sans-serif;
+            box-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
+            z-index: 90;
+            color: white;
+            text-align: center;
+        }
 
-        #castle-shop h2 {
-            margin: 0;
-            color: #f1c40f;
-            font-size: 20px;
-            text-transform: uppercase;
-        }
+        #castle-shop h2 {
+            margin: 0;
+            color: #f1c40f;
+            font-size: 20px;
+            text-transform: uppercase;
+        }
 
-        #castle-shop p {
-            margin: 0 0 10px 0;
-            font-size: 12px;
-            color: #bdc3c7;
-        }
+        #castle-shop p {
+            margin: 0 0 10px 0;
+            font-size: 12px;
+            color: #bdc3c7;
+        }
 
-        .shop-btn {
-            background: #34495e;
-            color: #fff;
-            border: 1px solid #7f8c8d;
-            padding: 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+        .shop-btn {
+            background: #34495e;
+            color: #fff;
+            border: 1px solid #7f8c8d;
+            padding: 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: 0.2s;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-        .shop-btn:hover {
-            background: #f39c12;
-            border-color: #f1c40f;
-            transform: scale(1.05);
-        }
+        .shop-btn:hover {
+            background: #f39c12;
+            border-color: #f1c40f;
+            transform: scale(1.05);
+        }
 
-        #university-logo {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            z-index: 10;
-        }
-    </style>
-    <link rel="stylesheet" href="style.css">
+        #university-logo {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 10;
+        }
+    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <div id="ui-layer">
-        <div id="stars-container"></div>
-        <div id="planets-container"></div>
-        <div id="comets-container"></div>
+    <div id="ui-layer">
+        <div id="stars-container"></div>
+        <div id="planets-container"></div>
+        <div id="comets-container"></div>
 
-        <div id="menu">
-            <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
-            <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
+        <div id="menu">
+            <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
+            <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
 
-            <div class="tutorial-box">
-                <b>📜 Szybki poradnik:</b><br>
-                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
-                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
-                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
-                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!<br>
-                💀 Uwaga: Zderzenie z czerwoną granicą mapy to pewna śmierć!
-            </div>
+            <div class="tutorial-box">
+                <b>📜 Szybki poradnik:</b><br>
+                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
+                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
+                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
+                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!<br>
+                💀 Uwaga: Zderzenie z czerwoną granicą mapy to pewna śmierć!
+            </div>
 
-            <div id="step-1">
-                <div class="input-group">
-                    <label for="playerName">Twój Nick:</label>
-                    <input type="text" id="playerName" placeholder="Wpisz nick..." maxlength="12" autofocus>
-                </div>
-                
-                <input type="color" id="playerColor" value="#ff4444" style="display: none;">
-                
-                <button id="nextBtn" class="main-btn" style="margin-top: 15px;">DALEJ</button>
-            </div>
+            <div id="step-1">
+                <div class="input-group">
+                    <label for="playerName">Twój Nick:</label>
+                    <input type="text" id="playerName" placeholder="Wpisz nick..." maxlength="12" autofocus>
+                </div>
+                
+                <input type="color" id="playerColor" value="#ff4444" style="display: none;">
+                
+                <button id="nextBtn" class="main-btn" style="margin-top: 15px;">DALEJ</button>
+            </div>
 
-            <div id="step-2" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px;">Wybierz Tryb Gry:</h3>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #f1c40f; color: #2c3e50; border: 2px solid #e67e22; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);">👑 KAMPANIA: Od zera do Króla (RPG)</button>
-                    
-                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Multiplayer)</button>
-                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #8e44ad;">⚔️ Wojna Drużyn (PvP)</button>
-                </div>
-                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
-            </div>
+            <div id="step-2" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px;">Wybierz Tryb Gry:</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #f1c40f; color: #2c3e50; border: 2px solid #e67e22; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);">👑 KAMPANIA: Od zera do Króla (RPG)</button>
+                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Multiplayer)</button>
+                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #8e44ad;">⚔️ Wojna Drużyn (PvP)</button>
+                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #27ae60;">🤖 Trening Drużynowy (PvE)</button>
+                </div>
+                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+            </div>
 
-            <div id="step-3" style="display: none;">
-                <h3>Wybierz sterowanie:</h3>
-                <div class="control-grid">
-                    <div class="control-card" onclick="launchGame('WASD')">
-                        <div class="keys-preview">W A S D</div>
-                        <span>Klasyczne</span>
-                    </div>
-                    
-                    <div class="control-card" onclick="launchGame('ARROWS')">
-                        <div class="keys-preview">↑ ↓ ← →</div>
-                        <span>Strzałki</span>
-                    </div>
-                </div>
-                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
-            </div>
+            <div id="step-3" style="display: none;">
+                <h3>Wybierz sterowanie:</h3>
+                <div class="control-grid">
+                    <div class="control-card" onclick="launchGame('WASD')">
+                        <div class="keys-preview">W A S D</div>
+                        <span>Klasyczne</span>
+                    </div>
+                    
+                    <div class="control-card" onclick="launchGame('ARROWS')">
+                        <div class="keys-preview">↑ ↓ ← →</div>
+                        <span>Strzałki</span>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+            </div>
 
-            <div id="step-4" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px;">Wybierz swoją Klasę:</h3>
-                <div class="char-grid">
-                    <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
-                        <img src="xtreme-destiny-postac.png" alt="Standard">
-                        <h4>Standard</h4>
-                        <p>+2% zysku Masy</p>
-                    </div>
-                    <div class="char-card" id="char-ninja" onclick="selectSkin('ninja')">
-                        <img src="ninja-transparent.png" alt="Ninja">
-                        <h4>Ninja</h4>
-                        <p>+5% Szybkości</p>
-                    </div>
-                    <div class="char-card" id="char-arystokrata" onclick="selectSkin('arystokrata')">
-                        <img src="postac-bez-tla.png" alt="Arystokrata">
-                        <h4>Arystokrata</h4>
-                        <p>-5% Cen w Sklepie</p>
-                    </div>
-                </div>
-                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71; width: 100%;">WEJDŹ NA ARENĘ</button>
-                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
-            </div>
+            <div id="step-4" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px;">Wybierz swoją Klasę:</h3>
+                <div class="char-grid">
+                    <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
+                        <img src="xtreme-destiny-postac.png" alt="Standard">
+                        <h4>Standard</h4>
+                        <p>+2% zysku Masy</p>
+                    </div>
+                    <div class="char-card" id="char-ninja" onclick="selectSkin('ninja')">
+                        <img src="ninja-transparent.png" alt="Ninja">
+                        <h4>Ninja</h4>
+                        <p>+5% Szybkości</p>
+                    </div>
+                    <div class="char-card" id="char-arystokrata" onclick="selectSkin('arystokrata')">
+                        <img src="postac-bez-tla.png" alt="Arystokrata">
+                        <h4>Arystokrata</h4>
+                        <p>-5% Cen w Sklepie</p>
+                    </div>
+                </div>
+                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71; width: 100%;">WEJDŹ NA ARENĘ</button>
+                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
+            </div>
 
-            <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
-            </div>
-        </div>
-    </div>
+            <div id="game-info" style="margin-top: 20px;">
+                <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
+            </div>
+        </div>
+    </div>
 
-    <div id="skill-menu">
-        <div class="sp-label">Punkty Umiejętności: <span id="sp-count" style="color:#000; background:#f1c40f; padding: 2px 8px; border-radius: 10px;">0</span></div>
-        <div id="skills-container">
-            </div>
-    </div>
+    <div id="skill-menu">
+        <div class="sp-label">Punkty Umiejętności: <span id="sp-count" style="color:#000; background:#f1c40f; padding: 2px 8px; border-radius: 10px;">0</span></div>
+        <div id="skills-container">
+            </div>
+    </div>
 
-    <div id="castle-shop">
-        <h2>🏰 Tajny Sklep</h2>
-        <p>Kupuj i ulepszaj bronie za masę!</p>
-        <button id="btn-bow" class="shop-btn" onclick="buyItem('bow')"><span>🏹 Łuk</span> <span>$100</span></button>
-        <button id="btn-knife" class="shop-btn" onclick="buyItem('knife')"><span>🗡️ Nóż</span> <span>$50</span></button>
-        <button id="btn-shuriken" class="shop-btn" onclick="buyItem('shuriken')"><span>🥷 Shuriken</span> <span>$20</span></button>
-        <button onclick="document.getElementById('castle-shop').style.display='none'" style="margin-top: 10px; background: #c0392b; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Ukryj Sklep</button>
-    </div>
+    <div id="castle-shop">
+        <h2>🏰 Tajny Sklep</h2>
+        <p>Kupuj i ulepszaj bronie za masę!</p>
+        <button id="btn-bow" class="shop-btn" onclick="buyItem('bow')"><span>🏹 Łuk</span> <span>$100</span></button>
+        <button id="btn-knife" class="shop-btn" onclick="buyItem('knife')"><span>🗡️ Nóż</span> <span>$50</span></button>
+        <button id="btn-shuriken" class="shop-btn" onclick="buyItem('shuriken')"><span>🥷 Shuriken</span> <span>$20</span></button>
+        <button onclick="document.getElementById('castle-shop').style.display='none'" style="margin-top: 10px; background: #c0392b; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Ukryj Sklep</button>
+    </div>
 
-    <canvas id="gameCanvas"></canvas>
+    <canvas id="gameCanvas"></canvas>
 
-    <a href="https://wsiz.pl/" target="_blank" id="university-logo">
-        <img src="https://wsiz.pl/wp-content/uploads/2023/04/logo-wsiz.png" alt="WSIZ Logo" style="height: 60px;">
-    </a>
+    <a href="https://wsiz.pl/" target="_blank" id="university-logo">
+        <img src="https://wsiz.pl/wp-content/uploads/2023/04/logo-wsiz.png" alt="WSIZ Logo" style="height: 60px;">
+    </a>
 
-    <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
-    <script src="map.js"></script>
-    <script src="engine.js"></script>
-    
-    <script>
-        function createStars() {
-            const container = document.getElementById('stars-container');
-            if(!container) return;
-            const numStars = 100;
-            for (let i = 0; i < numStars; i++) {
-                let star = document.createElement('div');
-                star.classList.add('star');
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                let size = Math.random() * 3 + 2;
-                star.style.width = size + 'px';
-                star.style.height = size + 'px';
-                star.style.animationDuration = (Math.random() * 3 + 2) + 's';
-                star.style.animationDelay = (Math.random() * 5) + 's';
-                container.appendChild(star);
-            }
-        }
-        createStars();
+    <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
+    <script src="map.js"></script>
+    <script src="engine.js"></script>
+    
+    <script>
+        function createStars() {
+            const container = document.getElementById('stars-container');
+            if(!container) return;
+            const numStars = 100;
+            for (let i = 0; i < numStars; i++) {
+                let star = document.createElement('div');
+                star.classList.add('star');
+                star.style.left = Math.random() * 100 + '%';
+                star.style.top = Math.random() * 100 + '%';
+                let size = Math.random() * 3 + 2;
+                star.style.width = size + 'px';
+                star.style.height = size + 'px';
+                star.style.animationDuration = (Math.random() * 3 + 2) + 's';
+                star.style.animationDelay = (Math.random() * 5) + 's';
+                container.appendChild(star);
+            }
+        }
+        createStars();
 
-        function createPlanets() {
-            const container = document.getElementById('planets-container');
-            if(!container) return;
-            const numPlanets = 12;
-            const planetColors = ['#e67e22', '#3498db', '#bdc3c7', '#c0392b', '#f1c40f'];
-            for (let i = 0; i < numPlanets; i++) {
-                let planet = document.createElement('div');
-                planet.classList.add('planet');
-                let size = Math.random() * 30 + 15;
-                planet.style.width = size + 'px';
-                planet.style.height = size + 'px';
-                planet.style.left = Math.random() * 100 + '%';
-                planet.style.top = Math.random() * 100 + '%';
-                planet.style.backgroundColor = planetColors[Math.floor(Math.random() * planetColors.length)];
-                planet.style.animationDuration = (Math.random() * 60 + 30) + 's'; 
-                planet.style.animationDelay = (Math.random() * 30) + 's';
-                container.appendChild(planet);
-            }
-        }
-        createPlanets();
+        function createPlanets() {
+            const container = document.getElementById('planets-container');
+            if(!container) return;
+            const numPlanets = 12;
+            const planetColors = ['#e67e22', '#3498db', '#bdc3c7', '#c0392b', '#f1c40f'];
+            for (let i = 0; i < numPlanets; i++) {
+                let planet = document.createElement('div');
+                planet.classList.add('planet');
+                let size = Math.random() * 30 + 15;
+                planet.style.width = size + 'px';
+                planet.style.height = size + 'px';
+                planet.style.left = Math.random() * 100 + '%';
+                planet.style.top = Math.random() * 100 + '%';
+                planet.style.backgroundColor = planetColors[Math.floor(Math.random() * planetColors.length)];
+                planet.style.animationDuration = (Math.random() * 60 + 30) + 's'; 
+                planet.style.animationDelay = (Math.random() * 30) + 's';
+                container.appendChild(planet);
+            }
+        }
+        createPlanets();
 
-        function createComets() {
-            const container = document.getElementById('comets-container');
-            if(!container) return;
-            function addComet() {
-                const comet = document.createElement('div');
-                comet.classList.add('comet');
-                const head = document.createElement('div'); head.classList.add('comet-head'); comet.appendChild(head);
-                const tail = document.createElement('div'); tail.classList.add('comet-tail'); comet.appendChild(tail);
-                comet.style.animationDuration = (Math.random() * 5 + 3) + 's'; 
-                container.appendChild(comet);
-                setTimeout(() => comet.remove(), (parseFloat(comet.style.animationDuration) * 1000));
-            }
-            setInterval(addComet, 8000);
-        }
-        createComets();
+        function createComets() {
+            const container = document.getElementById('comets-container');
+            if(!container) return;
+            function addComet() {
+                const comet = document.createElement('div');
+                comet.classList.add('comet');
+                const head = document.createElement('div'); head.classList.add('comet-head'); comet.appendChild(head);
+                const tail = document.createElement('div'); tail.classList.add('comet-tail'); comet.appendChild(tail);
+                comet.style.animationDuration = (Math.random() * 5 + 3) + 's'; 
+                container.appendChild(comet);
+                setTimeout(() => comet.remove(), (parseFloat(comet.style.animationDuration) * 1000));
+            }
+            setInterval(addComet, 8000);
+        }
+        createComets();
 
-        const s1 = document.getElementById('step-1');
-        const s2 = document.getElementById('step-2');
-        const s3 = document.getElementById('step-3');
-        const next = document.getElementById('nextBtn');
-        const nameInput = document.getElementById('playerName');
-        
-        let chosenMode = 'FREE'; 
-        let chosenSkin = 'standard';
-        let chosenControlType = 'WASD';
+        const s1 = document.getElementById('step-1');
+        const s2 = document.getElementById('step-2');
+        const s3 = document.getElementById('step-3');
+        const next = document.getElementById('nextBtn');
+        const nameInput = document.getElementById('playerName');
+        
+        let chosenMode = 'FREE'; 
+        let chosenSkin = 'standard';
+        let chosenControlType = 'WASD';
 
-        next.onclick = () => {
-            if (nameInput.value.trim().length > 0) {
-                s1.style.display = 'none';
-                s2.style.display = 'block'; 
-            } else {
-                nameInput.style.borderColor = 'red';
-                alert("Wpisz swój nick, aby kontynuować!");
-            }
-        };
+        next.onclick = () => {
+            if (nameInput.value.trim().length > 0) {
+                s1.style.display = 'none';
+                s2.style.display = 'block'; 
+            } else {
+                nameInput.style.borderColor = 'red';
+                alert("Wpisz swój nick, aby kontynuować!");
+            }
+        };
 
-        nameInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") next.click();
-        });
+        nameInput.addEventListener("keypress", (e) => {
+            if (e.key === "Enter") next.click();
+        });
 
-        window.selectMode = (mode) => {
-            chosenMode = mode;
-            s2.style.display = 'none';
-            s3.style.display = 'block'; 
-        };
+        window.selectMode = (mode) => {
+            chosenMode = mode;
+            s2.style.display = 'none';
+            s3.style.display = 'block'; 
+        };
 
-        window.selectSkin = (skin) => {
-            chosenSkin = skin;
-            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
-            document.getElementById('char-' + skin).classList.add('selected');
-        };
+        window.selectSkin = (skin) => {
+            chosenSkin = skin;
+            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
+            document.getElementById('char-' + skin).classList.add('selected');
+        };
 
-        window.launchGame = (controlType) => {
-            chosenControlType = controlType;
-            document.getElementById('step-3').style.display = 'none';
-            document.getElementById('step-4').style.display = 'block'; 
-        };
+        window.launchGame = (controlType) => {
+            chosenControlType = controlType;
+            document.getElementById('step-3').style.display = 'none';
+            document.getElementById('step-4').style.display = 'block'; 
+        };
 
-        window.launchGameFinal = () => {
-            document.getElementById('step-4').style.display = 'none';
-            document.getElementById('game-info').style.display = 'none'; 
-            
-            // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
-            window.playerSkin = chosenSkin; 
+        window.launchGameFinal = () => {
+            document.getElementById('step-4').style.display = 'none';
+            document.getElementById('game-info').style.display = 'none'; 
+            
+            // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
+            window.playerSkin = chosenSkin; 
 
-            // --- AKTUALIZACJA WIZUALNA CEN W SKLEPIE DLA ARYSTOKRATY ---
-            if (chosenSkin === 'arystokrata') {
-                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95';
-                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47';
-                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19';
-            } else {
-                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100';
-                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50';
-                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20';
-            }
-            
-            let loadingDiv = document.getElementById('loading-step');
-            if (!loadingDiv) {
-                loadingDiv = document.createElement('div');
-                loadingDiv.id = 'loading-step';
-                loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
-                document.getElementById('menu').appendChild(loadingDiv);
-            }
-            loadingDiv.style.display = 'block';
+            // --- AKTUALIZACJA WIZUALNA CEN W SKLEPIE DLA ARYSTOKRATY ---
+            if (chosenSkin === 'arystokrata') {
+                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95';
+                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47';
+                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19';
+            } else {
+                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100';
+                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50';
+                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20';
+            }
+            
+            let loadingDiv = document.getElementById('loading-step');
+            if (!loadingDiv) {
+                loadingDiv = document.createElement('div');
+                loadingDiv.id = 'loading-step';
+                loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
+                document.getElementById('menu').appendChild(loadingDiv);
+            }
+            loadingDiv.style.display = 'block';
 
-            // --- NOWOŚĆ: WYBÓR SKRYPTU ---
-            let scriptSrc = 'free.js';
-            if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
-            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; // <- Ładujemy nasz nowy skrypt RPG!
+            // --- NOWOŚĆ: WYBÓR SKRYPTU ---
+            let scriptSrc = 'free.js';
+            if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
+            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; // <- Ładujemy nasz nowy skrypt RPG!
 
-            const script = document.createElement('script');
-            script.src = scriptSrc;
-            
-            script.onload = () => {
-                const shopScript = document.createElement('script');
-                shopScript.src = 'shop.js';
-                shopScript.onload = () => {
-                    const safeColor = document.getElementById('playerColor').value || '#ffffff';
-                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
-                };
-                document.body.appendChild(shopScript);
-            };
-            document.body.appendChild(script);
-        };
-    </script>
+            const script = document.createElement('script');
+            script.src = scriptSrc;
+            
+            script.onload = () => {
+                const shopScript = document.createElement('script');
+                shopScript.src = 'shop.js';
+                shopScript.onload = () => {
+                    const safeColor = document.getElementById('playerColor').value || '#ffffff';
+                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
+                };
+                document.body.appendChild(shopScript);
+            };
+            document.body.appendChild(script);
+        };
+    </script>
 </body>
-</html> 
+</html>
