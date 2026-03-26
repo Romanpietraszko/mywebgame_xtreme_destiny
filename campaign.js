@@ -37,8 +37,8 @@ const campaignDialogues = {
     3: "Dobrze sobie radzisz. Słuchaj, zaraz rozpęta się tu prawdziwe piekło. Zapiszemy ten stan, na dzisiaj wystarczy. (Kolejne questy w produkcji!)"
 };
 
-// Inicjalizacja lokalnej mapy
-initMap(WORLD_SIZE);
+// Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
+initMap(WORLD_SIZE, 'campaign_1');
 
 // Lokalny symulator serwera (Tworzy kropki i wrogów na komputerze gracza)
 function spawnLocalFood() {
@@ -75,11 +75,11 @@ function spawnLocalBot(type) {
 for (let i = 0; i < 150; i++) foods.push(spawnLocalFood());
 for (let i = 0; i < 15; i++) bots.push(spawnLocalBot('slime'));
 
-// --- OBSŁUGA KLAWIATURY I MYSZKI ---
+// --- OBSŁUGA KLAWIATURY, MYSZKI I EKRANU DOTYKOWEGO ---
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 window.addEventListener('mousemove', (e) => {
-    if (gameState === 'PLAYING' && player) {
+    if (gameState === 'PLAYING' && player && controlType !== 'TOUCH') {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -104,6 +104,18 @@ window.addEventListener('mousedown', (e) => {
                 life: 60, speed: 18, damage: 5, isPiercing: false, projType: 'sword'
             });
         }
+    }
+});
+
+// --- NOWOŚĆ: ODBIÓR STRZAŁU Z PRZYCISKU MOBILNEGO ---
+window.addEventListener('mobile-attack', () => {
+    if (gameState === 'PLAYING' && player && !player.isSafe && player.score >= 2) {
+        player.score -= 2;
+        projectiles.push({
+            id: Math.random(), ownerId: player.id,
+            x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y,
+            life: 60, speed: 18, damage: 5, isPiercing: false, projType: 'sword'
+        });
     }
 });
 
@@ -134,7 +146,9 @@ window.startGame = (type) => {
         tutorialText: campaignDialogues[currentQuest],
         skin: window.playerSkin || 'standard',
         baseSpeed: window.playerSkin === 'ninja' ? 5.5 : 5.0,
-        massMultiplier: window.playerSkin === 'arystokrata' ? 1.15 : (window.playerSkin === 'standard' ? 1.02 : 1.0)
+        massMultiplier: window.playerSkin === 'arystokrata' ? 1.15 : (window.playerSkin === 'standard' ? 1.02 : 1.0),
+        paths: { speed: 'none', strength: 'none', weapon: 'none' }, // Zabezpieczenie ciała!
+        skills: { speed: 0, strength: 0, weapon: 0 } // Zabezpieczenie silnika!
     };
     
     gameState = 'PLAYING';
@@ -148,7 +162,21 @@ function updateLocalPhysics() {
 
     // Ruch Gracza
     let dx = 0, dy = 0;
-    if (controlType === 'WASD') {
+    
+    // --- NOWOŚĆ: OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
+    if (controlType === 'TOUCH') {
+        if (window.mobileJoy && window.mobileJoy.active) {
+            dx = window.mobileJoy.dx;
+            dy = window.mobileJoy.dy;
+            
+            // Na telefonie postać celuje dokładnie tam, gdzie aktualnie idzie
+            lastMoveDir = { x: dx, y: dy }; 
+            
+            // Wyrównanie prędkości
+            let len = Math.hypot(dx, dy);
+            if (len > 0) { dx /= len; dy /= len; }
+        }
+    } else if (controlType === 'WASD') {
         if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
     } else {
         if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
@@ -199,7 +227,7 @@ function updateLocalPhysics() {
                 bots[bi] = spawnLocalBot('slime');
                 checkQuestProgress();
             } else if (dist < bRadius && b.score > player.score * 1.15) {
-                // KARA ZA ŚMIERĆ W KAMPANII (Nie kończymy gry, odbieramy masę i odradzamy w bazie)
+                // KARA ZA ŚMIERĆ W KAMPANII
                 player.score = Math.floor(player.score * 0.8); // Traci 20%
                 player.x = 2000; player.y = 3800; // Powrót do bazy
                 killLogs.push({ text: `Zginąłeś! Tracisz masę i wracasz do bazy.`, time: 200 });
