@@ -281,10 +281,30 @@
             right: 20px;
             z-index: 10;
         }
+
+        /* --- NOWOŚĆ: INTERFEJS MOBILNY (UKRYTY DOMYŚLNIE) --- */
+        #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
+        #joystick-zone { position: absolute; left: 0; bottom: 0; width: 50%; height: 60%; pointer-events: auto; }
+        #joystick-base { position: absolute; width: 120px; height: 120px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
+        #joystick-stick { position: absolute; width: 50px; height: 50px; background: rgba(241, 196, 15, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        
+        #action-buttons { position: absolute; right: 30px; bottom: 30px; pointer-events: auto; display: flex; gap: 20px; align-items: flex-end; }
+        .m-btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(44, 62, 80, 0.6); border: 3px solid rgba(255,255,255,0.3); color: white; font-size: 28px; display: flex; justify-content: center; align-items: center; user-select: none; transition: 0.1s; }
+        .m-btn:active { background: rgba(241, 196, 15, 0.6); transform: scale(0.9); }
+        #btn-m-attack { width: 90px; height: 90px; font-size: 36px; background: rgba(231, 76, 60, 0.6); border-color: rgba(241, 196, 15, 0.5); }
     </style>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <div id="mobile-controls">
+        <div id="joystick-zone"></div>
+        <div id="joystick-base"><div id="joystick-stick"></div></div>
+        <div id="action-buttons">
+            <div class="m-btn" id="btn-m-shield">🛡️</div>
+            <div class="m-btn" id="btn-m-attack">⚔️</div>
+        </div>
+    </div>
 
     <div id="ui-layer">
         <div id="stars-container"></div>
@@ -338,6 +358,11 @@
                         <div class="keys-preview">↑ ↓ ← →</div>
                         <span>Strzałki</span>
                     </div>
+
+                    <div class="control-card" onclick="launchGame('TOUCH')" style="border-color: #3498db;">
+                        <div class="keys-preview" style="font-size: 24px;">📱</div>
+                        <span>Dotyk (Mobile)</span>
+                    </div>
                 </div>
                 <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
             </div>
@@ -366,7 +391,7 @@
             </div>
 
             <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
+                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
             </div>
         </div>
     </div>
@@ -495,12 +520,21 @@
             document.getElementById('step-4').style.display = 'block'; 
         };
 
+        // --- NOWOŚĆ: GLOBALNA ZMIENNA DLA JOYSTICKA ---
+        window.mobileJoy = { dx: 0, dy: 0, active: false };
+
         window.launchGameFinal = () => {
             document.getElementById('step-4').style.display = 'none';
             document.getElementById('game-info').style.display = 'none'; 
             
             // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
             window.playerSkin = chosenSkin; 
+
+            // JEŚLI GRACZ WYBRAŁ DOTYK - POKAZUJEMY INTERFEJS MOBILNY
+            if (chosenControlType === 'TOUCH') {
+                document.getElementById('mobile-controls').style.display = 'block';
+                initMobileControls();
+            }
 
             // --- AKTUALIZACJA WIZUALNA CEN W SKLEPIE DLA ARYSTOKRATY ---
             if (chosenSkin === 'arystokrata') {
@@ -541,6 +575,67 @@
             };
             document.body.appendChild(script);
         };
+
+        // --- NOWOŚĆ: LOGIKA WIRTUALNEGO JOYSTICKA ---
+        function initMobileControls() {
+            const joyZone = document.getElementById('joystick-zone');
+            const joyBase = document.getElementById('joystick-base');
+            const joyStick = document.getElementById('joystick-stick');
+            let joyId = null;
+            let startX = 0, startY = 0;
+
+            joyZone.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (joyId !== null) return;
+                const touch = e.changedTouches[0];
+                joyId = touch.identifier;
+                startX = touch.clientX; startY = touch.clientY;
+                joyBase.style.display = 'block';
+                joyBase.style.left = startX + 'px'; joyBase.style.top = startY + 'px';
+                joyStick.style.transform = `translate(-50%, -50%)`;
+                window.mobileJoy.active = true;
+            }, {passive: false});
+
+            joyZone.addEventListener('touchmove', (e) => {
+                e.preventDefault();
+                if (joyId === null) return;
+                for (let i=0; i<e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyId) {
+                        const touch = e.changedTouches[i];
+                        let dx = touch.clientX - startX;
+                        let dy = touch.clientY - startY;
+                        const dist = Math.hypot(dx, dy);
+                        const maxRadius = 50; 
+                        if (dist > maxRadius) {
+                            dx = (dx / dist) * maxRadius; dy = (dy / dist) * maxRadius;
+                        }
+                        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+                        
+                        // Zapisujemy wartości od -1.0 do 1.0 dla silnika fizyki
+                        window.mobileJoy.dx = dx / maxRadius;
+                        window.mobileJoy.dy = dy / maxRadius;
+                    }
+                }
+            }, {passive: false});
+
+            const endJoy = (e) => {
+                e.preventDefault();
+                for (let i=0; i<e.changedTouches.length; i++) {
+                    if (e.changedTouches[i].identifier === joyId) {
+                        joyId = null; joyBase.style.display = 'none';
+                        window.mobileJoy = { dx: 0, dy: 0, active: false };
+                    }
+                }
+            };
+            joyZone.addEventListener('touchend', endJoy, {passive: false});
+            joyZone.addEventListener('touchcancel', endJoy, {passive: false});
+
+            // Akcje przycisków mobilnych (Wysyłają sygnał do gry, taki jak kliknięcie myszką)
+            document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                window.dispatchEvent(new Event('mobile-attack'));
+            }, {passive: false});
+        }
     </script>
 </body>
 </html>
