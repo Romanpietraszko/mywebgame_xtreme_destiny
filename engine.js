@@ -412,13 +412,15 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     
     if (kingId === eId && score >= 1) { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(x - 12 * sc, y - 35 * sc); ctx.lineTo(x - 12 * sc, y - 55 * sc); ctx.lineTo(x - 6 * sc, y - 45 * sc); ctx.lineTo(x, y - 55 * sc); ctx.lineTo(x + 6 * sc, y - 45 * sc); ctx.lineTo(x + 12 * sc, y - 55 * sc); ctx.lineTo(x + 12 * sc, y - 35 * sc); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill(); }
 
+    // --- NOWOŚĆ: UCINANIE BRZYDKICH UŁAMKÓW PO PRZECINKU ---
     ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * sc}px Arial`; ctx.textAlign = 'center';
-    if (e.name !== 'Wojownik') { ctx.fillText(`${e.name || "Bot"} [${score}]`, x, y - 65 * sc); } else { ctx.fillText(`[${score}]`, x, y - 65 * sc); } 
+    let displayScore = Math.floor(score); // Ta jedna linijka załatwia cały problem!
+    if (e.name !== 'Wojownik') { ctx.fillText(`${e.name || "Bot"} [${displayScore}]`, x, y - 65 * sc); } else { ctx.fillText(`[${displayScore}]`, x, y - 65 * sc); } 
     
     ctx.restore();
 }
 
-// --- NOWOŚĆ: RYSOWANIE PRAWDZIWEGO ZAMKU (Zabezpieczone pod Map.js i Engine.js) ---
+// --- RYSOWANIE PRAWDZIWEGO ZAMKU (Zabezpieczone pod Map.js i Engine.js) ---
 function drawCastle(x, y, radius) {
     // Tarcza przed konfliktem z plikiem map.js (który podaje ctx jako x)
     if (typeof x === 'object' && y && y.radius !== undefined) {
