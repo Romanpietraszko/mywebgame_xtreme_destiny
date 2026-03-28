@@ -83,11 +83,34 @@ function initMap(worldSize, mapType = 'default') {
 
 // --- RYSOWANIE GRAFIKI MAPY ---
 function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
-    ctx.fillStyle = '#264a18';
+    // ==========================================
+    // NOWOŚĆ: SYSTEM BIOMÓW I CZASU (DZIEŃ/NOC)
+    // ==========================================
+    
+    // Bezpieczne pobranie eventu (żeby nie wywaliło błędu w Kampanii)
+    let eventName = typeof currentEvent !== 'undefined' ? currentEvent : null;
+    let isWinter = eventName === 'BLIZZARD';
+    let isToxic = eventName === 'TOXIC_RAIN';
+
+    // Obliczanie czasu lokalnego (Pora dnia)
+    let currentHour = new Date().getHours();
+    let timeOverlay = 'transparent';
+    if (currentHour >= 18 && currentHour < 20) {
+        timeOverlay = 'rgba(211, 84, 0, 0.15)'; // Ciepły, pomarańczowy wieczór
+    } else if (currentHour >= 20 || currentHour < 7) {
+        timeOverlay = 'rgba(10, 17, 40, 0.45)'; // Głęboka, chłodna noc
+    }
+
+    // Dynamiczna trawa zależna od pogody
+    let grassColor = '#264a18'; // Domyślna trawa
+    if (isWinter) grassColor = '#dbe4e9'; // Śnieg
+    else if (isToxic) grassColor = '#2d2720'; // Uschnięta ziemia bagienna
+
+    ctx.fillStyle = grassColor;
     ctx.fillRect(0, 0, canvasWidth, canvasHeight);
 
     // Subtelna siatka z tła
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.1)';
+    ctx.strokeStyle = isWinter ? 'rgba(0, 0, 0, 0.05)' : 'rgba(0, 0, 0, 0.1)';
     ctx.lineWidth = 2;
     const TILE_SIZE = 100;
     const offsetX = -camera.x % TILE_SIZE;
@@ -105,9 +128,14 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     ctx.save();
     ctx.translate(-camera.x, -camera.y);
 
-    // Drogi
-    ctx.fillStyle = '#6d4c41'; 
-    ctx.strokeStyle = '#3e2723';
+    // Dynamiczne Drogi
+    let roadColor = '#6d4c41';
+    let roadBorder = '#3e2723';
+    if (isWinter) { roadColor = '#bdc3c7'; roadBorder = '#7f8c8d'; }
+    else if (isToxic) { roadColor = '#3e2723'; roadBorder = '#1a1110'; }
+
+    ctx.fillStyle = roadColor; 
+    ctx.strokeStyle = roadBorder;
     ctx.lineWidth = 10;
     for(let road of mapData.roads) {
         ctx.fillRect(road.x, road.y, road.width, road.height);
@@ -122,27 +150,41 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     visibleTrees.sort((a, b) => a.y - b.y);
 
     for(let tree of visibleTrees) {
-        // 1. RYSOWANIE PNIA (bez cienia, za to z połówkowym światłocieniem)
+        // --- DYNAMICZNE KOLORY DRZEW ---
+        let tTrunk1 = '#3e2723'; let tTrunk2 = '#4e342e';
+        let tMainColor = tree.color;
+        let tBrightColor = tree.brightColor;
+        let tShadowEdge = '#0d210f';
+
+        if (isWinter) {
+            tTrunk1 = '#7f8c8d'; tTrunk2 = '#95a5a6'; // Oszroniony pień
+            tMainColor = '#bdc3c7'; tBrightColor = '#ffffff'; tShadowEdge = '#7f8c8d'; // Zamarznięte liście
+        } else if (isToxic) {
+            tTrunk1 = '#2c1f1c'; tTrunk2 = '#3e2c28'; // Gnijący pień
+            tMainColor = '#5c5316'; tBrightColor = '#8c8021'; tShadowEdge = '#1a1804'; // Uschnięte, toksyczne liście
+        }
+
+        // 1. RYSOWANIE PNIA
         ctx.shadowColor = 'transparent';
-        ctx.fillStyle = '#3e2723'; // Ciemny brąz
+        ctx.fillStyle = tTrunk1;
         ctx.fillRect(tree.x - 8, tree.y + tree.radius - 20, 16, 35);
-        ctx.fillStyle = '#4e342e'; // Jasny brąz od strony słońca
+        ctx.fillStyle = tTrunk2; 
         ctx.fillRect(tree.x - 8, tree.y + tree.radius - 20, 6, 35);
 
         // 2. RYSOWANIE KORONY Z POTĘŻNYM CIENIEM
-        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'; // Grubszy cień
+        ctx.shadowColor = 'rgba(0, 0, 0, 0.6)'; 
         ctx.shadowBlur = 18;
-        ctx.shadowOffsetX = 12; // Cień rzucany w prawo
-        ctx.shadowOffsetY = 12; // Cień rzucany w dół
+        ctx.shadowOffsetX = 12; 
+        ctx.shadowOffsetY = 12; 
 
-        // Gradient promienisty tworzący efekt wypukłej, oświetlonej korony
+        // Gradient promienisty tworzący efekt wypukłej korony
         let grad = ctx.createRadialGradient(
-            tree.x - tree.radius * 0.35, tree.y - tree.radius * 0.35, tree.radius * 0.1, // Źródło światła
+            tree.x - tree.radius * 0.35, tree.y - tree.radius * 0.35, tree.radius * 0.1, 
             tree.x, tree.y, tree.radius * 1.2
         );
-        grad.addColorStop(0, tree.brightColor || '#4caf50'); 
-        grad.addColorStop(0.5, tree.color);
-        grad.addColorStop(1, '#0d210f'); // Głęboka zieleń na krawędziach
+        grad.addColorStop(0, tBrightColor); 
+        grad.addColorStop(0.5, tMainColor);
+        grad.addColorStop(1, tShadowEdge); 
 
         ctx.fillStyle = grad;
         
@@ -153,22 +195,31 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         // Puszyste "bąble" dookoła korony
         if (tree.clusters) {
             for (let c of tree.clusters) {
-                ctx.moveTo(tree.x + c.x + c.r, tree.y + c.y); // Wyzerowanie ścieżki (zapobiega paskom)
+                ctx.moveTo(tree.x + c.x + c.r, tree.y + c.y); 
                 ctx.arc(tree.x + c.x, tree.y + c.y, c.r, 0, Math.PI * 2);
             }
         }
-        ctx.fill(); // Rysuje i zlewa kółka w JEDEN kształt rzucający JEDEN wspólny cień!
+        ctx.fill(); 
         ctx.closePath();
 
         // 3. RYSOWANIE POŁYSKU (dodaje głębi)
         ctx.shadowColor = 'transparent'; 
         ctx.beginPath();
         ctx.arc(tree.x - tree.radius * 0.25, tree.y - tree.radius * 0.25, tree.radius * 0.4, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; // Delikatny blask
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.08)'; 
         ctx.fill();
         ctx.closePath();
     }
     ctx.restore();
+
+    // 4. NAKŁADANIE FILTRU PORY DNIA (TYLKO NA MAPĘ)
+    if (timeOverlay !== 'transparent') {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); // Resetujemy transformację do ekranu kamery
+        ctx.fillStyle = timeOverlay;
+        ctx.fillRect(0, 0, canvasWidth * globalScale, canvasHeight * globalScale); // Malujemy cały ekran cieniem
+        ctx.restore();
+    }
 }
 
 function drawCastle(ctx, z) {
