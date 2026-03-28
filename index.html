@@ -95,6 +95,7 @@
             cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; 
         }
         .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 10px rgba(46, 204, 113, 0.4); }
+        .char-card.locked { filter: grayscale(100%); opacity: 0.7; border-color: #95a5a6; cursor: not-allowed; }
         .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
         .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
         .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
@@ -123,14 +124,26 @@
         #university-logo { position: absolute; top: 15px; right: 15px; z-index: 10; }
         #university-logo img { height: clamp(40px, 8vw, 60px); }
 
-        /* MIKRO-POPRAWKI DLA SUPER MAŁYCH EKRANÓW (PION) */
         @media (max-height: 600px) {
-            #ui-layer { align-items: flex-start; } /* Równa menu do góry, pozwala scrolować dół! */
+            #ui-layer { align-items: flex-start; } 
         }
+
+        /* --- ANIMACJE GACHA (SKRZYNI) --- */
+        @keyframes floatChest { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes shakeChest { 0% { transform: translateX(0); } 25% { transform: translateX(-15px) rotate(-10deg); } 50% { transform: translateX(15px) rotate(10deg); } 75% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: translateX(0); } }
+        @keyframes glowReward { 0% { text-shadow: 0 0 10px #f1c40f, 0 0 20px #f1c40f; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #f1c40f, 0 0 50px #f39c12; transform: scale(1.2); opacity: 1;} }
     </style>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
+        <h2 id="gacha-title" style="color:#f1c40f; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5);">Niespodzianka!</h2>
+        <div id="gacha-chest" style="font-size:120px; cursor:pointer; user-select:none; animation: floatChest 2s infinite;">🎁</div>
+        <p id="gacha-hint" style="color:#bdc3c7; margin-top:10px; font-weight:bold;">Kliknij, aby otworzyć...</p>
+        <div id="gacha-reward" style="display:none; color:white; font-size:32px; font-family:'Permanent Marker', cursive; margin-top:20px;"></div>
+        <button id="gacha-close" class="main-btn" style="display:none; width:auto; padding: 15px 40px; margin-top:40px; background:#3498db; box-shadow: 0 4px 0 #2980b9;">Zabierz Nagrodę</button>
+    </div>
 
     <div id="mobile-controls">
         <div id="joystick-zone"></div>
@@ -159,8 +172,7 @@
                 🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
                 ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
                 ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
-                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!<br>
-                💀 Uwaga: Zderzenie z czerwoną granicą mapy to pewna śmierć!
+                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!
             </div>
 
             <div id="step-1">
@@ -223,6 +235,7 @@
                         <img src="postac-bez-tla.png" alt="Arystokrata">
                         <h4>Arystokrata</h4>
                         <p>-5% Cen w Sklepie</p>
+                        <div id="arystokrata-progress" style="font-size: 10px; color: #e74c3c; margin-top: 5px; font-weight: bold;">Fragmenty: 0/3</div>
                     </div>
                 </div>
                 <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71;">WEJDŹ NA ARENĘ</button>
@@ -263,10 +276,45 @@
         const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
         let chosenMode = 'FREE'; let chosenSkin = 'standard'; let chosenControlType = 'WASD';
 
+        // ==========================================
+        // SYSTEM ZAPISU I ODBLOKOWYWANIA SKÓREK
+        // ==========================================
+        window.playerData = JSON.parse(localStorage.getItem('xd_playerData')) || { fragments: { arystokrata: 0 } };
+        
+        function updateMenuUI() {
+            let aryFrags = window.playerData.fragments.arystokrata || 0;
+            let progressDiv = document.getElementById('arystokrata-progress');
+            let cardDiv = document.getElementById('char-arystokrata');
+            
+            if (progressDiv && cardDiv) {
+                if (aryFrags >= 3) {
+                    progressDiv.style.color = '#2ecc71';
+                    progressDiv.innerText = 'ODBLOKOWANO!';
+                    cardDiv.classList.remove('locked');
+                } else {
+                    progressDiv.style.color = '#e74c3c';
+                    progressDiv.innerText = `Fragmenty: ${aryFrags}/3`;
+                    cardDiv.classList.add('locked');
+                }
+            }
+        }
+        updateMenuUI();
+
         next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = 'red'; alert("Wpisz swój nick, aby kontynuować!"); } };
         nameInput.addEventListener("keypress", (e) => { if (e.key === "Enter") next.click(); });
         window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
-        window.selectSkin = (skin) => { chosenSkin = skin; document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected')); document.getElementById('char-'+skin).classList.add('selected'); };
+        
+        window.selectSkin = (skin) => { 
+            // Blokada kliknięcia jeśli nie mamy fragmentów
+            if (skin === 'arystokrata' && (window.playerData.fragments.arystokrata || 0) < 3) {
+                alert("Klasa Zablokowana! Graj by otrzymać Epicką Skrzynię i wylosować 3 Fragmenty Arystokraty!");
+                return;
+            }
+            chosenSkin = skin; 
+            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected')); 
+            document.getElementById('char-'+skin).classList.add('selected'); 
+        };
+        
         window.launchGame = (controlType) => { chosenControlType = controlType; document.getElementById('step-3').style.display = 'none'; document.getElementById('step-4').style.display = 'block'; };
 
         window.mobileJoy = { dx: 0, dy: 0, active: false };
@@ -298,7 +346,76 @@
             document.body.appendChild(script);
         };
 
-        // --- ULEPSZONA LOGIKA JOYSTICKA ---
+        // ==========================================
+        // SYSTEM LOSOWANIA - GACHA ANIMACJA
+        // ==========================================
+        window.showGachaAnimation = function(onCompleteCallback) {
+            const modal = document.getElementById('gacha-modal');
+            const chest = document.getElementById('gacha-chest');
+            const hint = document.getElementById('gacha-hint');
+            const rewardText = document.getElementById('gacha-reward');
+            const closeBtn = document.getElementById('gacha-close');
+            const title = document.getElementById('gacha-title');
+
+            modal.style.display = 'flex';
+            chest.style.display = 'block';
+            chest.style.animation = 'floatChest 2s infinite';
+            hint.style.display = 'block';
+            rewardText.style.display = 'none';
+            closeBtn.style.display = 'none';
+            title.innerText = "Niespodzianka!";
+            chest.innerText = "🎁";
+
+            chest.onclick = () => {
+                chest.onclick = null; 
+                hint.style.display = 'none';
+                chest.style.animation = 'shakeChest 0.5s'; // Szybkie trzęsienie
+                
+                setTimeout(() => {
+                    let rand = Math.random();
+                    let rewardType, itemName, itemCode;
+                    
+                    if (rand < 0.4) {
+                        // 40% Szans: Trwały fragment postaci
+                        rewardType = 'skin_fragment';
+                        itemName = 'Fragment Arystokraty';
+                        itemCode = 'arystokrata';
+                        
+                        window.playerData.fragments.arystokrata = (window.playerData.fragments.arystokrata || 0) + 1;
+                        localStorage.setItem('xd_playerData', JSON.stringify(window.playerData));
+                        updateMenuUI();
+                        
+                        chest.innerText = "🧩";
+                    } else {
+                        // 60% Szans: Potężna broń na czas trwania życia gracza
+                        rewardType = 'weapon';
+                        const epicWeapons = [
+                            { code: 'diamond_bow', name: 'Diamentowy Łuk' },
+                            { code: 'cleaver', name: 'Rzeźnicki Tasak' },
+                            { code: 'explosive_kunai', name: 'Wybuchowe Kunai' },
+                            { code: 'shotgun', name: 'Garłacz' }
+                        ];
+                        let w = epicWeapons[Math.floor(Math.random() * epicWeapons.length)];
+                        itemName = w.name;
+                        itemCode = w.code;
+                        chest.innerText = "⚔️";
+                    }
+
+                    chest.style.animation = 'none';
+                    rewardText.style.animation = 'glowReward 1s forwards';
+                    title.innerText = "Wylosowano:";
+                    rewardText.innerText = itemName;
+                    rewardText.style.display = 'block';
+                    closeBtn.style.display = 'block';
+
+                    closeBtn.onclick = () => {
+                        modal.style.display = 'none';
+                        if(onCompleteCallback) onCompleteCallback({ type: rewardType, itemName: itemName, item: itemCode });
+                    };
+                }, 1000); // 1 sekunda napięcia
+            };
+        };
+
         function initMobileControls() {
             const joyZone = document.getElementById('joystick-zone');
             const joyBase = document.getElementById('joystick-base');
@@ -348,7 +465,6 @@
 
             document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mobile-attack')); }, {passive: false});
             
-            // NAPRAWIONA TARCZA - Symuluje wciśnięcie klawisza Q
             const shieldBtn = document.getElementById('btn-m-shield');
             shieldBtn.addEventListener('touchstart', (e) => { 
                 e.preventDefault(); 
