@@ -2,15 +2,13 @@
 <html lang="pl">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <script>
     // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
-    // Definiujemy zmienną globalnie jako PIERWSZĄ RZECZ w grze, zanim jeszcze załaduje się silnik rysowania.
     window.weaponPath = 'none';
 
-    // To uruchomi SDK zanim załadują się reszta Twoich plików JS
     (async function() {
         try {
             await window.CrazyGames.SDK.init();
@@ -22,276 +20,113 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
-        /* Szybkie style pomocnicze (reszta jest w style.css) */
+        /* === POTĘŻNY, ELASTYCZNY CSS BEZPOŚREDNIO W HTML === */
+        
         #ui-layer {
             position: absolute;
             inset: 0;
             background: radial-gradient(circle, #1a2a4e 0%, #0a1128 100%);
             display: flex;
             justify-content: center;
-            align-items: center;
+            align-items: center; 
             z-index: 100;
-            overflow: hidden; 
+            overflow-y: auto; /* Przewijanie tła na małych telefonach */
+            padding: 20px 0; 
         }
 
-        /* --- Tło z dynamicznymi obiektami --- */
-        #stars-container, #planets-container, #comets-container {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            pointer-events: none; 
-            z-index: 1; 
-        }
+        #stars-container, #planets-container, #comets-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+        .star { position: absolute; background-color: white; border-radius: 50%; animation: twinkle linear infinite; box-shadow: 0 0 5px rgba(255, 255, 255, 0.8); }
+        @keyframes twinkle { 0% { opacity: 0; transform: scale(0.5); } 50% { opacity: 1; transform: scale(1.5); box-shadow: 0 0 12px rgba(255, 255, 255, 1); } 100% { opacity: 0; transform: scale(0.5); } }
+        .planet { position: absolute; border-radius: 50%; animation: planetAppear ease-in-out; opacity: 0; }
+        @keyframes planetAppear { 0% { opacity: 0; transform: scale(0); } 10% { opacity: 0.7; transform: scale(1); } 90% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(0); } }
+        .comet { position: absolute; pointer-events: none; animation: cometFly linear; opacity: 0; }
+        .comet-head { width: 5px; height: 5px; background: white; border-radius: 50%; box-shadow: 0 0 8px white; }
+        .comet-tail { width: 50px; height: 2px; background: linear-gradient(to right, white, transparent); margin-top: -3px; margin-left: -52px; transform: rotate(-10deg); }
+        @keyframes cometFly { 0% { opacity: 0; transform: translate(100vw, -100vh) rotate(45deg); } 5% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translate(-100vw, 100vh) rotate(45deg); } }
 
-        /* GWIAZDY (Migoczące) */
-        .star {
-            position: absolute;
-            background-color: white;
-            border-radius: 50%;
-            animation: twinkle linear infinite;
-            box-shadow: 0 0 5px rgba(255, 255, 255, 0.8);
-        }
-
-        @keyframes twinkle {
-            0% { opacity: 0; transform: scale(0.5); }
-            50% { opacity: 1; transform: scale(1.5); box-shadow: 0 0 12px rgba(255, 255, 255, 1); }
-            100% { opacity: 0; transform: scale(0.5); }
-        }
-
-        /* PLANETY (Powolne) */
-        .planet {
-            position: absolute;
-            border-radius: 50%;
-            animation: planetAppear ease-in-out;
-            opacity: 0;
-        }
-
-        @keyframes planetAppear {
-            0% { opacity: 0; transform: scale(0); }
-            10% { opacity: 0.7; transform: scale(1); }
-            90% { opacity: 0.7; transform: scale(1); }
-            100% { opacity: 0; transform: scale(0); }
-        }
-
-        /* KOMETY (Szybkie) */
-        .comet {
-            position: absolute;
-            pointer-events: none;
-            animation: cometFly linear;
-            opacity: 0;
-        }
-
-        .comet-head {
-            width: 5px; height: 5px;
-            background: white; border-radius: 50%;
-            box-shadow: 0 0 8px white;
-        }
-
-        .comet-tail {
-            width: 50px; height: 2px;
-            background: linear-gradient(to right, white, transparent);
-            margin-top: -3px; margin-left: -52px;
-            transform: rotate(-10deg);
-        }
-
-        @keyframes cometFly {
-            0% { opacity: 0; transform: translate(100vw, -100vh) rotate(45deg); }
-            5% { opacity: 1; }
-            95% { opacity: 1; }
-            100% { opacity: 0; transform: translate(-100vw, 100vh) rotate(45deg); }
-        }
-
-        /* --- MENU --- */
+        /* MAGIA ELASTYCZNEGO MENU */
         #menu {
             position: relative;
             z-index: 10; 
             background: rgba(255, 255, 255, 0.98); 
-            padding: 40px;
+            padding: 30px;
             border-radius: 15px;
             box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
             text-align: center;
-            max-width: 500px;
+            width: 90%;          /* Dynamicznie: Menu zajmuje zawsze 90% szerokości urządzenia */
+            max-width: 450px;    /* Na PC nigdy nie będzie szersze niż 450px */
+            margin: auto;        /* Trzyma menu wyśrodkowane */
         }
 
-        #menu h1 {
-            font-family: 'Permanent Marker', cursive;
-            font-size: 55px;
-            margin-top: 0;
-            margin-bottom: 10px;
-            letter-spacing: 2px;
-            color: #2c3e50;
-            text-shadow: 3px 3px 0px rgba(0,0,0,0.2);
-            transform: rotate(-2deg); 
-        }
-        
-        .paint-x { color: #e74c3c; } 
-        .paint-d { color: #3498db; } 
+        #menu h1 { font-family: 'Permanent Marker', cursive; font-size: clamp(35px, 8vw, 55px); margin-top: 0; margin-bottom: 5px; letter-spacing: 2px; color: #2c3e50; text-shadow: 3px 3px 0px rgba(0,0,0,0.2); transform: rotate(-2deg); }
+        .paint-x { color: #e74c3c; } .paint-d { color: #3498db; } 
+        #menu p.subtitle { font-size: clamp(12px, 3.5vw, 16px); color: #555; margin-bottom: 15px; font-weight: bold; }
+        .tutorial-box { background: rgba(0, 0, 0, 0.05); padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 12px; text-align: left; line-height: 1.4; border-left: 4px solid #f1c40f; color: #333; }
 
-        #menu p.subtitle {
-            font-size: 16px;
-            color: #555;
+        /* WSPÓLNE STYLOWANIE FORMULARZY I PRZYCISKÓW */
+        .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; text-align: left; font-size: 14px; }
+        #playerName { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #ccc; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        .main-btn { background: #27ae60; color: white; border: none; padding: 16px; width: 100%; border-radius: 12px; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 0px #1e8449; margin-bottom: 10px; box-sizing: border-box;}
+        .main-btn:active { transform: translateY(4px); box-shadow: none; }
+
+        /* KARUZELA KART (KROK 3 - STEROWANIE) */
+        .control-grid { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;}
+        .control-card { flex: 1; min-width: 80px; border: 2px solid #bdc3c7; border-radius: 10px; padding: 15px 5px; cursor: pointer; background: #fff; transition: 0.2s; box-sizing: border-box;}
+        .control-card:hover { border-color: #3498db; background: #eafaf1; }
+        .keys-preview { font-size: clamp(14px, 3vw, 18px); font-weight: bold; color: #e67e22; margin-bottom: 5px; }
+        .control-card span { font-size: 11px; color: #555; font-weight: bold; display: block;}
+
+        /* KARUZELA POSTACI (KROK 4 - WYBÓR KLASY) */
+        .char-grid { 
+            display: flex; 
+            gap: 10px; 
+            overflow-x: auto; /* Poziome przewijanie palcem! */
+            padding-bottom: 10px;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
             margin-bottom: 15px;
-            font-weight: bold;
         }
-
-        /* --- PORADNIK DLA GRACZA --- */
-        .tutorial-box {
-            background: rgba(0, 0, 0, 0.05); padding: 15px; border-radius: 10px;
-            margin-bottom: 20px; font-size: 13px; text-align: left; line-height: 1.5;
-            border-left: 4px solid #f1c40f; color: #333;
+        .char-grid::-webkit-scrollbar { height: 6px; }
+        .char-grid::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
+        .char-card { 
+            flex: 0 0 auto; /* Nie pozwala kartom się zgniatać */
+            width: 100px; 
+            background: #fff; border: 2px solid #bdc3c7; border-radius: 10px; padding: 10px; 
+            cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; 
         }
+        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 10px rgba(46, 204, 113, 0.4); }
+        .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
+        .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
+        .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
 
-        /* --- KARTY POSTACI --- */
-        .char-grid { display: flex; gap: 15px; justify-content: center; margin-bottom: 20px; flex-wrap: wrap; }
-        .char-card {
-            background: #fff; border: 3px solid #bdc3c7; border-radius: 10px; padding: 15px;
-            cursor: pointer; transition: 0.3s; width: 120px; text-align: center; position: relative;
-        }
-        .char-card:hover { border-color: #f1c40f; transform: translateY(-5px); }
-        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 15px rgba(46, 204, 113, 0.5); }
-        .char-card h4 { margin: 0 0 5px 0; font-size: 15px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
-        .char-card p { margin: 0; font-size: 11px; color: #7f8c8d; font-weight: bold; }
-        .char-card img { width: 60px; height: 60px; margin-bottom: 10px; object-fit: contain; }
-
-        /* --- MENU UMIEJĘTNOŚCI --- */
-        #skill-menu {
-            position: fixed;
-            left: 20px;
-            bottom: 20px;
-            background: rgba(255, 255, 255, 0.95);
-            padding: 15px;
-            border: 2px solid #333;
-            border-radius: 12px;
-            display: none; 
-            flex-direction: column;
-            gap: 8px;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.3);
-            min-width: 300px; 
-            z-index: 90;
-        }
-
-        .skill-btn {
-            background: #4CAF50;
-            color: white;
-            border: none;
-            padding: 10px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-            text-align: center; 
-            position: relative;
-            width: 100%;
-        }
-
-        .skill-btn small {
-            display: block;
-            font-size: 10px;
-            font-weight: normal;
-            opacity: 0.9;
-            margin-top: 4px;
-        }
-
-        .skill-btn:hover:not(:disabled) {
-            background: #45a049;
-            transform: scale(1.05);
-        }
-
-        .skill-btn:disabled {
-            background: #95a5a6;
-            cursor: not-allowed;
-            opacity: 0.6;
-            transform: none;
-        }
-
-        .lvl-badge {
-            float: right;
-            background: rgba(0,0,0,0.3);
-            padding: 2px 6px;
-            border-radius: 4px;
-            font-size: 11px;
-        }
-
-        .sp-label {
-            font-weight: bold;
-            color: #d35400;
-            text-align: center;
-            margin-bottom: 5px;
-            font-size: 1.1em;
-            text-shadow: 1px 1px 0px #fff;
-        }
-
-        /* --- TAJNY SKLEP ZAMKOWY --- */
-        #castle-shop {
-            position: fixed;
-            right: 20px;
-            top: 50%;
-            transform: translateY(-50%);
-            background: rgba(44, 62, 80, 0.95);
-            border: 3px solid #f1c40f;
-            border-radius: 12px;
-            padding: 20px;
-            display: none; 
-            flex-direction: column;
-            gap: 10px;
-            font-family: Arial, sans-serif;
-            box-shadow: 0 0 20px rgba(241, 196, 15, 0.5);
-            z-index: 90;
-            color: white;
-            text-align: center;
-        }
-
-        #castle-shop h2 {
-            margin: 0;
-            color: #f1c40f;
-            font-size: 20px;
-            text-transform: uppercase;
-        }
-
-        #castle-shop p {
-            margin: 0 0 10px 0;
-            font-size: 12px;
-            color: #bdc3c7;
-        }
-
-        .shop-btn {
-            background: #34495e;
-            color: #fff;
-            border: 1px solid #7f8c8d;
-            padding: 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-weight: bold;
-            transition: 0.2s;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .shop-btn:hover {
-            background: #f39c12;
-            border-color: #f1c40f;
-            transform: scale(1.05);
-        }
-
-        #university-logo {
-            position: absolute;
-            top: 20px;
-            right: 20px;
-            z-index: 10;
-        }
-
-        /* --- NOWOŚĆ: INTERFEJS MOBILNY (UKRYTY DOMYŚLNIE) --- */
-        #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
-        #joystick-zone { position: absolute; left: 0; bottom: 0; width: 50%; height: 60%; pointer-events: auto; }
-        #joystick-base { position: absolute; width: 120px; height: 120px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
-        #joystick-stick { position: absolute; width: 50px; height: 50px; background: rgba(241, 196, 15, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        /* WSPÓLNE MENU SKLEP I SKILLE (W GRACH) */
+        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #333; border-radius: 10px; display: none; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 220px; z-index: 90; }
+        .sp-label { font-weight: bold; color: #d35400; text-align: center; margin-bottom: 5px; font-size: 14px; }
+        .skill-btn { background: #4CAF50; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; width: 100%; text-align: left; }
         
-        #action-buttons { position: absolute; right: 30px; bottom: 30px; pointer-events: auto; display: flex; gap: 20px; align-items: flex-end; }
-        .m-btn { width: 70px; height: 70px; border-radius: 50%; background: rgba(44, 62, 80, 0.6); border: 3px solid rgba(255,255,255,0.3); color: white; font-size: 28px; display: flex; justify-content: center; align-items: center; user-select: none; transition: 0.1s; }
-        .m-btn:active { background: rgba(241, 196, 15, 0.6); transform: scale(0.9); }
-        #btn-m-attack { width: 90px; height: 90px; font-size: 36px; background: rgba(231, 76, 60, 0.6); border-color: rgba(241, 196, 15, 0.5); }
+        #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(44, 62, 80, 0.95); border: 2px solid #f1c40f; border-radius: 10px; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); z-index: 90; color: white; width: 160px; }
+        #castle-shop h2 { margin: 0; color: #f1c40f; font-size: 16px; text-align: center;}
+        #castle-shop p { margin: 0 0 10px 0; font-size: 11px; text-align: center; color: #bdc3c7; }
+        .shop-btn { background: #34495e; color: #fff; border: 1px solid #7f8c8d; padding: 8px; border-radius: 6px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+
+        /* --- INTERFEJS MOBILNY DLA GRACZA W TRAKCIE GRY --- */
+        #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
+        #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
+        #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
+        #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(241, 196, 15, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        
+        #action-buttons { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
+        .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(44, 62, 80, 0.6); border: 2px solid rgba(255,255,255,0.3); color: white; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; }
+        .m-btn:active { background: rgba(241, 196, 15, 0.8); transform: scale(0.9); }
+        #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(231, 76, 60, 0.6); border-color: rgba(241, 196, 15, 0.5); }
+        
+        #university-logo { position: absolute; top: 15px; right: 15px; z-index: 10; }
+        #university-logo img { height: clamp(40px, 8vw, 60px); }
+
+        /* MIKRO-POPRAWKI DLA SUPER MAŁYCH EKRANÓW (PION) */
+        @media (max-height: 600px) {
+            #ui-layer { align-items: flex-start; } /* Równa menu do góry, pozwala scrolować dół! */
+        }
     </style>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -312,6 +147,10 @@
         <div id="comets-container"></div>
 
         <div id="menu">
+            <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
+                <img src="logo.svg" alt="WSIZ Logo">
+            </a>
+
             <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
             <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
 
@@ -332,11 +171,11 @@
                 
                 <input type="color" id="playerColor" value="#ff4444" style="display: none;">
                 
-                <button id="nextBtn" class="main-btn" style="margin-top: 15px;">DALEJ</button>
+                <button id="nextBtn" class="main-btn">DALEJ</button>
             </div>
 
             <div id="step-2" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px;">Wybierz Tryb Gry:</h3>
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz Tryb Gry:</h3>
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
                     <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #f1c40f; color: #2c3e50; border: 2px solid #e67e22; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);">👑 KAMPANIA: Od zera do Króla (RPG)</button>
                     <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Multiplayer)</button>
@@ -347,15 +186,15 @@
             </div>
 
             <div id="step-3" style="display: none;">
-                <h3>Wybierz sterowanie:</h3>
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz sterowanie:</h3>
                 <div class="control-grid">
                     <div class="control-card" onclick="launchGame('WASD')">
-                        <div class="keys-preview">W A S D</div>
+                        <div class="keys-preview">WASD</div>
                         <span>Klasyczne</span>
                     </div>
                     
                     <div class="control-card" onclick="launchGame('ARROWS')">
-                        <div class="keys-preview">↑ ↓ ← →</div>
+                        <div class="keys-preview">↑↓←→</div>
                         <span>Strzałki</span>
                     </div>
 
@@ -368,7 +207,7 @@
             </div>
 
             <div id="step-4" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px;">Wybierz swoją Klasę:</h3>
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz swoją Klasę:</h3>
                 <div class="char-grid">
                     <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
                         <img src="xtreme-destiny-postac.png" alt="Standard">
@@ -386,20 +225,19 @@
                         <p>-5% Cen w Sklepie</p>
                     </div>
                 </div>
-                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71; width: 100%;">WEJDŹ NA ARENĘ</button>
+                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71;">WEJDŹ NA ARENĘ</button>
                 <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
             </div>
 
             <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt) | [SHIFT] Zryw | [R] Zimowy Miecz</small>
+                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt)</small>
             </div>
         </div>
     </div>
 
     <div id="skill-menu">
         <div class="sp-label">Punkty Umiejętności: <span id="sp-count" style="color:#000; background:#f1c40f; padding: 2px 8px; border-radius: 10px;">0</span></div>
-        <div id="skills-container">
-            </div>
+        <div id="skills-container"></div>
     </div>
 
     <div id="castle-shop">
@@ -413,227 +251,112 @@
 
     <canvas id="gameCanvas"></canvas>
 
-    <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
-        <img src="logo.svg" alt="WSIZ Logo" style="height: 60px;">
-    </a>
-
     <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
     <script src="map.js"></script>
     <script src="engine.js"></script>
     
     <script>
-        function createStars() {
-            const container = document.getElementById('stars-container');
-            if(!container) return;
-            const numStars = 100;
-            for (let i = 0; i < numStars; i++) {
-                let star = document.createElement('div');
-                star.classList.add('star');
-                star.style.left = Math.random() * 100 + '%';
-                star.style.top = Math.random() * 100 + '%';
-                let size = Math.random() * 3 + 2;
-                star.style.width = size + 'px';
-                star.style.height = size + 'px';
-                star.style.animationDuration = (Math.random() * 3 + 2) + 's';
-                star.style.animationDelay = (Math.random() * 5) + 's';
-                container.appendChild(star);
-            }
-        }
-        createStars();
+        function createStars() { const c = document.getElementById('stars-container'); if(!c) return; for (let i = 0; i < 100; i++) { let s = document.createElement('div'); s.classList.add('star'); s.style.left = Math.random()*100+'%'; s.style.top = Math.random()*100+'%'; let sz = Math.random()*3+2; s.style.width = sz+'px'; s.style.height = sz+'px'; s.style.animationDuration = (Math.random()*3+2)+'s'; s.style.animationDelay = (Math.random()*5)+'s'; c.appendChild(s); } } createStars();
+        function createPlanets() { const c = document.getElementById('planets-container'); if(!c) return; const colors = ['#e67e22', '#3498db', '#bdc3c7', '#c0392b', '#f1c40f']; for (let i = 0; i < 12; i++) { let p = document.createElement('div'); p.classList.add('planet'); let sz = Math.random()*30+15; p.style.width = sz+'px'; p.style.height = sz+'px'; p.style.left = Math.random()*100+'%'; p.style.top = Math.random()*100+'%'; p.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)]; p.style.animationDuration = (Math.random()*60+30)+'s'; p.style.animationDelay = (Math.random()*30)+'s'; c.appendChild(p); } } createPlanets();
+        function createComets() { const c = document.getElementById('comets-container'); if(!c) return; function addComet() { const cm = document.createElement('div'); cm.classList.add('comet'); const hd = document.createElement('div'); hd.classList.add('comet-head'); cm.appendChild(hd); const tl = document.createElement('div'); tl.classList.add('comet-tail'); cm.appendChild(tl); cm.style.animationDuration = (Math.random()*5+3)+'s'; c.appendChild(cm); setTimeout(()=>cm.remove(), parseFloat(cm.style.animationDuration)*1000); } setInterval(addComet, 8000); } createComets();
 
-        function createPlanets() {
-            const container = document.getElementById('planets-container');
-            if(!container) return;
-            const numPlanets = 12;
-            const planetColors = ['#e67e22', '#3498db', '#bdc3c7', '#c0392b', '#f1c40f'];
-            for (let i = 0; i < numPlanets; i++) {
-                let planet = document.createElement('div');
-                planet.classList.add('planet');
-                let size = Math.random() * 30 + 15;
-                planet.style.width = size + 'px';
-                planet.style.height = size + 'px';
-                planet.style.left = Math.random() * 100 + '%';
-                planet.style.top = Math.random() * 100 + '%';
-                planet.style.backgroundColor = planetColors[Math.floor(Math.random() * planetColors.length)];
-                planet.style.animationDuration = (Math.random() * 60 + 30) + 's'; 
-                planet.style.animationDelay = (Math.random() * 30) + 's';
-                container.appendChild(planet);
-            }
-        }
-        createPlanets();
+        const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
+        let chosenMode = 'FREE'; let chosenSkin = 'standard'; let chosenControlType = 'WASD';
 
-        function createComets() {
-            const container = document.getElementById('comets-container');
-            if(!container) return;
-            function addComet() {
-                const comet = document.createElement('div');
-                comet.classList.add('comet');
-                const head = document.createElement('div'); head.classList.add('comet-head'); comet.appendChild(head);
-                const tail = document.createElement('div'); tail.classList.add('comet-tail'); comet.appendChild(tail);
-                comet.style.animationDuration = (Math.random() * 5 + 3) + 's'; 
-                container.appendChild(comet);
-                setTimeout(() => comet.remove(), (parseFloat(comet.style.animationDuration) * 1000));
-            }
-            setInterval(addComet, 8000);
-        }
-        createComets();
+        next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = 'red'; alert("Wpisz swój nick, aby kontynuować!"); } };
+        nameInput.addEventListener("keypress", (e) => { if (e.key === "Enter") next.click(); });
+        window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
+        window.selectSkin = (skin) => { chosenSkin = skin; document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected')); document.getElementById('char-'+skin).classList.add('selected'); };
+        window.launchGame = (controlType) => { chosenControlType = controlType; document.getElementById('step-3').style.display = 'none'; document.getElementById('step-4').style.display = 'block'; };
 
-        const s1 = document.getElementById('step-1');
-        const s2 = document.getElementById('step-2');
-        const s3 = document.getElementById('step-3');
-        const next = document.getElementById('nextBtn');
-        const nameInput = document.getElementById('playerName');
-        
-        let chosenMode = 'FREE'; 
-        let chosenSkin = 'standard';
-        let chosenControlType = 'WASD';
-
-        next.onclick = () => {
-            if (nameInput.value.trim().length > 0) {
-                s1.style.display = 'none';
-                s2.style.display = 'block'; 
-            } else {
-                nameInput.style.borderColor = 'red';
-                alert("Wpisz swój nick, aby kontynuować!");
-            }
-        };
-
-        nameInput.addEventListener("keypress", (e) => {
-            if (e.key === "Enter") next.click();
-        });
-
-        window.selectMode = (mode) => {
-            chosenMode = mode;
-            s2.style.display = 'none';
-            s3.style.display = 'block'; 
-        };
-
-        window.selectSkin = (skin) => {
-            chosenSkin = skin;
-            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected'));
-            document.getElementById('char-' + skin).classList.add('selected');
-        };
-
-        window.launchGame = (controlType) => {
-            chosenControlType = controlType;
-            document.getElementById('step-3').style.display = 'none';
-            document.getElementById('step-4').style.display = 'block'; 
-        };
-
-        // --- NOWOŚĆ: GLOBALNA ZMIENNA DLA JOYSTICKA ---
         window.mobileJoy = { dx: 0, dy: 0, active: false };
 
         window.launchGameFinal = () => {
             document.getElementById('step-4').style.display = 'none';
             document.getElementById('game-info').style.display = 'none'; 
             
-            // Zapisujemy skórkę w globalnej zmiennej by pociągnął ją free.js lub teams.js
             window.playerSkin = chosenSkin; 
 
-            // JEŚLI GRACZ WYBRAŁ DOTYK - POKAZUJEMY INTERFEJS MOBILNY
             if (chosenControlType === 'TOUCH') {
                 document.getElementById('mobile-controls').style.display = 'block';
                 initMobileControls();
             }
 
-            // --- AKTUALIZACJA WIZUALNA CEN W SKLEPIE DLA ARYSTOKRATY ---
-            if (chosenSkin === 'arystokrata') {
-                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95';
-                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47';
-                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19';
-            } else {
-                document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100';
-                document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50';
-                document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20';
-            }
+            if (chosenSkin === 'arystokrata') { document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95'; document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47'; document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19'; }
+            else { document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100'; document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50'; document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20'; }
             
             let loadingDiv = document.getElementById('loading-step');
-            if (!loadingDiv) {
-                loadingDiv = document.createElement('div');
-                loadingDiv.id = 'loading-step';
-                loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>';
-                document.getElementById('menu').appendChild(loadingDiv);
-            }
+            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
             loadingDiv.style.display = 'block';
 
-            // --- NOWOŚĆ: WYBÓR SKRYPTU ---
             let scriptSrc = 'free.js';
             if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
-            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; // <- Ładujemy nasz nowy skrypt RPG!
+            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; 
 
-            const script = document.createElement('script');
-            script.src = scriptSrc;
-            
-            script.onload = () => {
-                const shopScript = document.createElement('script');
-                shopScript.src = 'shop.js';
-                shopScript.onload = () => {
-                    const safeColor = document.getElementById('playerColor').value || '#ffffff';
-                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
-                };
-                document.body.appendChild(shopScript);
-            };
+            const script = document.createElement('script'); script.src = scriptSrc;
+            script.onload = () => { const shopScript = document.createElement('script'); shopScript.src = 'shop.js'; shopScript.onload = () => { const safeColor = document.getElementById('playerColor').value || '#ffffff'; startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); }; document.body.appendChild(shopScript); };
             document.body.appendChild(script);
         };
 
-        // --- NOWOŚĆ: LOGIKA WIRTUALNEGO JOYSTICKA ---
+        // --- ULEPSZONA LOGIKA JOYSTICKA ---
         function initMobileControls() {
             const joyZone = document.getElementById('joystick-zone');
             const joyBase = document.getElementById('joystick-base');
             const joyStick = document.getElementById('joystick-stick');
-            let joyId = null;
-            let startX = 0, startY = 0;
+            let joyId = null; let startX = 0, startY = 0;
 
-            joyZone.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                if (joyId !== null) return;
-                const touch = e.changedTouches[0];
-                joyId = touch.identifier;
-                startX = touch.clientX; startY = touch.clientY;
-                joyBase.style.display = 'block';
-                joyBase.style.left = startX + 'px'; joyBase.style.top = startY + 'px';
-                joyStick.style.transform = `translate(-50%, -50%)`;
-                window.mobileJoy.active = true;
+            joyZone.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                if (joyId !== null) return; 
+                const touch = e.changedTouches[0]; 
+                joyId = touch.identifier; 
+                startX = touch.clientX; startY = touch.clientY; 
+                joyBase.style.display = 'block'; 
+                joyBase.style.left = startX + 'px'; joyBase.style.top = startY + 'px'; 
+                joyStick.style.transform = `translate(-50%, -50%)`; 
+                window.mobileJoy.active = true; 
             }, {passive: false});
 
-            joyZone.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                if (joyId === null) return;
-                for (let i=0; i<e.changedTouches.length; i++) {
-                    if (e.changedTouches[i].identifier === joyId) {
-                        const touch = e.changedTouches[i];
-                        let dx = touch.clientX - startX;
-                        let dy = touch.clientY - startY;
-                        const dist = Math.hypot(dx, dy);
-                        const maxRadius = 50; 
-                        if (dist > maxRadius) {
-                            dx = (dx / dist) * maxRadius; dy = (dy / dist) * maxRadius;
-                        }
-                        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
-                        
-                        // Zapisujemy wartości od -1.0 do 1.0 dla silnika fizyki
-                        window.mobileJoy.dx = dx / maxRadius;
-                        window.mobileJoy.dy = dy / maxRadius;
-                    }
-                }
+            joyZone.addEventListener('touchmove', (e) => { 
+                e.preventDefault(); 
+                if (joyId === null) return; 
+                for (let i=0; i<e.changedTouches.length; i++) { 
+                    if (e.changedTouches[i].identifier === joyId) { 
+                        const touch = e.changedTouches[i]; 
+                        let dx = touch.clientX - startX; 
+                        let dy = touch.clientY - startY; 
+                        const dist = Math.hypot(dx, dy); 
+                        const maxRadius = 40; 
+                        if (dist > maxRadius) { dx = (dx / dist) * maxRadius; dy = (dy / dist) * maxRadius; } 
+                        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; 
+                        window.mobileJoy.dx = dx / maxRadius; window.mobileJoy.dy = dy / maxRadius; 
+                    } 
+                } 
             }, {passive: false});
 
-            const endJoy = (e) => {
-                e.preventDefault();
-                for (let i=0; i<e.changedTouches.length; i++) {
-                    if (e.changedTouches[i].identifier === joyId) {
-                        joyId = null; joyBase.style.display = 'none';
-                        window.mobileJoy = { dx: 0, dy: 0, active: false };
-                    }
-                }
+            const endJoy = (e) => { 
+                e.preventDefault(); 
+                for (let i=0; i<e.changedTouches.length; i++) { 
+                    if (e.changedTouches[i].identifier === joyId) { 
+                        joyId = null; joyBase.style.display = 'none'; 
+                        window.mobileJoy = { dx: 0, dy: 0, active: false }; 
+                    } 
+                } 
             };
-            joyZone.addEventListener('touchend', endJoy, {passive: false});
+            joyZone.addEventListener('touchend', endJoy, {passive: false}); 
             joyZone.addEventListener('touchcancel', endJoy, {passive: false});
 
-            // Akcje przycisków mobilnych (Wysyłają sygnał do gry, taki jak kliknięcie myszką)
-            document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                window.dispatchEvent(new Event('mobile-attack'));
+            document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mobile-attack')); }, {passive: false});
+            
+            // NAPRAWIONA TARCZA - Symuluje wciśnięcie klawisza Q
+            const shieldBtn = document.getElementById('btn-m-shield');
+            shieldBtn.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                window.dispatchEvent(new KeyboardEvent('keydown', {'key': 'q', 'code': 'KeyQ'})); 
+            }, {passive: false});
+            shieldBtn.addEventListener('touchend', (e) => { 
+                e.preventDefault(); 
+                window.dispatchEvent(new KeyboardEvent('keyup', {'key': 'q', 'code': 'KeyQ'})); 
             }, {passive: false});
         }
     </script>
