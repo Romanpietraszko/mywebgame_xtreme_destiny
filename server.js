@@ -340,6 +340,22 @@ io.on('connection', (socket) => {
         }
     });
 
+    // =======================================================
+    // NOWOŚĆ: ODBIERANIE WYNIKU LOSOWANIA Z FRONTENDU (Gacha)
+    // =======================================================
+    socket.on('claimGachaReward', (data) => {
+        const p = players[socket.id];
+        if (!p) return;
+
+        if (data.type === 'weapon') {
+            p.inventory[data.item] = 1;
+            p.activeWeapon = data.item;
+            io.emit('killEvent', { text: `🔥 ${p.name} wylosował z Gacha potężną broń: ${data.itemName}!` });
+        } else if (data.type === 'skin_fragment') {
+            io.emit('killEvent', { text: `🌟 ${p.name} zdobył z Gacha fragment: ${data.itemName}!` });
+        }
+    });
+
     socket.on('buyShopItem', (item) => {
         const p = players[socket.id];
         if (!p || !p.isSafe) return;
