@@ -1,3 +1,7 @@
+// ==========================================
+// SERVER.JS - Backend i Symulacja Świata
+// ==========================================
+
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
@@ -91,32 +95,52 @@ function spawnLoot() {
     };
 }
 
+// ==========================================
+// NOWOŚĆ: INTELIGENTNE SPAWNOWANIE BOTÓW I MINIBOSSÓW
+// ==========================================
 function spawnBot() {
     botNameCounter++;
+    
+    let botScore = 1 + Math.random() * 10; // Start z 1-10 masy (zamiast 0)
+    let botName = `Bot AI #${botNameCounter}`;
+    let botColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+    
+    // Szansa na wygenerowanie MINIBOSSA (Weterana) - od razu niebezpieczny
+    const randBoss = Math.random();
+    if (randBoss < 0.01) { // 1% szansy na super bota
+        botScore = 150 + Math.random() * 50; 
+        botName = `Czarny Tytan AI`;
+        botColor = '#111'; // Czarny kruk
+    } else if (randBoss < 0.05) { // Kolejne 4% szans na silnego bota
+        botScore = 50 + Math.random() * 30;
+        botName = `Wędrowny Rycerz AI`;
+        botColor = '#34495e'; // Stalowy
+    }
+
     return {
         id: `bot_${++entityIdCounter}`,
         x: Math.random() * WORLD_SIZE,
         y: Math.random() * WORLD_SIZE,
-        score: 0, 
-        color: `hsl(${Math.random() * 360}, 70%, 50%)`,
-        name: `Bot AI #${botNameCounter}`,
+        score: botScore, 
+        color: botColor,
+        name: botName,
         angle: Math.random() * Math.PI * 2,
         speed: 2.5,
         ownerId: null, 
-        team: null, // Pamięć o przynależności do drużyny (Teams)
-        // --- Pamięć formacji RTS ---
+        team: null, 
         angleOffset: 0, 
         distOffset: 0,  
         targetX: 0,     
         targetY: 0,
         inventory: { bow: 0, knife: 0, shuriken: 0 },
-        activeWeapon: 'sword'
+        activeWeapon: 'sword',
+        lastShootTime: 0 // Do kontrolowania agresji strzelania
     };
 }
 
 for (let i = 0; i < MAX_FOODS; i++) foods.push(spawnFood());
 for (let i = 0; i < MAX_BOTS; i++) bots.push(spawnBot());
-for (let i = 0; i < MAX_LOOTS; i++) loots.push(spawnLoot()); // Spawn startowych skrzynek
+for (let i = 0; i < MAX_LOOTS; i++) loots.push(spawnLoot());
 
 io.on('connection', (socket) => {
     console.log(`\n===========================================`);
@@ -125,15 +149,13 @@ io.on('connection', (socket) => {
 
     // --- DOŁĄCZANIE (TRYB FREE) ---
     socket.on('joinGame', (data) => {
-        // --- NOWOŚĆ: USTAWIENIA KLASY (PASYWKI) ---
         const skinType = data.skin || 'standard';
         let baseSpeed = 5;
         let massGainMult = 1.0; 
         
-        // Zwykła postać dostaje bonus do masy w logice jedzenia (1.02)
         if (skinType === 'arystokrata') {
             baseSpeed = 4.8;     
-            massGainMult = 1.15; // 15% bonusu!
+            massGainMult = 1.15; 
         } else if (skinType === 'ninja') {
             baseSpeed = 5.5;      
         }
@@ -142,32 +164,29 @@ io.on('connection', (socket) => {
             id: socket.id,
             x: 2000,
             y: 2000,
-            score: 0, // CZYSTE ZERO DLA KAŻDEGO! (Naprawiono błąd startowych punktów)
-            baseSpeed: baseSpeed, // NOWOŚĆ: Pamięć bazowej prędkości klasy
-            massMultiplier: massGainMult, // NOWOŚĆ: Pamięć mnożnika zdobywanej masy
+            score: 0, 
+            baseSpeed: baseSpeed, 
+            massMultiplier: massGainMult, 
             level: 1,
             skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 },
-            // --- NOWOŚĆ: SYSTEM 3 ŚCIEŻEK ---
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0,   
-            lastDashUse: 0, // Do umiejętności ZRYW
-            isMoving: false, // Do umiejętności TYTAN
-            idleTime: 0,     // Do umiejętności TYTAN
+            lastDashUse: 0, 
+            isMoving: false, 
+            idleTime: 0,     
             color: data.color || '#000',
             name: data.name || 'Gracz',
-            skin: skinType, // NOWOŚĆ: Zapisujemy skórkę gracza
+            skin: skinType, 
             isSafe: false,
             isShielding: false,
             armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 },
             activeWeapon: 'sword',
-            // --- NOWOŚCI RTS ---
-            isRecruiting: false, // Domyslnie pożera boty
-            formation: 0,        // 0: Okrąg, 1: Klin(V), 2: Linia, 3: Własna
-            moveAngle: 0,        // Kierunek biegu gracza do formacji
+            isRecruiting: false, 
+            formation: 0,        
+            moveAngle: 0,        
             team: null,
-            // --- NOWOŚĆ: PAMIĘĆ MIDASA (TUTORIAL SEKWENCYJNY) ---
             isTutorialActive: true,
             tutorialFlags: { m15: false, m50: false, m100: false },
             tutorialText: ""
@@ -178,7 +197,6 @@ io.on('connection', (socket) => {
         console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł jako ${skinType.toUpperCase()}!`);
         console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
 
-        // --- WYWOŁANIE MIDASA PO DOŁĄCZENIU (WITAJĄCE RÓŻNE KLASY) ---
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
@@ -196,10 +214,10 @@ io.on('connection', (socket) => {
             id: socket.id,
             x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
             skills: { speed: 0, strength: 0, weapon: 0 }, 
-            paths: { speed: 'none', strength: 'none', weapon: 'none' }, // NOWOŚĆ
+            paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
             color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
-            skin: 'standard', // W drużynach na razie standard (do ew. rozbudowy)
+            skin: 'standard', 
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
             isRecruiting: false, formation: 0, moveAngle: 0,
@@ -221,9 +239,8 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         if (p) {
             p.isMoving = (data.x !== p.x || data.y !== p.y);
-            if (p.isMoving) p.idleTime = 0; // NOWOŚĆ: Reset licznika postoju dla Tytana
+            if (p.isMoving) p.idleTime = 0; 
 
-            // Obliczamy kąt ruchu dla formacji
             if (p.isMoving) {
                 p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
             }
@@ -255,24 +272,20 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- NOWOŚĆ: ZRYW (DASH) ---
     socket.on('dash', (dir) => {
         const p = players[socket.id];
         const now = Date.now();
-        // Zryw działa tylko jeśli wybrałeś ścieżkę 'dash' i minął cooldown 3s
         if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
             p.lastDashUse = now;
             let dashDist = 150;
             p.x += dir.x * dashDist;
             p.y += dir.y * dashDist;
-            // Zabezpieczenie przed wypadnięciem za mapę
             p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
             p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
             io.emit('killEvent', { text: `💨 Zryw!`, time: 100 });
         }
     });
 
-    // --- Przełączniki RTS ---
     socket.on('toggleRecruit', () => {
         const p = players[socket.id];
         if (p) {
@@ -284,13 +297,12 @@ io.on('connection', (socket) => {
     socket.on('switchFormation', () => {
         const p = players[socket.id];
         if (p) {
-            p.formation = (p.formation + 1) % 4; // Zmiana na 4 stany
+            p.formation = (p.formation + 1) % 4; 
             let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : (p.formation === 2 ? "LINIA" : "WŁASNA (PPM)"));
             socket.emit('formationSwitched', formName);
         }
     });
 
-    // --- Odbieranie przesuniętych botów z myszki ---
     socket.on('setBotOffset', (data) => {
         const p = players[socket.id];
         let b = bots.find(bot => bot.id === data.botId);
@@ -298,42 +310,32 @@ io.on('connection', (socket) => {
             b.angleOffset = data.angleOffset;
             b.distOffset = data.distOffset;
             if (p.formation !== 3) {
-                p.formation = 3; // Automatyczna zmiana na "WŁASNA" po dotknięciu
+                p.formation = 3; 
                 socket.emit('formationSwitched', "WŁASNA (PPM)");
             }
         }
     });
 
-    // =========================================================
-    // POPRAWKA: ULEPSZANIE UMIEJĘTNOŚCI (Zwracamy pełny stan)
-    // =========================================================
     socket.on('upgradeSkill', (skillName) => {
         const p = players[socket.id];
         if (p && p.skillPoints > 0) {
             if (skillName === 'strength' && p.score < 100) return; 
             if (skillName === 'weapon' && p.score < 15) return;   
 
-            // LIMIT 20 POZIOMÓW
             let maxLevel = 20;
 
             if (p.skills[skillName] !== undefined && p.skills[skillName] < maxLevel) {
                 p.skills[skillName]++;
                 p.skillPoints--;
-                // Wysyłamy klientowi CAŁY zaktualizowany obiekt
                 socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
             }
         }
     });
 
-    // =========================================================
-    // POPRAWKA: WYBÓR ŚCIEŻEK (Zwracamy pełny stan)
-    // =========================================================
     socket.on('chooseSkillPath', (data) => {
         const p = players[socket.id];
-        // data.category = 'weapon'|'speed'|'strength', data.path = 'piercing'|'dash' itp.
         if (p && p.skills[data.category] >= 5 && p.paths[data.category] === 'none') {
             p.paths[data.category] = data.path;
-            // Wysyłamy klientowi CAŁY zaktualizowany obiekt
             socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
         }
     });
@@ -350,7 +352,6 @@ io.on('connection', (socket) => {
 
         let price = shopPrices[item];
         
-        // --- PASYWKA ARYSTOKRATY (-5% W SKLEPIE) ---
         if (p.skin === 'arystokrata') {
             price = Math.floor(price * 0.95);
         }
@@ -361,8 +362,6 @@ io.on('connection', (socket) => {
             p.activeWeapon = item;        
             socket.emit('shopSuccess', { item: item });
             
-            // --- AKTUALIZACJA ZWERBOWANYCH BOTÓW ---
-            // Gdy kupisz sprzęt, przekaż go również zwerbowanym żołnierzom!
             bots.forEach(b => {
                 if (b.ownerId === p.id) {
                     b.inventory[item] = 1;
@@ -383,7 +382,6 @@ io.on('connection', (socket) => {
             for(let t of types) if(p.inventory[t]) { p.activeWeapon = t; break; }
         }
         
-        // Zmiana broni rzutuje na żołnierzy
         bots.forEach(b => {
             if (b.ownerId === p.id) b.activeWeapon = p.activeWeapon;
         });
@@ -403,7 +401,6 @@ io.on('connection', (socket) => {
             if (canShoot) {
                 p.score -= stats.cost;
                 let finalDmg = type === 'sword' ? stats.dmg + (p.skills.weapon * 1) : stats.dmg;
-                // --- NOWOŚĆ: ZMIANA Z p.weaponPath NA p.paths.weapon ---
                 let isPierce = type === 'sword' ? (p.paths.weapon === 'piercing') : stats.piercing;
 
                 projectiles.push({
@@ -419,7 +416,6 @@ io.on('connection', (socket) => {
     socket.on('throwWinterSword', () => {
         const p = players[socket.id];
         const now = Date.now();
-        // --- NOWOŚĆ: ZMIANA Z p.weaponPath NA p.paths.weapon ---
         if (p && p.paths.weapon === 'winter' && now - p.lastWinterUse >= 15000) {
             p.lastWinterUse = now;
             let winterDmg = 15 + (p.skills.weapon * 2);
@@ -537,7 +533,6 @@ setInterval(() => {
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
             
-            // Midas ostrzega graczy:
             Object.values(players).forEach(p => {
                 if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'toxic_rain') });
             });
@@ -552,7 +547,6 @@ setInterval(() => {
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
 
-            // Midas ostrzega graczy:
             Object.values(players).forEach(p => {
                 if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'blizzard') });
             });
@@ -569,7 +563,6 @@ setInterval(() => {
     if (activeEvent === 'TOXIC_RAIN' && eventTickCounter % 30 === 0) {
         Object.values(players).forEach(p => {
             if (!p.isSafe && p.score > 5) {
-                // --- NOWOŚĆ: TYTAN OTRZYMUJE MNIEJ OBRAŻEŃ OD DESZCZU ---
                 let dmg = p.paths.strength === 'titan' ? 1 : 2;
                 p.score -= dmg;
             }
@@ -579,13 +572,26 @@ setInterval(() => {
         });
     }
 
-    // --- NOWOŚĆ: REGENERACJA TYTANA (Gdy stoi w miejscu) ---
+    // REGENERACJA TYTANA (Gdy stoi w miejscu)
     if (eventTickCounter % 30 === 0) { // Co 1 sekundę
         Object.values(players).forEach(p => {
             if (p.paths.strength === 'titan') {
                 if (!p.isMoving) p.idleTime++;
                 if (p.idleTime >= 3) { // Jeśli stoi 3 sekundy
                     p.score += 2;      // Leczy +2 co sekundę
+                }
+            }
+        });
+        
+        // ==========================================
+        // NOWOŚĆ: PASYWNY WZROST DZIKICH BOTÓW!
+        // ==========================================
+        bots.forEach(b => {
+            if (!b.ownerId) { // Tylko dzikie boty "farmią"
+                // Do 30 punktów rosną chętnie, powyżej wolniej, żeby nie zalać mapy gigantami
+                let growthChance = b.score < 30 ? 0.4 : 0.1;
+                if (Math.random() < growthChance) {
+                    b.score += 1;
                 }
             }
         });
@@ -628,7 +634,6 @@ setInterval(() => {
         let botSpeedFromOwner = owner ? owner.baseSpeed : 2.5; // Uwzględnia pasywkę Ninji!
         let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
         
-        // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ SPADKI SZYBKOŚCI W ŚNIEŻYCY ---
         let isLightweight = owner && owner.paths.speed === 'lightweight';
         let currentBotSpeed = (activeEvent === 'BLIZZARD' && !isLightweight) ? baseBotSpeed * 0.4 : baseBotSpeed;
         
@@ -686,12 +691,11 @@ setInterval(() => {
                 }
                 
                 // STRZELANIE BOTÓW ZWERBOWANYCH W STRONĘ CELÓW
-                if (Math.random() < 0.05) { // 5% szansy w każdej klatce na oddanie rzutu/strzału
+                if (Math.random() < 0.05) { 
                     let type = b.activeWeapon;
                     let stats = weaponStats[type];
                     
-                    if (stats && b.score >= stats.cost + 5) { // Muszą mieć zapas punktów na rzut
-                        // Poszukiwanie najbliższego wroga w promieniu rażenia (nie z naszej drużyny)
+                    if (stats && b.score >= stats.cost + 5) { 
                         let target = null;
                         let minBotDist = 400; // Zasięg "wzroku" botów
                         
@@ -711,13 +715,10 @@ setInterval(() => {
                             });
                         }
 
-                        // Jeżeli bot namierzył wroga, strzela w jego stronę
                         if (target) {
                             b.score -= stats.cost;
                             let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
 
-                            // --- SKALOWANIE OBRAŻEŃ BOTA DO GRACZA ---
-                            // ZMIANA: p.weaponPath zaktualizowane do owner.paths.weapon
                             let botPierce = type === 'sword' ? (owner.paths.weapon === 'piercing') : stats.piercing;
                             let botFinalDmg = type === 'sword' ? stats.dmg + ((owner.skills.weapon || 0) * 1) : stats.dmg;
 
@@ -771,14 +772,24 @@ setInterval(() => {
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
             
-            // Strzelanie dzikich botów
-            if (Math.random() < 0.01) {
+            // ==========================================
+            // NOWOŚĆ: AKTYWNA AGRESJA (STRZELANIE BOTÓW)
+            // ==========================================
+            // Dziki bot musi mieć min. 15 punktów masy (zgodnie z zasadami gracza)
+            // Strzela losowo przed siebie z 3% szansą na klatkę
+            if (b.score >= 15 && Math.random() < 0.03) {
                 let type = b.activeWeapon;
                 let stats = weaponStats[type];
-                if (stats && b.score >= stats.cost + 5) {
+                
+                // Mrożenie strzału (żeby boty nie wypluwały mieczy jak karabiny maszynowe)
+                let now = Date.now();
+                if (stats && b.score >= stats.cost + 5 && now - b.lastShootTime > 2000) {
+                    b.lastShootTime = now;
                     b.score -= stats.cost;
+                    
                     projectiles.push({
                         id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null, teamInitial: null,
+                        // Rzuca miecz z kierunkiem (dx, dy) zgodnym z kątem b.angle (kierunkiem swojego marszu)
                         x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
                         life: stats.life, speed: stats.speed, isBotSword: true,
                         scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
@@ -843,7 +854,6 @@ setInterval(() => {
 
         foods.forEach((f, fi) => {
             if (Math.hypot(p.x - f.x, p.y - f.y) < pRadius) {
-                // --- NOWOŚĆ: PASYWKA STANDARDOWEJ POSTACI (+2% Masy) LUB ARYSTOKRATY (+15%) ---
                 let massGain = 1 * p.massMultiplier;
                 if (p.skin === 'standard') massGain = 1.02; 
                 
@@ -856,7 +866,6 @@ setInterval(() => {
         loots.forEach((l, li) => {
             if (Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
                 if (l.type === 'mass') {
-                    // Arystokrata ma też bonus do skrzynek!
                     let baseLoot = 30; // --- POPRAWKA: Skrzynki dają teraz maks 30 masy ---
                     let lootMass = baseLoot * p.massMultiplier;
                     if (p.skin === 'standard') lootMass = baseLoot * 1.02; 
@@ -887,14 +896,14 @@ setInterval(() => {
                     if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
 
                     // ========================================================
-                    // NOWOŚĆ: KAMIKAZE BOTY NA KRÓLA (Koniec darmowego jedzenia!)
+                    // KAMIKAZE BOTY NA KRÓLA
                     // ========================================================
                     if (activeEvent === 'KING_HUNT' && p.id === currentKingId && b.ownerId !== p.id) {
                         if (dist < pRadius) {
-                            p.score = Math.max(10, p.score - 15); // Bot wgryza się w Króla zabierając masę
+                            p.score = Math.max(10, p.score - 15); 
                             io.emit('damageText', { x: p.x, y: p.y - 30, val: 15, color: '#f1c40f' });
-                            bots[bi] = spawnBot(); // Bot ginie w ataku samobójczym
-                            return; // Przerywamy logikę jedzenia, Król nie dostaje z niego masy
+                            bots[bi] = spawnBot(); 
+                            return; 
                         }
                     }
 
@@ -903,12 +912,11 @@ setInterval(() => {
                             // TRYB WERBOWANIA
                             io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
                             b.ownerId = p.id;
-                            b.team = p.team; // Przejęcie koloru / drużyny (dla Teams)
+                            b.team = p.team; 
                             b.score = 5; 
                             b.color = p.color; 
                             b.name = `Wojownik`; 
                             
-                            // Wyposaża od razu zwerbowanego bota w tę samą broń co gracz!
                             b.activeWeapon = p.activeWeapon;
                             if (p.activeWeapon !== 'sword') b.inventory[p.activeWeapon] = 1;
 
@@ -1031,7 +1039,6 @@ setInterval(() => {
     Object.values(players).forEach(p => {
         let skillsChanged = false;
         if (p.score < 100 && p.skills.strength > 0) { p.skills.strength = 0; skillsChanged = true; }
-        // ZMIANA na paths.weapon
         if (p.score < 15 && (p.skills.weapon > 0 || p.paths.weapon !== 'none' || p.activeWeapon !== 'sword')) {
             p.skills.weapon = 0; p.paths.weapon = 'none'; p.activeWeapon = 'sword'; skillsChanged = true;
         }
@@ -1051,8 +1058,8 @@ function getTutorialMessage(playerName, eventType) {
         'join_ninja': `Witaj w cieniach, ${playerName}. Jesteś zwinny jak Ninja, ale uważaj, jesteś bardzo delikatny na starcie! Zbieraj kropki, by przetrwać!`,
         'join_arystokrata': `Ah, Wasza Wysokość ${playerName}! Witamy na arenie. Jako Arystokrata masz zniżki w Zamkowym Sklepie i zbijasz fortunę na kropkach!`,
         'join': `Witaj na arenie XD, ${playerName}! Jestem Midas. Zbieraj pomarańczowe kropki i skrzynki z "?", by urosnąć. Uciekaj przed większymi!`,
-        'mass15': `Świetnie, masz 15 masy! Odblokowałeś Rzut Mieczem. Kliknij LPM (Myszka), by rzucić. Koszt: 2 pkt masy. Celuj uważnie!`,
-        'mass50': `Połowa drogi do potęgi (50 masy)! Możesz teraz używać Tarczy. Przytrzymaj [Q], by odbijać ataki.`,
+        'mass15': `Świetnie, masz 15 masy! Odblokowałeś Rzut Mieczem. Kliknij LPM (Myszka) lub czerwony miecz na ekranie (Telefon), by rzucić. Koszt: 2 pkt masy.`,
+        'mass50': `Połowa drogi do potęgi (50 masy)! Możesz teraz używać Tarczy. Przytrzymaj [Q] lub ikonę tarczy, by odbijać ataki.`,
         'mass100': `Niesamowite, 100 masy (5 poziom)! Szybko, użyj plusików po lewej i wybierz klasę (np. Zryw pod [SHIFT] lub Zimowy Miecz [R]).`,
         'toxic_rain': `Uwaga! Kwaśny Deszcz! 🌧️ Szybko chowaj się pod dachem Zamku, inaczej deszcz wypali Twoją masę!`,
         'blizzard': `Brrr... Śnieżyca! ❄️ Wszyscy zwalniają. To idealny moment, by rzucać mieczami w powolne cele!`
