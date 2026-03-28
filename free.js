@@ -54,7 +54,7 @@ window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- OBSŁUGA MYSZKI ---
 window.addEventListener('mousemove', (e) => {
-    if (gameState === 'PLAYING' && player) {
+    if (gameState === 'PLAYING' && player && controlType !== 'TOUCH') {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
@@ -138,6 +138,13 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
+// --- NOWOŚĆ: ODBIÓR STRZAŁU Z WIRTUALNEGO PRZYCISKU MOBILNEGO ---
+window.addEventListener('mobile-attack', () => {
+    if (gameState === 'PLAYING' && player && !player.isSafe) {
+        socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+    }
+});
+
 // --- OBSŁUGA KLAWIATURY ---
 window.onkeydown = (e) => {
     keys[e.code] = true; // Tablica keys pochodzi z engine.js
@@ -190,7 +197,6 @@ window.startGame = (type) => {
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     player = {
-        // --- ZMIANA BALANSU: Gracz startuje od zera ---
         x: 2000, y: 2000, score: 0, level: 1, 
         name: name, color: color, isSafe: false,
         isShielding: false, aura: null, 
@@ -198,19 +204,16 @@ window.startGame = (type) => {
         activeWeapon: 'sword',
         isRecruiting: false,
         formation: 0,
-        // --- NOWOŚĆ: PAMIĘĆ TUTORIALA ---
         isTutorialActive: true,
         tutorialText: "Ładowanie porady z serwera wiedzy...",
-        // --- NOWOŚĆ: Przesyłamy wybraną skórkę z interfejsu (lub domyślną) ---
         skin: window.playerSkin || 'standard'
     };
     if (myId) player.id = myId;
     
-    // --- NOWOŚĆ: Wysyłamy wybrany skin do serwera! ---
+    // Wysyłamy wybrany skin do serwera!
     socket.emit('joinGame', { name, color, skin: player.skin });
     gameState = 'PLAYING';
     
-    // Zapewniamy, że czas startu do ograniczania klatek jest prawidłowy
     lastFrameTime = performance.now();
     requestAnimationFrame(gameLoop);
 };
@@ -223,13 +226,12 @@ socket.on('skillUpdated', (data) => {
     playerSkills = data.skills; 
     skillPoints = data.points; 
     paths = data.paths || paths; 
-    window.weaponPath = paths.weapon; // --- POPRAWKA: Synchronizacja ze starą zmienną! ---
+    window.weaponPath = paths.weapon;
 });
 
 socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
 
-// --- NOWOŚĆ: ODBIERANIE WIADOMOŚCI OD MIDASA (PHI3) ---
 socket.on('tutorialTick', (data) => {
     if (player) {
         player.tutorialText = data.text;
@@ -237,7 +239,6 @@ socket.on('tutorialTick', (data) => {
     }
 });
 
-// --- PRZEŁĄCZNIKI RTS ---
 socket.on('recruitToggled', (state) => { 
     if (player) player.isRecruiting = state;
     killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
@@ -248,7 +249,6 @@ socket.on('formationSwitched', (formName) => {
 
 // Odbieranie informacji o obrażeniach i GENEROWANIE CZĄSTECZEK
 socket.on('damageText', (data) => {
-    // 1. Dodajemy tekst obrażeń
     damageTexts.push({
         x: data.x + (Math.random() * 20 - 10), 
         y: data.y,
@@ -259,22 +259,21 @@ socket.on('damageText', (data) => {
         vy: -2 - Math.random() * 2 
     });
 
-    // 2. NOWOŚĆ: Dodajemy eksplozję cząsteczek (Particles)
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
-    let count = data.val > 20 ? 12 : 6; // Mocniejsze uderzenie = więcej krwi/iskier!
+    let count = data.val > 20 ? 12 : 6; 
     
     for (let i = 0; i < count; i++) {
         let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 6 + 2; // Siła rozbryzgu
+        let speed = Math.random() * 6 + 2;
         particles.push({
             x: data.x,
             y: data.y,
             vx: Math.cos(angle) * speed,
             vy: Math.sin(angle) * speed,
             life: 1.0,
-            decay: Math.random() * 0.05 + 0.02, // Szybkość znikania
+            decay: Math.random() * 0.05 + 0.02, 
             color: particleColor,
-            size: Math.random() * 4 + 2 // Losowy rozmiar kropelki
+            size: Math.random() * 4 + 2 
         });
     }
 });
@@ -321,13 +320,12 @@ socket.on('serverTick', (data) => {
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword';
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
+        if (otherPlayers[myId].skin) player.skin = otherPlayers[myId].skin; // Twarde zabezpieczenie skórki!
     }
     delete otherPlayers[myId];
 });
 
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
-
-// --- NOWOŚĆ: Przesyłamy kategorię i nazwę ścieżki do serwera ---
 window.choosePath = (category, pathName) => { socket.emit('chooseSkillPath', { category: category, path: pathName }); };
 
 function checkEquipmentUpgrades() {
@@ -360,7 +358,20 @@ function update() {
     if (player.aura && player.aura.time > 0) player.aura.time--;
 
     let dx = 0, dy = 0;
-    if (controlType === 'WASD') {
+    
+    // --- NOWOŚĆ: OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
+    if (controlType === 'TOUCH') {
+        if (window.mobileJoy && window.mobileJoy.active) {
+            dx = window.mobileJoy.dx;
+            dy = window.mobileJoy.dy;
+            
+            // Ciało i miecz celują tam, gdzie idziesz
+            lastMoveDir = { x: dx, y: dy };
+            
+            let len = Math.hypot(dx, dy);
+            if (len > 0) { dx /= len; dy /= len; }
+        }
+    } else if (controlType === 'WASD') {
         if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
     } else {
         if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
@@ -370,12 +381,10 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        // --- NOWOŚĆ: PASYWKA KLASY NINJA ---
         if (player.skin === 'ninja') {
             speed *= 1.05; // 5% szybciej!
         }
 
-        // --- NOWOŚĆ: LEKKIE STOPY IGNORUJĄ SPADKI SZYBKOŚCI W ŚNIEŻYCY ---
         if (currentEvent === 'BLIZZARD') {
             if (paths.speed !== 'lightweight') {
                 speed *= 0.4; 
@@ -399,17 +408,13 @@ function update() {
 // LIMITOWANIE FPS DO 60 W GŁÓWNEJ PĘTLI
 // ==========================================
 function gameLoop(currentTime) {
-    // Obliczamy ile czasu minęło od ostatniej klatki
     const deltaTime = currentTime - lastFrameTime;
 
-    // Jeśli minęło mniej czasu niż wymaga tego 60 FPS (16.6ms), czekamy i prosimy o kolejną klatkę
     if (deltaTime < frameDuration) {
         requestAnimationFrame(gameLoop);
         return;
     }
 
-    // Jeśli czas minął, ustalamy nowy punkt startowy dla kolejnej klatki
-    // Zdejmujemy resztę z dzielenia (tzw. "overhang"), żeby klatki szły równomiernie i się nie nawarstwiały
     lastFrameTime = currentTime - (deltaTime % frameDuration);
 
     let allEntities = Object.values(otherPlayers).concat(bots);
@@ -507,55 +512,46 @@ function gameLoop(currentTime) {
 
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
-            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
             b.weaponPath = b.paths ? b.paths.weapon : 'none';
             drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); 
         });
 
         Object.values(otherPlayers).forEach(p => {
             if (p.isSafe && (!player || !player.isSafe)) return;
-            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
             p.weaponPath = p.paths ? p.paths.weapon : 'none';
             drawStickman(p, p.x, p.y, getScale(p.score), p.isSafe, currentKingId);
         });
         
         if (player && gameState !== 'GAMEOVER') {
-            // Podpinamy weaponPath z powrotem pod obiekty na czas rysowania
             player.weaponPath = paths.weapon || 'none';
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
 
-        // =========================================================
-        // NOWOŚĆ: Rysowanie fizyki cząsteczek (Krew / Iskry)
-        // =========================================================
+        // Rysowanie fizyki cząsteczek (Krew / Iskry)
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i];
             
-            // Fizyka
             p.x += p.vx;
             p.y += p.vy;
-            p.vx *= 0.85; // Tarcie - cząsteczki drastycznie zwalniają
+            p.vx *= 0.85; 
             p.vy *= 0.85; 
-            p.life -= p.decay; // Starzenie się
+            p.life -= p.decay; 
 
-            // Rysowanie
             ctx.save();
             ctx.globalAlpha = Math.max(0, p.life);
             ctx.fillStyle = p.color;
             ctx.beginPath();
             
-            // --- ZABEZPIECZENIE: Promień nie może być ujemny! ---
             let currentRadius = Math.max(0, p.size * p.life);
             ctx.arc(p.x, p.y, currentRadius, 0, Math.PI * 2);
             
             ctx.fill();
             ctx.restore();
 
-            // Usuwanie martwych cząsteczek
             if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Rysowanie wyskakujących obrażeń (Combat Feedback)
+        // Rysowanie wyskakujących obrażeń
         for (let i = damageTexts.length - 1; i >= 0; i--) {
             let dt = damageTexts[i];
             
@@ -618,31 +614,23 @@ function gameLoop(currentTime) {
         }
 
         // --- RYSOWANIE UI ---
-
-        // ==========================================================
-        // RYSOWANIE MIDASA (ASYSTENTA AI) - TUTORIAL
-        // ==========================================================
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save();
             let tutorialX = 20; 
             let tutorialY = canvas.height - 200; 
             
-            // Tło okienka dialogowego
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
             ctx.fillRect(tutorialX, tutorialY, 380, 110);
             ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; 
             ctx.strokeRect(tutorialX, tutorialY, 380, 110);
             
-            // Portret Midasa (sprawdzamy czy obrazek się załadował i obiekt istnieje)
             if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
                 ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
             }
             
-            // Imię Asystenta
             ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
             ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
             
-            // Wiadomość od Ollamy (używamy wrapText z engine.js)
             ctx.fillStyle = '#000'; ctx.font = '13px Arial';
             if (player.tutorialText) {
                 if (window.wrapText) {
@@ -652,7 +640,6 @@ function gameLoop(currentTime) {
                 }
             }
             
-            // Instrukcja ukrycia
             ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial';
             ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
             
@@ -728,7 +715,6 @@ function gameLoop(currentTime) {
             for(let t of types) { if(player.inventory && player.inventory[t]) { secText = t.replace('_', ' ').toUpperCase(); break; } }
             ctx.font = '9px Arial'; ctx.fillText(secText, startX + 65, startY + 40);
 
-            // --- RYSOWANIE COOLDOWNU DLA ZIMOWEGO MIECZA ---
             if (paths.weapon === 'winter') {
                 let timePassed = Date.now() - lastWinterUseClient;
                 let cooldownTotal = 15000; 
@@ -752,18 +738,14 @@ function gameLoop(currentTime) {
                 }
             }
             
-            // =========================================================
-            // --- NOWOŚĆ: RYSOWANIE COOLDOWNU DLA ZRYWU (SHIFT) ---
-            // =========================================================
             if (paths.speed === 'dash') {
                 let timePassedD = Date.now() - lastDashUseClient;
                 let cooldownTotalD = 3000; 
                 let dashProgress = Math.min(1, timePassedD / cooldownTotalD);
                 let timeLeftD = Math.ceil((cooldownTotalD - timePassedD) / 1000);
 
-                let btnXD = startX + 180; // Przesunięte w prawo od przycisku R
+                let btnXD = startX + 180;
                 ctx.fillStyle = 'rgba(44, 62, 80, 0.8)'; ctx.fillRect(btnXD, startY, 50, 50);
-                // Zielony pasek ładowania dla szybkości
                 ctx.fillStyle = 'rgba(46, 204, 113, 0.8)'; ctx.fillRect(btnXD, startY + 50 * (1 - dashProgress), 50, 50 * dashProgress);
                 ctx.strokeStyle = dashProgress >= 1 ? '#2ecc71' : '#7f8c8d'; ctx.lineWidth = 2; ctx.strokeRect(btnXD, startY, 50, 50);
                 
@@ -780,15 +762,11 @@ function gameLoop(currentTime) {
             }
             ctx.restore();
 
-            // ==============================================================
-            // NOWOŚĆ: Dynamiczne menu umiejętności - Wstrzykiwanie HTML
-            // ==============================================================
             const skillMenu = document.getElementById('skill-menu');
             let needsWeaponPath = (playerSkills.weapon >= 5 && paths.weapon === 'none');
             let needsSpeedPath = (playerSkills.speed >= 5 && paths.speed === 'none');
             let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
 
-            // Pokazuj menu jeśli są punkty LUB jeśli trzeba wybrać JAKĄKOLWIEK ścieżkę
             if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
@@ -801,7 +779,6 @@ function gameLoop(currentTime) {
 
                 let currentUIState = skillPoints + "|" + JSON.stringify(playerSkills) + "|" + JSON.stringify(paths) + "|" + player.score;
                 
-                // Odświeżaj HTML tylko wtedy, gdy stan punktów/lvli się zmienił (unikamy migania i lagów)
                 if (lastSkillMenuState !== currentUIState) {
                     lastSkillMenuState = currentUIState;
                     
@@ -832,7 +809,6 @@ function gameLoop(currentTime) {
                         html += `</div></div>`;
                     });
                     
-                    // Bezpośrednie wrzucenie kodu w kontener w index.html
                     let targetDiv = document.getElementById('skills-container');
                     if (targetDiv) targetDiv.innerHTML = html;
                 }
@@ -861,5 +837,3 @@ function gameLoop(currentTime) {
     }
     requestAnimationFrame(gameLoop);
 }
-
-// OSTRZEŻENIE: Wywołanie pętli znajduje się teraz w funkcji startGame!
