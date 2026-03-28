@@ -280,9 +280,14 @@ h1 {
 /* --- RESPONSYWNOŚĆ GLOBALNA --- */
 /* Zmiany dla wąskich i krótkich ekranów wchodzą tu do gry i "nadpisują" duże wartości */
 @media (max-width: 480px), (max-height: 650px) {
+    #ui-layer {
+        align-items: flex-start; /* Na telefonach równamy do góry, żeby nie ucinało dołu */
+        overflow-y: auto; /* Pozwala przewijać jeśli menu jest za długie */
+    }
     #menu { 
         padding: 20px; 
-        border-radius: 20px; 
+        border-radius: 20px;
+        margin: 0 auto; 
     }
     #university-logo {
         top: 10px;
