@@ -8,6 +8,8 @@ body, html {
     background-color: #f0f4f8;
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     user-select: none; /* Zapobiega zaznaczaniu tekstu podczas walki */
+    -webkit-user-select: none; /* Wsparcie Safari */
+    touch-action: manipulation; /* Optymalizacja dotyku */
 }
 
 canvas {
@@ -28,6 +30,8 @@ canvas {
     justify-content: center;
     align-items: center;
     z-index: 100;
+    padding: 15px; /* Margines bezpieczeństwa na małych ekranach */
+    box-sizing: border-box;
 }
 
 #menu {
@@ -35,10 +39,24 @@ canvas {
     padding: 40px;
     border-radius: 30px;
     text-align: center;
-    width: 420px;
+    /* MAGIA RESPONSYWNOŚCI: Płynna szerokość zamiast sztywnej */
+    width: 100%; 
+    max-width: 420px; 
+    max-height: 90vh; /* Nigdy nie wyjdzie poza ekran w pionie */
+    overflow-y: auto; /* Jak się nie mieści -> włączamy scroll palcem */
+    box-sizing: border-box;
     box-shadow: 0 25px 60px rgba(0,0,0,0.4);
     border: 4px solid #2c3e50;
     animation: fadeIn 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+/* Ukrywamy brzydki pasek scrolla, ale zostawiamy funkcjonalność przewijania */
+#menu::-webkit-scrollbar {
+    width: 6px;
+}
+#menu::-webkit-scrollbar-thumb {
+    background-color: #bdc3c7;
+    border-radius: 10px;
 }
 
 h1 {
@@ -48,12 +66,15 @@ h1 {
     text-transform: uppercase;
     letter-spacing: -3px;
     margin-bottom: 5px;
+    /* Płynne skalowanie fontu na bardzo małych urządzeniach */
+    font-size: clamp(32px, 8vw, 52px); 
 }
 
 #sub-title {
     color: #7f8c8d;
     margin-bottom: 30px;
     font-weight: 500;
+    font-size: clamp(12px, 4vw, 16px);
 }
 
 /* KROKI MENU */
@@ -94,14 +115,15 @@ h1 {
     background: #27ae60;
     color: white;
     border: none;
-    padding: 20px;
+    padding: 18px;
     width: 100%;
     border-radius: 15px;
-    font-size: 20px;
+    font-size: clamp(16px, 5vw, 20px);
     font-weight: 800;
     cursor: pointer;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     box-shadow: 0 4px 0 #1e8449;
+    box-sizing: border-box;
 }
 
 .main-btn:hover {
@@ -117,19 +139,23 @@ h1 {
 
 .control-grid {
     display: flex;
-    gap: 20px;
+    gap: 15px;
     margin-top: 25px;
+    flex-wrap: wrap; /* Pozwala kartom spadać w dół na wąskich ekranach */
 }
 
 .control-card {
     flex: 1;
+    min-width: 100px; /* Nie pozwala kartom zrobić się mikroskopijnym */
     border: 3px solid #ecf0f1;
-    padding: 25px 15px;
+    padding: 20px 10px;
     border-radius: 20px;
     cursor: pointer;
     transition: all 0.3s ease;
     background: #fcfcfc;
     position: relative;
+    touch-action: manipulation;
+    box-sizing: border-box;
 }
 
 .control-card:hover {
@@ -141,11 +167,11 @@ h1 {
 .keys-preview {
     background: #2c3e50;
     color: #3498db;
-    padding: 6px 12px;
+    padding: 6px 10px;
     border-radius: 8px;
     font-family: 'Courier New', monospace;
     font-weight: 900;
-    font-size: 18px;
+    font-size: clamp(14px, 4vw, 18px);
     margin-bottom: 12px;
     display: inline-block;
     box-shadow: 0 3px 0 #000;
@@ -155,24 +181,26 @@ h1 {
     display: block;
     font-weight: 700;
     color: #7f8c8d;
-    font-size: 13px;
+    font-size: clamp(11px, 3vw, 13px);
 }
 
 /* PANEL UMIEJĘTNOŚCI (W TRAKCIE GRY) */
 #skill-menu {
     position: fixed;
-    left: 25px;
-    bottom: 25px;
+    left: 20px;
+    bottom: 20px;
     background: rgba(255, 255, 255, 0.98);
-    padding: 25px;
+    padding: 20px;
     border: 4px solid #2c3e50;
     border-radius: 22px;
     display: none; 
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     box-shadow: 0 15px 40px rgba(0,0,0,0.25);
     z-index: 50;
-    min-width: 200px;
+    width: 90%;
+    max-width: 300px;
+    box-sizing: border-box;
 }
 
 .sp-label {
@@ -188,7 +216,7 @@ h1 {
     background: #3498db;
     color: white;
     border: none;
-    padding: 14px 18px;
+    padding: 12px 15px;
     border-radius: 12px;
     cursor: pointer;
     font-weight: 700;
@@ -197,19 +225,20 @@ h1 {
     display: flex;
     justify-content: space-between;
     align-items: center;
+    font-size: 14px;
 }
 
 .skill-btn:hover {
     background: #2980b9;
-    padding-left: 25px;
+    padding-left: 20px;
     transform: translateX(5px);
 }
 
 /* BRANDING I DODATKI */
 #university-logo {
     position: absolute;
-    top: 25px;
-    right: 25px;
+    top: 20px;
+    right: 20px;
     z-index: 10;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     filter: drop-shadow(0 5px 15px rgba(0,0,0,0.1));
@@ -220,9 +249,9 @@ h1 {
 }
 
 #game-info {
-    margin-top: 30px;
+    margin-top: 20px;
     color: #bdc3c7;
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 600;
     border-top: 1px solid #eee;
     padding-top: 15px;
@@ -238,7 +267,6 @@ h1 {
     to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
-/* EFEKT DLA TARCZY (DO JS - dodawanie klasy do body przy bloku) */
 .shield-flash {
     animation: bluePulse 0.3s ease;
 }
@@ -249,10 +277,27 @@ h1 {
     100% { box-shadow: inset 0 0 0 rgba(52, 152, 219, 0); }
 }
 
-/* RESPONSYWNOŚĆ DLA MAŁYCH EKRANÓW */
-@media (max-height: 700px) {
-    #menu { padding: 30px; width: 360px; }
-    h1 { font-size: 38px; }
-    .control-grid { gap: 10px; }
-    .control-card { padding: 15px 10px; }
+/* --- RESPONSYWNOŚĆ GLOBALNA --- */
+/* Zmiany dla wąskich i krótkich ekranów wchodzą tu do gry i "nadpisują" duże wartości */
+@media (max-width: 480px), (max-height: 650px) {
+    #menu { 
+        padding: 20px; 
+        border-radius: 20px; 
+    }
+    #university-logo {
+        top: 10px;
+        right: 10px;
+    }
+    #university-logo img {
+        height: 40px !important;
+    }
+    .input-group {
+        margin-bottom: 15px;
+    }
+    #playerName {
+        padding: 12px;
+    }
+    .control-grid {
+        margin-top: 15px;
+    }
 }
