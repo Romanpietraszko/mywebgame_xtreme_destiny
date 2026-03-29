@@ -50,6 +50,12 @@ let lastFrameTime = performance.now();
 const targetFPS = 60;
 const frameDuration = 1000 / targetFPS; // Ok. 16.66ms na klatkę
 
+// =======================================================
+// NOWOŚĆ: CZASOWY SYSTEM GACHA (LOOTBOX) - ZMIENIONE NA 60s
+// =======================================================
+let nextGachaTime = 0;
+const GACHA_INTERVAL_MS = 60 * 1000; // 60 sekund do testów!
+
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- OBSŁUGA MYSZKI ---
@@ -215,6 +221,7 @@ window.startGame = (type) => {
     gameState = 'PLAYING';
     
     lastFrameTime = performance.now();
+    nextGachaTime = Date.now() + GACHA_INTERVAL_MS; // Ustawiamy czas pierwszego Gacha!
     requestAnimationFrame(gameLoop);
 };
 
@@ -424,6 +431,22 @@ function gameLoop(currentTime) {
     let currentKingId = topEntities.length > 0 ? (topEntities[0].id || topEntities[0].name) : null;
     
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
+        
+        // =======================================================
+        // NOWOŚĆ: WYZWALACZ CZASOWEGO GACHA!
+        // =======================================================
+        if (gameState === 'PLAYING' && Date.now() > nextGachaTime && window.showGachaAnimation) {
+            // Pauzujemy sterowanie żeby gracz mógł odebrać nagrodę
+            gameState = 'PAUSED'; 
+            
+            window.showGachaAnimation((rewardData) => {
+                // Po odebraniu nagrody wracamy do gry i ustawiamy kolejny czas (za 60 sekund)
+                socket.emit('claimGachaReward', rewardData);
+                gameState = 'PLAYING';
+                nextGachaTime = Date.now() + GACHA_INTERVAL_MS;
+            });
+        }
+
         if (gameState === 'PLAYING') {
             update(); checkEquipmentUpgrades(); 
         }
@@ -458,7 +481,7 @@ function gameLoop(currentTime) {
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
         ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        safeZones.forEach(z => drawCastle(z.x, z.y, z.radius)); 
+        safeZones.forEach(z => drawCastle(ctx, z)); 
         
         foods.forEach(f => {
             ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
@@ -766,8 +789,10 @@ function gameLoop(currentTime) {
             let needsWeaponPath = (playerSkills.weapon >= 5 && paths.weapon === 'none');
             let needsSpeedPath = (playerSkills.speed >= 5 && paths.speed === 'none');
             let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
+            let hasAnyPath = paths.speed !== 'none' || paths.strength !== 'none' || paths.weapon !== 'none';
 
-            if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath) {
+            // --- NOWOŚĆ: Stały widok HUD, jeśli masz wybraną ścieżkę lub punkty! ---
+            if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath || hasAnyPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
                 
@@ -788,16 +813,22 @@ function gameLoop(currentTime) {
                         let currentPath = paths[cat.id];
                         let canUpgrade = skillPoints > 0 && player.score >= cat.req && lvl < 20; 
                         
+                        // --- NOWOŚĆ: Ewolucja poziomu 20 (Przebudzenie) ---
+                        let levelText = lvl >= 20 ? `(Lv. MAX - PRZEBUDZENIE!)` : `(Lv. ${lvl}/20)`;
+                        let titleColor = lvl >= 20 ? '#e67e22' : '#000';
+                        
                         html += `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                                     <span style="font-size: 24px;">${cat.icon}</span>
                                     <div style="flex-grow: 1;">
-                                        <div style="font-weight: bold; font-size: 14px; display: flex; justify-content: space-between;">
-                                            <span>${cat.name} (Lv. ${lvl}/20)</span>
+                                        <div style="font-weight: bold; font-size: 14px; display: flex; justify-content: space-between; color: ${titleColor};">
+                                            <span>${cat.name} ${levelText}</span>
                                             <button class="skill-btn" ${!canUpgrade ? 'disabled' : ''} onclick="upgrade('${cat.id}')">➕</button>
                                         </div>`;
                         
                         if (currentPath !== 'none') {
-                            html += `<div style="font-size: 11px; color: #27ae60; font-weight: bold; margin-top: 2px;">ŚCIEŻKA: ${currentPath.toUpperCase()}</div>`;
+                            let pathColor = lvl >= 20 ? '#e74c3c' : '#27ae60';
+                            let pathText = lvl >= 20 ? `MISTRZ: ${currentPath.toUpperCase()}` : `ŚCIEŻKA: ${currentPath.toUpperCase()}`;
+                            html += `<div style="font-size: 11px; color: ${pathColor}; font-weight: bold; margin-top: 2px;">${pathText}</div>`;
                         } else if (lvl >= 5) {
                             html += `<div style="display: flex; gap: 5px; margin-top: 5px;">
                                         <button class="skill-btn" style="background: #e67e22; flex:1;" onclick="choosePath('${cat.id}', '${cat.path1}')">${cat.path1Name}</button>
@@ -824,7 +855,7 @@ function gameLoop(currentTime) {
             wasSafe = player.isSafe; 
         }
 
-        if (gameState === 'PAUSED') {
+        if (gameState === 'PAUSED' && !document.getElementById('gacha-modal').style.display.includes('flex')) {
             ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
             ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
