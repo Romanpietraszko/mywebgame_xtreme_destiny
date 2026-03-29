@@ -120,47 +120,6 @@ function drawSwordModel(p, x, y, angle, sc, tier = 1) {
     ctx.restore();
 }
 
-function drawProArmor(x, y, sc, tier, strengthLvl) {
-    ctx.save();
-    let mainColor = tier === 3 ? '#f1c40f' : (tier === 2 ? '#3498db' : '#95a5a6');
-    let shadowColor = tier === 3 ? '#d35400' : (tier === 2 ? '#2980b9' : '#7f8c8d');
-
-    ctx.fillStyle = shadowColor;
-    ctx.beginPath(); ctx.moveTo(x - 11 * sc, y - 10 * sc); ctx.lineTo(x + 11 * sc, y - 10 * sc);
-    ctx.lineTo(x + 14 * sc, y + 15 * sc); ctx.lineTo(x - 14 * sc, y + 15 * sc); ctx.fill();
-
-    ctx.fillStyle = mainColor;
-    ctx.beginPath(); ctx.moveTo(x - 9 * sc, y - 10 * sc); ctx.lineTo(x + 9 * sc, y - 10 * sc);
-    ctx.lineTo(x + 11 * sc, y + 13 * sc); ctx.lineTo(x - 11 * sc, y + 13 * sc); ctx.fill();
-
-    if (strengthLvl >= 100) {
-        ctx.fillStyle = '#8e44ad'; 
-        ctx.fillRect(x - 13 * sc, y - 12 * sc, 26 * sc, 8 * sc);
-        ctx.fillStyle = '#f1c40f'; 
-        ctx.beginPath(); ctx.moveTo(x, y - 5 * sc); ctx.lineTo(x + 8 * sc, y + 5 * sc); ctx.lineTo(x, y + 15 * sc); ctx.lineTo(x - 8 * sc, y + 5 * sc); ctx.fill();
-        ctx.shadowBlur = 10 * sc; ctx.shadowColor = '#9b59b6';
-        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * sc; ctx.stroke();
-    } else if (strengthLvl >= 55) {
-        ctx.fillStyle = '#00ffff';
-        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * sc); ctx.fill();
-        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * sc); ctx.fill();
-        ctx.fillRect(x - 4 * sc, y, 8 * sc, 10 * sc);
-    } else if (strengthLvl >= 20) {
-        ctx.fillStyle = '#bdc3c7';
-        ctx.fillRect(x - 10 * sc, y - 5 * sc, 20 * sc, 4 * sc);
-        ctx.fillRect(x - 8 * sc, y + 2 * sc, 16 * sc, 4 * sc);
-        ctx.fillStyle = '#7f8c8d';
-        ctx.beginPath(); ctx.arc(x, y + 8 * sc, 4 * sc, 0, Math.PI*2); ctx.fill();
-    } else if (strengthLvl >= 5) {
-        ctx.fillStyle = '#d35400';
-        ctx.fillRect(x - 12 * sc, y - 10 * sc, 6 * sc, 6 * sc);
-        ctx.fillRect(x + 6 * sc, y - 10 * sc, 6 * sc, 6 * sc);
-        ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 2 * sc;
-        ctx.beginPath(); ctx.moveTo(x - 8 * sc, y - 10 * sc); ctx.lineTo(x + 8 * sc, y + 10 * sc); ctx.stroke();
-    }
-    ctx.restore();
-}
-
 function drawProHelmet(x, y, sc, tier) {
     ctx.save();
     let col = tier === 3 ? '#f1c40f' : (tier === 2 ? '#3498db' : '#7f8c8d');
@@ -218,6 +177,101 @@ function drawProShield(x, y, sc, tier) {
     ctx.restore();
 }
 
+// ==========================================
+// NOWOŚĆ: DYNAMICZNY PANCERZ (PUKLERZ I NARAMIENNIKI)
+// ==========================================
+function drawDynamicArmor(e, x, y, sc, tier) {
+    if (tier === 0) return; // Zwykły patyczak, brak masy
+    
+    ctx.save();
+    ctx.translate(x, y);
+    
+    // Bazowe kolory zależne od wybranego skina
+    let skinType = e.skin || 'standard';
+    let baseColor = '#bdc3c7'; // Srebrny (Standard)
+    let trimColor = '#7f8c8d'; // Ciemnosrebrny
+    let gemColor = null;
+
+    if (skinType === 'ninja') {
+        baseColor = '#2c3e50'; // Czarny/Granat
+        trimColor = '#e74c3c'; // Czerwony pasek
+    } else if (skinType === 'arystokrata') {
+        baseColor = '#f1c40f'; // Złoty
+        trimColor = '#e67e22'; // Pomarańczowy/Miedziany
+        gemColor = '#8e44ad';  // Fioletowy rubin
+    }
+
+    // TIER 1 (Masa 100+): PUKLERZ NA LEWYM RAMIENIU
+    if (tier >= 1) {
+        ctx.save();
+        ctx.translate(-25 * sc, 5 * sc); // Ustawienie na lewym ramieniu
+        ctx.rotate(-Math.PI / 8);        // Lekkie przechylenie
+
+        if (skinType === 'ninja') {
+            // Karwasz Ninji
+            ctx.fillStyle = baseColor;
+            ctx.beginPath(); ctx.moveTo(-6*sc, -12*sc); ctx.lineTo(6*sc, -12*sc); ctx.lineTo(10*sc, 15*sc); ctx.lineTo(0, 22*sc); ctx.lineTo(-10*sc, 15*sc); ctx.fill();
+            ctx.strokeStyle = trimColor; ctx.lineWidth = 2*sc; ctx.stroke();
+        } else {
+            // Klasyczny lub Złoty Puklerz
+            ctx.fillStyle = baseColor;
+            ctx.beginPath(); ctx.arc(0, 0, 14 * sc, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = trimColor; ctx.lineWidth = 3 * sc; ctx.stroke();
+            
+            if (gemColor) { // Szmaragd/Rubin dla Arystokraty
+                ctx.fillStyle = gemColor;
+                ctx.beginPath(); ctx.arc(0, 0, 5 * sc, 0, Math.PI * 2); ctx.fill();
+                ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+            } else { // Metalowy nit dla Standardu
+                ctx.fillStyle = '#ecf0f1';
+                ctx.beginPath(); ctx.arc(0, 0, 4 * sc, 0, Math.PI * 2); ctx.fill();
+            }
+        }
+        ctx.restore();
+    }
+
+    // TIER 2 (Masa 300+): POTĘŻNE NARAMIENNIKI
+    if (tier >= 2) {
+        ctx.fillStyle = baseColor;
+        ctx.strokeStyle = trimColor;
+        ctx.lineWidth = 2 * sc;
+
+        // Lewy Naramiennik
+        ctx.beginPath(); ctx.ellipse(-28 * sc, -15 * sc, 12 * sc, 18 * sc, Math.PI / 4, 0, Math.PI); ctx.fill(); ctx.stroke();
+        // Prawy Naramiennik
+        ctx.beginPath(); ctx.ellipse(28 * sc, -15 * sc, 12 * sc, 18 * sc, -Math.PI / 4, 0, Math.PI); ctx.fill(); ctx.stroke();
+    }
+
+    // TIER 3 (Masa 600+): KORONA ENERGII / AURA WETERANA
+    if (tier >= 3) {
+        let auraTime = Date.now() / 200;
+        let floatY = Math.sin(auraTime) * 5 * sc;
+        
+        ctx.save();
+        ctx.translate(0, -45 * sc + floatY); // Unosi się nad głową
+        
+        if (skinType === 'ninja') {
+            // Mroczna Aura Ninji
+            ctx.fillStyle = '#e74c3c';
+            ctx.shadowColor = '#c0392b'; ctx.shadowBlur = 15;
+            ctx.beginPath(); ctx.moveTo(0, -15*sc); ctx.lineTo(10*sc, 5*sc); ctx.lineTo(-10*sc, 5*sc); ctx.fill();
+            ctx.beginPath(); ctx.moveTo(0, 10*sc); ctx.lineTo(5*sc, 20*sc); ctx.lineTo(-5*sc, 20*sc); ctx.fill();
+        } else {
+            // Diadem Wojownika / Złota Korona
+            let crownColor = skinType === 'arystokrata' ? '#f1c40f' : '#ecf0f1';
+            ctx.fillStyle = crownColor;
+            ctx.shadowColor = crownColor; ctx.shadowBlur = 20;
+            ctx.beginPath(); 
+            ctx.moveTo(-20*sc, 0); ctx.lineTo(-15*sc, -20*sc); ctx.lineTo(-7*sc, -5*sc); 
+            ctx.lineTo(0, -25*sc); ctx.lineTo(7*sc, -5*sc); ctx.lineTo(15*sc, -20*sc); 
+            ctx.lineTo(20*sc, 0); ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    ctx.restore();
+}
+
 function drawStickman(e, x, y, sc, safe, kingId) {
     if (safe) return; 
 
@@ -261,8 +315,8 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     const actWpn = e.activeWeapon || 'sword';
     const moveDir = (typeof lastMoveDir !== 'undefined') ? lastMoveDir : {x: 1, y: 0};
 
-    const armorTier = getTier(score, [100, 450, 850]); 
-    const helmetTier = getTier(score, [500, 800, 1150]); 
+    // Obliczamy Tier Ekwipunku na podstawie MASY (100, 300, 600)
+    const equipmentTier = getTier(score, [100, 300, 600]); 
     const swordTier = getTier(score, [15, 300, 700]); 
     const shieldTier = getTier(score, [50, 150, 300]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
@@ -314,8 +368,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
     }
 
-    if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
-
     let eId = e.id || e.name || 'unknown'; 
     if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
     if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
@@ -341,6 +393,9 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         
         ctx.drawImage(currentSkinImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
         
+        // RYSOWANIE EPICKIEGO PANCERZA BEZPOŚREDNIO NA POSTACI HUMANA!
+        drawDynamicArmor(e, 0, 0, sc, equipmentTier);
+
         if (visualStates[eId].eatTimer > 0) {
             ctx.rotate(-wobble); ctx.scale(1/breatheX, 1/breatheY);
             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(25 * sc, -25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
@@ -367,6 +422,11 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.moveTo(x + 11 * sc, y - 11 * sc); ctx.lineTo(x + 4 * sc, y - 8 * sc); 
         ctx.stroke();
 
+        // RYSOWANIE EPICKIEGO PANCERZA DLA BOTA (Jeśli ma dużo masy)
+        if (equipmentTier > 0) {
+            drawDynamicArmor(e, x, y, sc, equipmentTier);
+        }
+
         if (visualStates[eId].eatTimer > 0) {
             ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
@@ -375,8 +435,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     }
     
     ctx.restore();
-
-    if (helmetTier > 0) drawProHelmet(x, y, sc, helmetTier);
 
     if (e.isShielding) { 
         ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; ctx.beginPath(); 
@@ -410,8 +468,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
     if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') { ctx.save(); ctx.translate(x - 10 * sc, y + 18 * sc); ctx.fillStyle = '#34495e'; for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); } ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     
-    if (kingId === eId && score >= 1) { ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(x - 12 * sc, y - 35 * sc); ctx.lineTo(x - 12 * sc, y - 55 * sc); ctx.lineTo(x - 6 * sc, y - 45 * sc); ctx.lineTo(x, y - 55 * sc); ctx.lineTo(x + 6 * sc, y - 45 * sc); ctx.lineTo(x + 12 * sc, y - 55 * sc); ctx.lineTo(x + 12 * sc, y - 35 * sc); ctx.closePath(); ctx.fill(); ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(x, y - 45 * sc, 2 * sc, 0, Math.PI * 2); ctx.fill(); }
-
     // --- NOWOŚĆ: UCINANIE BRZYDKICH UŁAMKÓW PO PRZECINKU ---
     ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * sc}px Arial`; ctx.textAlign = 'center';
     let displayScore = Math.floor(score); // Ta jedna linijka załatwia cały problem!
