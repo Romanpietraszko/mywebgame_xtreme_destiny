@@ -118,6 +118,10 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if (gameState === 'PAUSED' && e.button === 0) {
+        // --- NAPRAWA BŁĘDU: Ignoruj kliknięcie wyjścia, jeśli otwarta jest Skrzynia Gacha! ---
+        const gachaModal = document.getElementById('gacha-modal');
+        if (gachaModal && gachaModal.style.display.includes('flex')) return;
+
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
