@@ -120,60 +120,44 @@ function drawSwordModel(p, x, y, angle, sc, tier = 1) {
     ctx.restore();
 }
 
-function drawProHelmet(x, y, sc, tier) {
+function drawProArmor(x, y, sc, tier, strengthLvl) {
     ctx.save();
-    let col = tier === 3 ? '#f1c40f' : (tier === 2 ? '#3498db' : '#7f8c8d');
-    ctx.fillStyle = col;
-    ctx.beginPath(); ctx.arc(x, y - 22 * sc, 12 * sc, Math.PI, 0); ctx.fill();
+    let mainColor = tier === 3 ? '#f1c40f' : (tier === 2 ? '#3498db' : '#95a5a6');
+    let shadowColor = tier === 3 ? '#d35400' : (tier === 2 ? '#2980b9' : '#7f8c8d');
 
-    ctx.fillStyle = '#2c3e50';
-    if (tier === 1) {
-        ctx.fillRect(x - 11 * sc, y - 22 * sc, 22 * sc, 4 * sc);
-    } else {
-        ctx.beginPath(); ctx.moveTo(x - 12 * sc, y - 22 * sc); ctx.lineTo(x + 12 * sc, y - 22 * sc);
-        ctx.lineTo(x + 8 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 15 * sc); ctx.fill();
+    ctx.fillStyle = shadowColor;
+    ctx.beginPath(); ctx.moveTo(x - 11 * sc, y - 10 * sc); ctx.lineTo(x + 11 * sc, y - 10 * sc);
+    ctx.lineTo(x + 14 * sc, y + 15 * sc); ctx.lineTo(x - 14 * sc, y + 15 * sc); ctx.fill();
+
+    ctx.fillStyle = mainColor;
+    ctx.beginPath(); ctx.moveTo(x - 9 * sc, y - 10 * sc); ctx.lineTo(x + 9 * sc, y - 10 * sc);
+    ctx.lineTo(x + 11 * sc, y + 13 * sc); ctx.lineTo(x - 11 * sc, y + 13 * sc); ctx.fill();
+
+    if (strengthLvl >= 100) {
+        ctx.fillStyle = '#8e44ad'; 
+        ctx.fillRect(x - 13 * sc, y - 12 * sc, 26 * sc, 8 * sc);
+        ctx.fillStyle = '#f1c40f'; 
+        ctx.beginPath(); ctx.moveTo(x, y - 5 * sc); ctx.lineTo(x + 8 * sc, y + 5 * sc); ctx.lineTo(x, y + 15 * sc); ctx.lineTo(x - 8 * sc, y + 5 * sc); ctx.fill();
+        ctx.shadowBlur = 10 * sc; ctx.shadowColor = '#9b59b6';
+        ctx.strokeStyle = '#fff'; ctx.lineWidth = 2 * sc; ctx.stroke();
+    } else if (strengthLvl >= 55) {
+        ctx.fillStyle = '#00ffff';
+        ctx.beginPath(); ctx.moveTo(x - 14 * sc, y - 8 * sc); ctx.lineTo(x - 20 * sc, y - 15 * sc); ctx.lineTo(x - 8 * sc, y - 12 * sc); ctx.fill();
+        ctx.beginPath(); ctx.moveTo(x + 14 * sc, y - 8 * sc); ctx.lineTo(x + 20 * sc, y - 15 * sc); ctx.lineTo(x + 8 * sc, y - 12 * sc); ctx.fill();
+        ctx.fillRect(x - 4 * sc, y, 8 * sc, 10 * sc);
+    } else if (strengthLvl >= 20) {
+        ctx.fillStyle = '#bdc3c7';
+        ctx.fillRect(x - 10 * sc, y - 5 * sc, 20 * sc, 4 * sc);
+        ctx.fillRect(x - 8 * sc, y + 2 * sc, 16 * sc, 4 * sc);
+        ctx.fillStyle = '#7f8c8d';
+        ctx.beginPath(); ctx.arc(x, y + 8 * sc, 4 * sc, 0, Math.PI*2); ctx.fill();
+    } else if (strengthLvl >= 5) {
+        ctx.fillStyle = '#d35400';
+        ctx.fillRect(x - 12 * sc, y - 10 * sc, 6 * sc, 6 * sc);
+        ctx.fillRect(x + 6 * sc, y - 10 * sc, 6 * sc, 6 * sc);
+        ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 2 * sc;
+        ctx.beginPath(); ctx.moveTo(x - 8 * sc, y - 10 * sc); ctx.lineTo(x + 8 * sc, y + 10 * sc); ctx.stroke();
     }
-
-    if (tier >= 2) {
-        ctx.fillStyle = tier === 3 ? '#e74c3c' : '#bdc3c7';
-        ctx.beginPath(); ctx.moveTo(x, y - 34 * sc);
-        ctx.quadraticCurveTo(x - 15 * sc, y - 40 * sc, x - 22 * sc, y - 25 * sc);
-        ctx.lineTo(x - 5 * sc, y - 28 * sc); ctx.fill();
-    }
-    ctx.restore();
-}
-
-function drawProShield(x, y, sc, tier) {
-    ctx.save();
-    ctx.translate(x, y);
-
-    if (tier === 1) { 
-        ctx.fillStyle = '#95a5a6';
-        ctx.beginPath(); ctx.arc(0, 0, 14 * sc, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#7f8c8d'; ctx.lineWidth = 2 * sc; ctx.stroke();
-        ctx.fillStyle = '#34495e'; 
-        ctx.beginPath(); ctx.arc(0, 0, 4 * sc, 0, Math.PI * 2); ctx.fill();
-    } 
-    else if (tier === 2) { 
-        ctx.fillStyle = '#2980b9';
-        ctx.beginPath();
-        ctx.moveTo(-12 * sc, -14 * sc); ctx.lineTo(12 * sc, -14 * sc);
-        ctx.lineTo(12 * sc, 4 * sc); ctx.lineTo(0, 18 * sc); ctx.lineTo(-12 * sc, 4 * sc);
-        ctx.closePath(); ctx.fill();
-        ctx.strokeStyle = '#ecf0f1'; ctx.lineWidth = 2 * sc; ctx.stroke();
-        ctx.fillStyle = '#ecf0f1';
-        ctx.fillRect(-2 * sc, -10 * sc, 4 * sc, 18 * sc);
-        ctx.fillRect(-8 * sc, -2 * sc, 16 * sc, 4 * sc);
-    } 
-    else { 
-        ctx.shadowBlur = 10 * sc; ctx.shadowColor = 'rgba(241, 196, 15, 0.6)';
-        ctx.fillStyle = '#f1c40f';
-        ctx.beginPath(); ctx.arc(0, 0, 15 * sc, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#e67e22'; ctx.lineWidth = 3 * sc; ctx.stroke();
-        ctx.fillStyle = '#e74c3c';
-        ctx.beginPath(); ctx.arc(0, 0, 5 * sc, 0, Math.PI * 2); ctx.fill();
-    }
-
     ctx.restore();
 }
 
@@ -317,16 +301,14 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
     // Obliczamy Tier Ekwipunku na podstawie MASY (100, 300, 600)
     const equipmentTier = getTier(score, [100, 300, 600]); 
+    const armorTier = getTier(score, [100, 450, 850]); // Zostawiamy dla pancerza korpusu
     const swordTier = getTier(score, [15, 300, 700]); 
-    const shieldTier = getTier(score, [50, 150, 300]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
 
     let isHuman = isPlayer || (e.id && e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
 
     let wpnX = isHuman ? 28 : 18;
     let wpnY = isHuman ? 18 : 10;
-    let shldX = isHuman ? 28 : 20;
-    let shldY = isHuman ? 18 : -6;
 
     if (!isHuman) {
         ctx.save();
@@ -367,6 +349,9 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.beginPath(); ctx.arc(x + wpnX * sc, y + wpnY * sc, 7 * sc, 0, Math.PI * 2); ctx.fill();
         }
     }
+    
+    // Zostawiłem stary pancerz korpusu (bo dobrze wygląda z naramiennikami)
+    if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
     let eId = e.id || e.name || 'unknown'; 
     if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
@@ -436,13 +421,11 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     
     ctx.restore();
 
+    // Rysowanie Tarczy ochronnej (Q)
     if (e.isShielding) { 
         ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; ctx.beginPath(); 
         let shieldAngle = isPlayer ? Math.atan2(moveDir.y, moveDir.x) : 0; 
         ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9); ctx.stroke(); ctx.restore(); 
-    }
-    if (score >= 50) { 
-        drawProShield(x - shldX * sc, y + shldY * sc, sc, shieldTier); 
     }
 
     if (score >= 15 || actWpn !== 'sword') {
