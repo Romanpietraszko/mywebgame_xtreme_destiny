@@ -24,7 +24,7 @@ jobs:
         echo "🚀 KROK 0: Testowanie samego siebie..."
         sudo apt-get update -yqq && sudo apt-get install -yqq yamllint
         echo -e "extends: relaxed\nrules:\n  line-length: disable" > .yamllint
-        if ! yamllint .github/workflows/skaner.yml; then
+        if ! yamllint .github/workflows/sprawdzanie-składni.yml; then
           echo "🚨 KRYTYCZNY BŁĄD META: Sam skrypt sprawdzający ma błąd!"
           exit 1
         fi
