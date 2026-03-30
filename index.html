@@ -121,8 +121,21 @@
         .m-btn:active { background: rgba(241, 196, 15, 0.8); transform: scale(0.9); }
         #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(231, 76, 60, 0.6); border-color: rgba(241, 196, 15, 0.5); }
         
-        #university-logo { position: absolute; top: 15px; right: 15px; z-index: 10; }
-        #university-logo img { height: clamp(40px, 8vw, 60px); }
+        /* ZAKTUALIZOWANE LOGO UCZELNI (NIEŚMIERTELNE) */
+        #university-logo { 
+            position: fixed; 
+            top: 15px; 
+            left: 15px; 
+            z-index: 1000; 
+        }
+        #university-logo img { 
+            height: clamp(40px, 8vw, 60px); 
+            filter: drop-shadow(0px 0px 5px rgba(255,255,255,0.5));
+            transition: transform 0.2s;
+        }
+        #university-logo img:hover {
+            transform: scale(1.1);
+        }
 
         @media (max-height: 600px) {
             #ui-layer { align-items: flex-start; } 
@@ -136,6 +149,10 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
+        <img src="logo.svg" alt="WSIZ Logo">
+    </a>
 
     <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
         <h2 id="gacha-title" style="color:#f1c40f; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5);">Niespodzianka!</h2>
@@ -160,10 +177,6 @@
         <div id="comets-container"></div>
 
         <div id="menu">
-            <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
-                <img src="logo.svg" alt="WSIZ Logo">
-            </a>
-
             <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
             <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
 
