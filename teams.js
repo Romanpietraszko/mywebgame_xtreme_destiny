@@ -6,7 +6,7 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
-let castles = []; // Bazy drużynowe odbierane z serwera
+let castles = []; 
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
@@ -18,6 +18,30 @@ let gameMode = 'PvP';
 let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 }, weaponPath = 'none'; 
 let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [], lastWinterUseClient = 0; 
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
+
+// --- NOWOŚĆ: Bufor systemu Wellbeing i cząsteczki śniegu ---
+let preFetchedWellbeingMessage = "Gra to nie życie. Odpocznij chwilę i wróć silniejszy. Masa: {MASS}";
+let blizzardParticles = [];
+for (let i = 0; i < 150; i++) {
+    blizzardParticles.push({ x: Math.random() * 5000, y: Math.random() * 5000, vx: (Math.random() - 0.5) * 5, vy: Math.random() * 5 + 3 });
+}
+
+async function fetchNextWellbeingMessage() {
+    try {
+        // Docelowe miejsce na: const response = await fetch('http://localhost:11434/api/generate', ...);
+        // Na ten moment symulujemy gotową bazę fallbackową:
+        const fallbackTexts = [
+            "Koniec misji z wynikiem {MASS}. Zrób sobie przerwę na łyk wody i przewietrz głowę.",
+            "Niestety, to koniec. Wynik: {MASS}. Zanim zagrasz znowu, popatrz przez okno na coś zielonego.",
+            "Twój statek zgasł, ale Ty nie musisz. Zdobądź {MASS} pkt w prawdziwym życiu – zrób dobrą herbatę."
+        ];
+        preFetchedWellbeingMessage = fallbackTexts[Math.floor(Math.random() * fallbackTexts.length)];
+    } catch (e) {
+        console.log("Qwen niedostępny, używam bazy lokalnej.");
+    }
+}
+// Pobieramy pierwszy tekst już na starcie
+fetchNextWellbeingMessage();
 
 initMap(WORLD_SIZE); 
 
@@ -114,12 +138,12 @@ socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 })
 socket.on('recruitToggled', (state) => { if (player) player.isRecruiting = state; killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
 socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); });
 
-// --- OBSŁUGA SKLEPU (Dodano komunikaty z serwera) ---
 socket.on('shopSuccess', (data) => { killLogs.push({ text: `🛒 Zakupiono: ${data.item}!`, time: 200 }); });
 socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, time: 200 }); });
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
+    fetchNextWellbeingMessage(); // Generujemy tekst na następny raz!
 });
 
 socket.on('serverTick', (data) => {
@@ -134,7 +158,6 @@ socket.on('serverTick', (data) => {
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
         
-        // --- LOGIKA WYŚWIETLANIA SKLEPU ---
         const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) {
             shopUI.style.display = player.isSafe ? 'block' : 'none';
@@ -146,6 +169,11 @@ socket.on('serverTick', (data) => {
 // --- FUNKCJE DLA PRZYCISKÓW W HTML ---
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
+window.changeMapColor = () => {
+    const colors = ['#1e272e', '#2c3e50', '#2d3436', '#1a1a2e'];
+    let bgIndex = Math.floor(Math.random() * colors.length);
+    document.body.style.backgroundColor = colors[bgIndex];
+};
 
 function update() {
     if (gameState !== 'PLAYING') return;
@@ -163,7 +191,6 @@ function update() {
         player.y += Math.sin(moveAngle) * speed;
     }
     
-    // --- TWARDE GRANICE MAPY (ZE ŚMIERCIĄ NA MARGINESIE JAK W FREE) ---
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovementTeam', { x: -100, y: -100, score: player.score, isShielding: false });
     } else {
@@ -186,7 +213,6 @@ function gameLoop() {
         ctx.fillStyle = '#1e272e'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // --- SKALOWANIE (ZOOM) KAMERY ---
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2); 
         ctx.scale(globalScale, globalScale);                
@@ -206,7 +232,6 @@ function gameLoop() {
 
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        // --- RYSOWANIE ZAMKÓW I OBLĘŻENIA ---
         castles.forEach(c => {
             ctx.fillStyle = c.color;
             ctx.globalAlpha = 0.3;
@@ -223,7 +248,6 @@ function gameLoop() {
             }
         });
         
-        // --- RYSOWANIE LOOTU (JEDZENIE I SKRZYNKI) ---
         foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
         
         loots.forEach(l => { 
@@ -235,7 +259,6 @@ function gameLoop() {
             else if (l.type === 'weapon') ctx.fillText("🗡️", l.x, l.y);
         });
         
-        // --- GRAWERUNKI NA MIECZACH ---
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
             if (p.projType === 'sword' || p.projType === 'winter' || !p.projType) {
@@ -263,7 +286,6 @@ function gameLoop() {
             }
         });
 
-        // Linii przeciągania RTS
         if (draggedBotId && player) {
             ctx.save();
             ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
@@ -279,20 +301,23 @@ function gameLoop() {
             ctx.restore();
         }
 
-        // --- RYSOWANIE GRACZY I BOTÓW ---
         allEntities.forEach(e => {
             if (e.isSafe && (!player || !player.isSafe)) return;
             
             let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
             let scale = radius / 25; 
             
+            // NOWOŚĆ: Nadpisywanie koloru na podstawie przynależności drużynowej
+            if (e.team === 'red') e.color = '#e74c3c';
+            else if (e.team === 'blue') e.color = '#3498db';
+            else if (e.team === 'green') e.color = '#2ecc71';
+            else if (e.team === 'yellow') e.color = '#f1c40f';
+            
             drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
 
-            // Dodatki drużynowe
             if (e.team) {
                 ctx.save();
                 ctx.translate(e.x, e.y); 
-
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                 ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
                 ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
@@ -300,31 +325,48 @@ function gameLoop() {
 
                 const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' };
                 ctx.font = `${Math.floor(radius)}px Arial`;
-                
-                // PODNIESIONY OFFSET, ABY NIE ZASŁANIAĆ DUSZKA I CHMURKI
                 ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 45); 
-                
                 ctx.restore();
             }
         });
         
         ctx.restore(); 
         
-        // --- EFEKTY POGODY I UI ---
-        if (currentEvent === 'TOXIC_RAIN') {
+        // --- NOWOŚĆ: Generowanie cząsteczek zamieci ---
+        if (currentEvent === 'BLIZZARD') {
+            ctx.fillStyle = 'rgba(236, 240, 241, 0.25)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            ctx.fillStyle = '#fff';
+            blizzardParticles.forEach(p => {
+                ctx.beginPath(); 
+                // Renderowanie śniegu przesuniętego względem kamery
+                let drawX = p.x - camera.x;
+                let drawY = p.y - camera.y;
+                // Zapętlanie cząsteczek na ekranie
+                if (drawX < 0) p.x += canvas.width;
+                if (drawX > canvas.width) p.x -= canvas.width;
+                if (drawY < 0) p.y += canvas.height;
+                if (drawY > canvas.height) p.y -= canvas.height;
+                
+                ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1, 0, Math.PI * 2); 
+                ctx.fill();
+                
+                p.x += p.vx; 
+                p.y += p.vy;
+            });
+
+            ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
+        } else if (currentEvent === 'TOXIC_RAIN') {
             ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
             ctx.fillText(`KWAŚNY DESZCZ: ${eventTimeLeft}s`, canvas.width / 2, 80);
-        } else if (currentEvent === 'BLIZZARD') {
-            ctx.fillStyle = 'rgba(236, 240, 241, 0.3)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
-            ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         } else if (currentEvent === 'KING_HUNT') {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
             ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
-        // --- RYSOWANIE LOGÓW ZABÓJSTW I SKLEPU ---
         let logY = canvas.height - 30;
         killLogs.forEach((log, index) => {
             if (log.time > 0) {
@@ -337,7 +379,6 @@ function gameLoop() {
         });
         killLogs = killLogs.filter(log => log.time > 0);
 
-        // --- RYSOWANIE UI GRACZA ---
         if (gameState !== 'GAMEOVER' && player) {
             ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
@@ -359,14 +400,20 @@ function gameLoop() {
             }
         }
 
-        // EKRAN ŚMIERCI
+        // --- NOWOŚĆ: Ekran śmierci z systemem Wellbeing ---
         if (gameState === 'GAMEOVER') {
-            ctx.fillStyle = 'rgba(0,0,0,0.7)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-            ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 48px Arial'; ctx.textAlign = 'center';
-            ctx.fillText("ZGŁADZONO CIĘ", canvas.width/2, canvas.height/2);
-            ctx.fillStyle = '#fff'; ctx.font = '24px Arial';
-            ctx.fillText(`Końcowa masa: ${Math.floor(player.score || 0)}`, canvas.width/2, canvas.height/2 + 40);
-            ctx.fillText("Odśwież stronę, aby zagrać ponownie.", canvas.width/2, canvas.height/2 + 80);
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
+            
+            const finalTxt = preFetchedWellbeingMessage.replace("{MASS}", Math.floor(player.score || 0));
+            
+            ctx.fillStyle = '#2ecc71'; 
+            ctx.font = 'bold 28px Arial'; 
+            ctx.textAlign = 'center';
+            ctx.fillText(finalTxt, canvas.width/2, canvas.height/2 - 20);
+            
+            ctx.fillStyle = '#bdc3c7'; 
+            ctx.font = '18px Arial';
+            ctx.fillText("Odśwież stronę, aby zagrać ponownie.", canvas.width/2, canvas.height/2 + 40);
         }
     }
     requestAnimationFrame(gameLoop);
