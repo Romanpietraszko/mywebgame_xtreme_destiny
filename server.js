@@ -16,6 +16,41 @@ const io = require('socket.io')(http, {
 // ------------------------
 app.use(express.static(__dirname));
 
+// ==========================================
+// NOWOŚĆ: INTEGRACJA LOKALNEGO AI (QWEN)
+// ==========================================
+async function getAIWellbeingMessage(mass) {
+    try {
+        // Zabezpieczenie przed "zawieszeniem" serwera (timeout 1.5s)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500);
+
+        const response = await fetch('http://127.0.0.1:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'qwen2.5:3b',
+                prompt: `Jesteś empatycznym asystentem w grze akcji. Gracz właśnie zginął i zdobył ${mass} punktów. Napisz jedno krótkie, pocieszające zdanie promujące zdrowie psychiczne, odpoczynek lub relaks przed kolejną próbą. Nie witaj się. Zwróć tylko samo zdanie.`,
+                stream: false
+            }),
+            signal: controller.signal
+        });
+        
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        return data.response.trim();
+    } catch (error) {
+        // Jeśli Qwen jest wyłączony lub działa za wolno - cichy fallback
+        // console.log("[AI ERROR] Używam fallbacku dla śmierci.");
+        const fallbacks = [
+            `Koniec misji z wynikiem ${mass}. Zrób sobie przerwę na łyk wody i przewietrz głowę.`,
+            `Niestety, zostałeś pożarty. Masa: ${mass}. Pamiętaj, gra to nie życie. Wróć, jak odpoczniesz.`,
+            `Wynik: ${mass}. Odetchnij głęboko, oderwij wzrok od ekranu na 10 sekund i spróbuj ponownie.`
+        ];
+        return fallbacks[Math.floor(Math.random() * fallbacks.length)];
+    }
+}
+
 // --- KONFIGURACJA ŚWIATA ---
 const WORLD_SIZE = 4000;
 const MAX_FOODS = 200;
@@ -32,7 +67,7 @@ let botNameCounter = 0;
 
 // --- ZMIENNE EVENTOWE I DRUŻYNOWE ---
 let activeEvent = null; 
-let eventTimer = 0;     
+let eventTimer = 0;      
 let eventTickCounter = 0; // Pomocniczy zegar do zadawania obrażeń od deszczu
 let currentKingId = null; 
 
@@ -65,18 +100,30 @@ const weaponStats = {
     'explosive_kunai': { dmg: 75, life: 85, speed: 38, cost: 30, piercing: true }
 };
 
-function killPlayer(pId) {
+// --- AKTUALIZACJA: ASYNCHRONICZNE ZABIJANIE Z QWENEM ---
+async function killPlayer(pId) {
     const p = players[pId];
     if (p) {
-        // --- DETRONIZACJA ---
+        // Detronizacja
         if (pId === currentKingId) {
             io.emit('killEvent', { text: `☠️ Król ${p.name} obalony!`, time: 200 });
             currentKingId = null; 
             activeEvent = null;   
         }
 
-        io.to(p.id).emit('gameOver', { finalScore: p.score });
-        console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! GAME OVER.`);
+        console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! Odpytuję AI...`);
+        const finalMass = Math.floor(p.score || 0);
+        
+        // Zabezpieczamy gracza na serwerze przed dalszym ruchem, zanim usuniemy go z pamięci
+        p.isSafe = true; 
+        
+        // Odpytanie modelu (działa w tle)
+        const deathMessage = await getAIWellbeingMessage(finalMass);
+
+        // Wysyłamy do klienta pełny ekran śmierci wraz z wiadomością
+        io.to(p.id).emit('gameOver', { finalScore: finalMass, message: deathMessage });
+        
+        console.log(`[GAME OVER] Wysłałem wiadomość: "${deathMessage}"`);
         delete players[pId];
     }
 }
@@ -340,9 +387,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // =======================================================
-    // NOWOŚĆ: ODBIERANIE WYNIKU LOSOWANIA Z FRONTENDU (Gacha)
-    // =======================================================
     socket.on('claimGachaReward', (data) => {
         const p = players[socket.id];
         if (!p) return;
@@ -462,14 +506,15 @@ setInterval(() => {
     for (let i = pKeysList.length - 1; i >= 0; i--) {
         let pId = pKeysList[i];
         let p = players[pId];
-        if (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10) {
+        // Ochrona dla graczy z flagą isSafe = true (np. w trakcie śmierci)
+        if (!p.isSafe && (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10)) {
             io.emit('killEvent', { text: `${p.name} zginął poza mapą!` }); 
             killPlayer(pId);
         }
     }
 
     // --- LOGIKA ZAMKÓW I OBLĘŻEŃ (TRYB TEAMS) ---
-    Object.values(players).forEach(p => { if (p.team) p.isSafe = false; }); // Reset przed sprawdzeniem
+    Object.values(players).forEach(p => { if (p.team && !p.isSafe) p.isSafe = false; }); 
 
     castles.forEach(c => {
         let defenders = 0;
@@ -489,7 +534,7 @@ setInterval(() => {
                     attackingTeam = p.team;
                     
                     // PARZENIE INTRUZÓW!
-                    if (eventTickCounter % 30 === 0) {
+                    if (eventTickCounter % 30 === 0 && !p.isSafe) {
                         let burnDamage = Math.max(2, Math.floor(p.score * 0.05)); 
                         p.score -= burnDamage;
                         if (p.score <= 1) killPlayer(p.id); 
@@ -599,12 +644,9 @@ setInterval(() => {
             }
         });
         
-        // ==========================================
-        // NOWOŚĆ: PASYWNY WZROST DZIKICH BOTÓW!
-        // ==========================================
+        // PASYWNY WZROST DZIKICH BOTÓW
         bots.forEach(b => {
-            if (!b.ownerId) { // Tylko dzikie boty "farmią"
-                // Do 30 punktów rosną chętnie, powyżej wolniej, żeby nie zalać mapy gigantami
+            if (!b.ownerId) { 
                 let growthChance = b.score < 30 ? 0.4 : 0.1;
                 if (Math.random() < growthChance) {
                     b.score += 1;
@@ -613,7 +655,7 @@ setInterval(() => {
         });
     }
 
-    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA (SEKWENCJE MIDASA) ---
+    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA ---
     Object.values(players).forEach(p => {
         if (!p.isTutorialActive || !p.tutorialFlags) return;
 
@@ -631,7 +673,6 @@ setInterval(() => {
         }
     });
 
-    // --- BUDOWA STRUKTURY ARMII DO OBLICZEŃ FORMACJI ---
     let armies = {};
     for(let b of bots) {
         if (b.ownerId) {
@@ -646,8 +687,7 @@ setInterval(() => {
         
         let owner = b.ownerId ? players[b.ownerId] : null;
 
-        // --- SKALOWANIE PRĘDKOŚCI BOTA DO GRACZA ---
-        let botSpeedFromOwner = owner ? owner.baseSpeed : 2.5; // Uwzględnia pasywkę Ninji!
+        let botSpeedFromOwner = owner ? owner.baseSpeed : 2.5; 
         let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
         
         let isLightweight = owner && owner.paths.speed === 'lightweight';
@@ -655,15 +695,12 @@ setInterval(() => {
         
         if (b.ownerId) {
             if (owner && armies[b.ownerId]) {
-                // Wyciągamy informacje o roju gracza
                 let myIndex = armies[b.ownerId].indexOf(b);
                 let total = armies[b.ownerId].length;
                 let targetX = owner.x;
                 let targetY = owner.y;
 
-                // --- MATEMATYKA FORMACJI WOJSKOWYCH ---
                 if (owner.formation === 0) { 
-                    // OKRĄG (Rotująca Tarcza)
                     let angleStep = (Math.PI * 2) / total;
                     let currentAngle = (Date.now() / 1500) + (myIndex * angleStep);
                     let radius = 70 + (total * 2); 
@@ -671,7 +708,6 @@ setInterval(() => {
                     targetY = owner.y + Math.sin(currentAngle) * radius;
                 } 
                 else if (owner.formation === 1) { 
-                    // KLIN (Trójkąt V za plecami)
                     let row = Math.floor(myIndex / 2) + 1;
                     let side = myIndex % 2 === 0 ? 1 : -1;
                     if (myIndex === 0) { row = 1; side = 0; } 
@@ -681,23 +717,19 @@ setInterval(() => {
                     targetY = owner.y - Math.sin(owner.moveAngle) * (row * spacingX) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
                 } 
                 else if (owner.formation === 2) { 
-                    // LINIA (Falanga pozioma za plecami)
                     let spacing = 45;
                     let offset = (myIndex - (total - 1) / 2) * spacing;
                     targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
                     targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
                 }
                 else if (owner.formation === 3) {
-                    // WŁASNA (Drag & Drop z myszki)
                     targetX = owner.x + Math.cos(owner.moveAngle + b.angleOffset) * b.distOffset;
                     targetY = owner.y + Math.sin(owner.moveAngle + b.angleOffset) * b.distOffset;
                 }
 
-                // Przypisanie celu (dla frontu do rysowania "duchów")
                 b.targetX = targetX;
                 b.targetY = targetY;
 
-                // Fizyka podążania do punktu
                 let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
                 if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
@@ -706,14 +738,13 @@ setInterval(() => {
                     b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
                 }
                 
-                // STRZELANIE BOTÓW ZWERBOWANYCH W STRONĘ CELÓW
                 if (Math.random() < 0.05) { 
                     let type = b.activeWeapon;
                     let stats = weaponStats[type];
                     
                     if (stats && b.score >= stats.cost + 5) { 
                         let target = null;
-                        let minBotDist = 400; // Zasięg "wzroku" botów
+                        let minBotDist = 400; 
                         
                         Object.values(players).forEach(p2 => {
                             if (p2.id !== owner.id && (!owner.team || owner.team !== p2.team)) {
@@ -749,7 +780,6 @@ setInterval(() => {
                 }
 
             } else if (!owner) {
-                // CZYSZCZENIE BOTÓW JEŚLI GRACZ WYSZEDŁ
                 b.ownerId = null;
                 b.team = null;
                 b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
@@ -761,10 +791,8 @@ setInterval(() => {
                 b.activeWeapon = 'sword';
             }
         } else {
-            // --- AI DZIKICH BOTÓW ---
             let isHuntingKing = false;
             
-            // Jeśli trwa event i Król żyje (i nie chowa się w bezpiecznej strefie)
             if (activeEvent === 'KING_HUNT' && currentKingId && players[currentKingId]) {
                 let king = players[currentKingId];
                 if (!king.isSafe) {
@@ -776,7 +804,6 @@ setInterval(() => {
                 }
             }
 
-            // Normalny, losowy ruch
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
                 b.x += Math.cos(b.angle) * currentBotSpeed;
@@ -784,20 +811,13 @@ setInterval(() => {
                 if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
 
-            // Odbijanie od ścian
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
             
-            // ==========================================
-            // NOWOŚĆ: AKTYWNA AGRESJA (STRZELANIE BOTÓW)
-            // ==========================================
-            // Dziki bot musi mieć min. 15 punktów masy (zgodnie z zasadami gracza)
-            // Strzela losowo przed siebie z 3% szansą na klatkę
             if (b.score >= 15 && Math.random() < 0.03) {
                 let type = b.activeWeapon;
                 let stats = weaponStats[type];
                 
-                // Mrożenie strzału (żeby boty nie wypluwały mieczy jak karabiny maszynowe)
                 let now = Date.now();
                 if (stats && b.score >= stats.cost + 5 && now - b.lastShootTime > 2000) {
                     b.lastShootTime = now;
@@ -805,7 +825,6 @@ setInterval(() => {
                     
                     projectiles.push({
                         id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null, teamInitial: null,
-                        // Rzuca miecz z kierunkiem (dx, dy) zgodnym z kątem b.angle (kierunkiem swojego marszu)
                         x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
                         life: stats.life, speed: stats.speed, isBotSword: true,
                         scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
@@ -814,7 +833,6 @@ setInterval(() => {
             }
         }
 
-        // --- Boty i Zwerbowane Boty Jedzą Kropki ---
         foods.forEach((f, fi) => {
             if (Math.hypot(b.x - f.x, b.y - f.y) < 25) {
                 b.score += 1;
@@ -822,7 +840,6 @@ setInterval(() => {
             }
         });
         
-        // Zwerbowane boty oddają masę właścicielowi, jeśli urosły za duże!
         if (b.ownerId && b.score > 15) {
             let p = players[b.ownerId];
             if (p) {
@@ -840,7 +857,6 @@ setInterval(() => {
             let b2 = bots[j];
             if (b1.ownerId && b1.ownerId === b2.ownerId) continue;
             
-            // --- BLOKADA FRIENDLY FIRE DLA BOTÓW W DRUŻYNIE ---
             if (b1.ownerId && b2.ownerId) {
                 let p1 = players[b1.ownerId]; let p2 = players[b2.ownerId];
                 if (p1 && p2 && p1.team && p2.team && p1.team === p2.team) continue;
@@ -862,7 +878,7 @@ setInterval(() => {
         }
     }
 
-    // 3. Kolizje Graczy (Jedzenie, Boty) - ODDZIELONA REKRUTACJA
+    // 3. Kolizje Graczy (Jedzenie, Boty)
     Object.values(players).forEach(p => {
         if (!players[p.id]) return; 
 
@@ -878,11 +894,10 @@ setInterval(() => {
             }
         });
 
-        // --- ZBIERANIE LOOTU (SKRZYNEK) ---
         loots.forEach((l, li) => {
             if (Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
                 if (l.type === 'mass') {
-                    let baseLoot = 30; // --- POPRAWKA: Skrzynki dają teraz maks 30 masy ---
+                    let baseLoot = 30; 
                     let lootMass = baseLoot * p.massMultiplier;
                     if (p.skin === 'standard') lootMass = baseLoot * 1.02; 
                     
@@ -897,7 +912,7 @@ setInterval(() => {
                     p.activeWeapon = 'knife';
                     io.emit('killEvent', { text: `🗡️ ${p.name} znalazł Nóż w skrzynce!` }); 
                 }
-                loots[li] = spawnLoot(); // Odradzamy skrzynkę w nowym miejscu
+                loots[li] = spawnLoot(); 
             }
         });
 
@@ -907,13 +922,9 @@ setInterval(() => {
 
             if (!p.isSafe) {
                 if (b.ownerId !== p.id) {
-                    // --- BLOKADA JEDZENIA BOTÓW Z TEJ SAMEJ DRUŻYNY ---
                     let ownerPlayer = players[b.ownerId];
                     if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
 
-                    // ========================================================
-                    // KAMIKAZE BOTY NA KRÓLA
-                    // ========================================================
                     if (activeEvent === 'KING_HUNT' && p.id === currentKingId && b.ownerId !== p.id) {
                         if (dist < pRadius) {
                             p.score = Math.max(10, p.score - 15); 
@@ -925,7 +936,6 @@ setInterval(() => {
 
                     if (dist < pRadius && p.score > b.score * 1.15) {
                         if (p.isRecruiting) {
-                            // TRYB WERBOWANIA
                             io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
                             b.ownerId = p.id;
                             b.team = p.team; 
@@ -942,7 +952,6 @@ setInterval(() => {
                             b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
 
                         } else {
-                            // TRYB POŻERANIA
                             io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
                             p.score += Math.floor(b.score * 0.5);
                             bots[bi] = spawnBot(); 
@@ -967,7 +976,6 @@ setInterval(() => {
             let p2 = players[pKeys[j]];
             if (!p1 || !p2 || p1.isSafe || p2.isSafe) continue; 
             
-            // --- BLOKADA FRIENDLY FIRE ---
             if (p1.team && p2.team && p1.team === p2.team) continue;
 
             let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
@@ -996,9 +1004,7 @@ setInterval(() => {
         bots.forEach((b) => {
             let hitRange = p.isWinter ? 60 : 30; 
             if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
-                // Zapobiegaj biciu botów ze swojej drużyny
                 if (b.ownerId && players[b.ownerId] && p.ownerTeam === players[b.ownerId].team) return;
-                // Zapobiegaj zwerbowanym botom bicia dzikich botów, jeśli nie chcemy by się krzywdziły bezcelowo
                 if (p.ownerTeam && !b.team) return;
 
                 b.score = Math.max(1, b.score - p.damage);
@@ -1011,7 +1017,6 @@ setInterval(() => {
         Object.values(players).forEach(pl => {
             let hitRange = p.isWinter ? 60 : 30;
             if (p.ownerId !== pl.id && Math.hypot(p.x - pl.x, p.y - pl.y) < hitRange) {
-                // --- BLOKADA FRIENDLY FIRE Z BRONI DYSTANSOWEJ ---
                 if (p.ownerTeam && p.ownerTeam === pl.team) return;
 
                 if (pl.isShielding && !p.isWinter) {
@@ -1029,18 +1034,13 @@ setInterval(() => {
 
                     pl.score = Math.max(1, pl.score - Math.floor(damage));
                     
-                    // Obrażenia po trafieniu gracza
                     io.emit('damageText', { x: pl.x, y: pl.y - 30, val: Math.floor(damage), color: '#ff4757' });
                     
-                    // ========================================================
-                    // NOWOŚĆ: UMIEJĘTNOŚĆ KOLCE (THORNS) - ODBIJA 25% OBRAŻEŃ
-                    // ========================================================
                     if (pl.paths.strength === 'thorns') {
                         let attacker = players[p.ownerId];
                         if (attacker) {
                             let reflectDmg = Math.max(1, Math.floor(damage * 0.25));
                             attacker.score = Math.max(1, attacker.score - reflectDmg);
-                            // Pomarańczowe obrażenia jako sygnał odbicia
                             io.emit('damageText', { x: attacker.x, y: attacker.y - 30, val: reflectDmg, color: '#e67e22' });
                         }
                     }
