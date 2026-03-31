@@ -7,8 +7,8 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
 let castles = []; 
-let bushes = []; // NOWOŚĆ: Tablica gąszczy (przeszkód)
-let meteorZones = []; // NOWOŚĆ: Strefy uderzeń meteorytów
+let bushes = []; // Tablica gąszczy (przeszkód)
+let meteorZones = []; // Strefy uderzeń meteorytów
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
@@ -39,7 +39,12 @@ window.addEventListener('mousemove', (e) => {
         const rect = canvas.getBoundingClientRect();
         const mouseWorldX = (e.clientX - rect.left) + camera.x;
         const mouseWorldY = (e.clientY - rect.top) + camera.y;
-        lastMoveDir = { x: Math.cos(Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x)), y: Math.sin(Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x)) };
+        
+        // --- POPRAWKA: Przekazanie kąta widzenia do gracza ---
+        let angle = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
+        lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
+        player.moveAngle = angle; // To przywraca wzrok postaci!
+        
         if (draggedBotId) dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
     }
 });
@@ -62,6 +67,13 @@ window.addEventListener('mousedown', (e) => {
     }
     if (gameState === 'PAUSED' && e.button === 0) {
         socket.disconnect(); location.reload();   
+    }
+});
+
+// --- POPRAWKA: Obsługa ataku z telefonów ---
+window.addEventListener('mobile-attack', () => {
+    if (gameState === 'PLAYING' && player) {
+        socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
     }
 });
 
@@ -95,7 +107,7 @@ window.startGame = (control, mode) => {
     gameMode = mode; 
     document.getElementById('ui-layer').style.display = 'none';
     
-    // --- NOWOŚĆ: Przycisk Trudności Botów (Tylko dla Treningu) ---
+    // --- Przycisk Trudności Botów (Tylko dla Treningu) ---
     if (gameMode === 'TRAINING') {
         let diffBtn = document.getElementById('difficulty-btn');
         if (!diffBtn) {
@@ -122,7 +134,9 @@ window.startGame = (control, mode) => {
     
     player = {
         x: 2000, y: 2000, score: 5, level: 1, name: name, color: '#fff', 
-        skin: window.playerSkin || 'standard', // POPRAWKA: Przekazanie skina (naprawia niewidzialność)
+        skin: window.playerSkin || 'standard', 
+        // --- POPRAWKA: Deklaracja ruchu (odzyskuje widzialność) ---
+        moveAngle: 0, isMoving: false, 
         isSafe: false, isShielding: false, aura: null, inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
         team: null, isRecruiting: false, formation: 0
     };
@@ -154,12 +168,8 @@ socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, 
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
-    // Odbieramy mądry tekst od Qwena z serwera
-    if (data && data.message) {
-        finalDeathMessage = data.message;
-    }
+    if (data && data.message) finalDeathMessage = data.message;
     
-    // Ukrywamy przycisk trudności po śmierci
     let diffBtn = document.getElementById('difficulty-btn');
     if (diffBtn) diffBtn.style.display = 'none';
 });
@@ -168,8 +178,8 @@ socket.on('serverTick', (data) => {
     foods = data.foods; bots = data.bots; projectiles = data.projectiles || []; loots = data.loots || [];
     currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0;
     castles = data.castles || []; 
-    bushes = data.bushes || []; // Pobieranie krzaków z serwera
-    meteorZones = data.meteorZones || []; // Pobieranie stref meteorytów
+    bushes = data.bushes || []; 
+    meteorZones = data.meteorZones || []; 
     
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
@@ -186,34 +196,46 @@ socket.on('serverTick', (data) => {
     delete otherPlayers[myId];
 });
 
-// --- FUNKCJE DLA PRZYCISKÓW W HTML ---
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
-window.changeMapColor = () => {
-    const colors = ['#1e272e', '#2c3e50', '#2d3436', '#1a1a2e'];
-    let bgIndex = Math.floor(Math.random() * colors.length);
-    document.body.style.backgroundColor = colors[bgIndex];
-};
 
+// --- POPRAWKA: Pełne przywrócenie kontroli mobilnej w Teams ---
 function update() {
     if (gameState !== 'PLAYING') return;
     if (player.aura && player.aura.time > 0) player.aura.time--;
 
     let dx = 0, dy = 0;
-    if (controlType === 'WASD') { if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++; } 
-    else { if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++; }
+    if (controlType === 'WASD') { 
+        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++; 
+    } 
+    else if (controlType === 'ARROWS') { 
+        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++; 
+    } 
+    else if (controlType === 'TOUCH' && window.mobileJoy && window.mobileJoy.active) {
+        dx = window.mobileJoy.dx;
+        dy = window.mobileJoy.dy;
+    }
     
     if (dx !== 0 || dy !== 0) {
-        let moveAngle = Math.atan2(dy, dx); 
+        player.isMoving = true; // Animacja nóg
+        let moveDirAngle = Math.atan2(dy, dx); 
+        
+        // Na telefonie patrzymy tam, gdzie biegniemy
+        if (controlType === 'TOUCH') {
+            player.moveAngle = moveDirAngle;
+            lastMoveDir = { x: Math.cos(moveDirAngle), y: Math.sin(moveDirAngle) };
+        }
+
         let speed = 5 + (playerSkills.speed * 0.5);
         if (currentEvent === 'BLIZZARD') speed *= 0.4; 
         
-        // Zwalnianie w gąszczu (Krzaki)
         let inBush = bushes.some(b => Math.hypot(player.x - b.x, player.y - b.y) < b.radius);
-        if (inBush) speed *= 0.5; // Gąszcz spowalnia o połowę
+        if (inBush) speed *= 0.5; 
 
-        player.x += Math.cos(moveAngle) * speed; 
-        player.y += Math.sin(moveAngle) * speed;
+        player.x += Math.cos(moveDirAngle) * speed; 
+        player.y += Math.sin(moveDirAngle) * speed;
+    } else {
+        player.isMoving = false; // Zatrzymanie animacji nóg
     }
     
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
@@ -333,16 +355,14 @@ function gameLoop() {
             let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
             let scale = radius / 25; 
             
-            // Zabezpieczenie niewidzialności
             e.skin = e.skin || 'standard';
 
-            // Nadpisywanie koloru na podstawie przynależności drużynowej
             if (e.team === 'N') e.color = '#3498db'; 
             else if (e.team === 'S') e.color = '#e74c3c'; 
             else if (e.team === 'E') e.color = '#f1c40f'; 
             else if (e.team === 'W') e.color = '#2ecc71'; 
             else if (!e.team && e.name && e.name.includes("Bot")) {
-                e.color = '#7f8c8d'; // Szare dzikie boty
+                e.color = '#7f8c8d'; 
             }
             
             drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
@@ -363,15 +383,13 @@ function gameLoop() {
         });
 
         // --- RYSOWANIE PRZESZKÓD (GĄSZCZY) ---
-        // Rysujemy po graczach, żeby krzak ich fizycznie zasłaniał (kamuflaż)
         bushes.forEach(b => {
-            ctx.globalAlpha = 0.85; // Lekko przezroczyste, by było widać, że ktoś tam jest
+            ctx.globalAlpha = 0.85; 
             ctx.fillStyle = '#27ae60'; 
             ctx.beginPath();
             ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
             ctx.fill();
             
-            // Detale liści
             ctx.fillStyle = '#2ecc71';
             ctx.beginPath(); ctx.arc(b.x - b.radius/3, b.y - b.radius/3, b.radius/2, 0, Math.PI*2); ctx.fill();
             ctx.beginPath(); ctx.arc(b.x + b.radius/3, b.y + b.radius/4, b.radius/2.5, 0, Math.PI*2); ctx.fill();
