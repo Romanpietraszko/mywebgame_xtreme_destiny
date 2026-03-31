@@ -65,6 +65,20 @@ let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
+// --- NOWOŚĆ: ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
+let bushes = [];
+let meteorZones = [];
+let botDifficultyMultiplier = 1.0; // Mnożnik trudności AI (Trening)
+
+// Generowanie przeszkód (krzaków) na starcie serwera
+for (let i = 0; i < 35; i++) {
+    bushes.push({
+        x: Math.random() * WORLD_SIZE,
+        y: Math.random() * WORLD_SIZE,
+        radius: 60 + Math.random() * 60
+    });
+}
+
 // --- ZMIENNE EVENTOWE I DRUŻYNOWE ---
 let activeEvent = null; 
 let eventTimer = 0;      
@@ -143,7 +157,7 @@ function spawnLoot() {
 }
 
 // ==========================================
-// NOWOŚĆ: INTELIGENTNE SPAWNOWANIE BOTÓW I MINIBOSSÓW
+// INTELIGENTNE SPAWNOWANIE BOTÓW I MINIBOSSÓW
 // ==========================================
 function spawnBot() {
     botNameCounter++;
@@ -264,7 +278,7 @@ io.on('connection', (socket) => {
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
             color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
-            skin: 'standard', 
+            skin: data.skin || 'standard', 
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
             isRecruiting: false, formation: 0, moveAngle: 0,
@@ -279,6 +293,16 @@ io.on('connection', (socket) => {
 
         socket.emit('initTeam', { id: socket.id, team: chosenTeam, color: TEAM_COLORS[chosenTeam] });
         console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
+    });
+
+    // --- NOWOŚĆ: Zmiana Trudności Botów (Odbiór z Klienta) ---
+    socket.on('setBotDifficulty', (levelIndex) => {
+        if (levelIndex === 0) botDifficultyMultiplier = 0.6; // Łatwy
+        else if (levelIndex === 1) botDifficultyMultiplier = 1.0; // Normalny
+        else if (levelIndex === 2) botDifficultyMultiplier = 1.5; // Trudny
+        
+        console.log(`[TRENING] Trudność botów zmieniona! Mnożnik: x${botDifficultyMultiplier}`);
+        io.emit('killEvent', { text: `⚙️ Zmiana trudności AI: ${levelIndex === 0 ? 'ŁATWY' : levelIndex === 1 ? 'NORMALNY' : 'TRUDNY'}`, time: 150 });
     });
 
     // --- RUCH (TRYB FREE) ---
@@ -559,15 +583,15 @@ setInterval(() => {
         }
     });
 
-    // --- SYSTEM EVENTÓW (Król, Deszcz lub Śnieżyca) ---
+    // --- SYSTEM EVENTÓW (Król, Deszcz, Śnieżyca lub Meteoryty) ---
     eventTimer++;
     // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
         let rand = Math.random();
         
-        // Losujemy typ eventu (33% szans na Króla, 33% na Deszcz, 33% na Śnieżycę)
-        if (rand < 0.33 && playersArray.length > 0) {
+        // Losujemy typ eventu (25% szans na każdy)
+        if (rand < 0.25 && playersArray.length > 0) {
             // EVENT: Polowanie na Króla
             playersArray.sort((a, b) => b.score - a.score);
             let topPlayer = playersArray[0];
@@ -589,7 +613,7 @@ setInterval(() => {
             } else {
                 eventTimer = 0; 
             }
-        } else if (rand < 0.66) {
+        } else if (rand < 0.5) {
             // EVENT: Kwaśny Deszcz
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
@@ -603,7 +627,7 @@ setInterval(() => {
                 eventTimer = 0;
                 io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
             }, 25000); // 25 sekund deszczu
-        } else {
+        } else if (rand < 0.75) {
             // EVENT: Zamięć Śnieżna
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
@@ -617,6 +641,50 @@ setInterval(() => {
                 eventTimer = 0;
                 io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 });
             }, 20000); // 20 sekund śniegu
+        } else {
+            // --- NOWOŚĆ: EVENT DESZCZU METEORYTÓW ---
+            activeEvent = 'METEOR_SHOWER';
+            io.emit('killEvent', { text: `☄️ UWAGA! Zbliża się deszcz meteorytów! Omijajcie czerwone strefy!`, time: 300 });
+            
+            // Generujemy 10 stref uderzeń
+            for(let m = 0; m < 10; m++) {
+                meteorZones.push({
+                    x: Math.random() * WORLD_SIZE,
+                    y: Math.random() * WORLD_SIZE,
+                    radius: 150 + Math.random() * 100,
+                    timer: 90 // 3 sekundy do uderzenia (30 ticków/sek * 3)
+                });
+            }
+
+            setTimeout(() => {
+                activeEvent = null; 
+                eventTimer = 0;
+                io.emit('killEvent', { text: `💨 Zagrożenie minęło. Meteoryty spadły.`, time: 200 });
+            }, 15000); 
+        }
+    }
+
+    // --- LOGIKA OBRAŻEŃ OD METEORYTÓW ---
+    for (let i = meteorZones.length - 1; i >= 0; i--) {
+        let m = meteorZones[i];
+        m.timer--;
+        if (m.timer <= 0) {
+            // BOOM! Uderzenie w strefę!
+            Object.values(players).forEach(p => {
+                if (!p.isSafe && Math.hypot(p.x - m.x, p.y - m.y) < m.radius) {
+                    p.score = Math.max(1, p.score - 100); // 100 pkt obrażeń obszarowych!
+                    io.emit('damageText', { x: p.x, y: p.y - 30, val: 100, color: '#e74c3c' });
+                    if(p.score <= 1) killPlayer(p.id);
+                }
+            });
+            bots.forEach(b => {
+                if (Math.hypot(b.x - m.x, b.y - m.y) < m.radius) {
+                    b.score = Math.max(1, b.score - 100);
+                    io.emit('damageText', { x: b.x, y: b.y - 30, val: 100, color: '#e74c3c' });
+                }
+            });
+            // Usuwamy strefę po uderzeniu
+            meteorZones.splice(i, 1);
         }
     }
 
@@ -644,10 +712,10 @@ setInterval(() => {
             }
         });
         
-        // PASYWNY WZROST DZIKICH BOTÓW
+        // --- NOWOŚĆ: PASYWNY WZROST DZIKICH BOTÓW Z MNOŻNIKIEM TRUDNOŚCI ---
         bots.forEach(b => {
             if (!b.ownerId) { 
-                let growthChance = b.score < 30 ? 0.4 : 0.1;
+                let growthChance = (b.score < 30 ? 0.4 : 0.1) * botDifficultyMultiplier;
                 if (Math.random() < growthChance) {
                     b.score += 1;
                 }
@@ -687,7 +755,8 @@ setInterval(() => {
         
         let owner = b.ownerId ? players[b.ownerId] : null;
 
-        let botSpeedFromOwner = owner ? owner.baseSpeed : 2.5; 
+        // --- NOWOŚĆ: SKALOWANIE PRĘDKOŚCI BOTA NA BAZIE TRUDNOŚCI ---
+        let botSpeedFromOwner = owner ? owner.baseSpeed : (2.5 * botDifficultyMultiplier); 
         let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
         
         let isLightweight = owner && owner.paths.speed === 'lightweight';
@@ -814,7 +883,9 @@ setInterval(() => {
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
             
-            if (b.score >= 15 && Math.random() < 0.03) {
+            // --- NOWOŚĆ: CZĘSTOTLIWOŚĆ STRZELANIA ZALEŻNA OD TRUDNOŚCI ---
+            let shootChance = 0.03 * botDifficultyMultiplier;
+            if (b.score >= 15 && Math.random() < shootChance) {
                 let type = b.activeWeapon;
                 let stats = weaponStats[type];
                 
@@ -1062,7 +1133,12 @@ setInterval(() => {
     });
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
-    io.emit('serverTick', { players, bots, foods, projectiles, loots, activeEvent, eventTimeLeft, castles });
+    
+    // --- NOWOŚĆ: WYSYŁANIE ŚRODOWISKA (KRZAKI, METEORY) ---
+    io.emit('serverTick', { 
+        players, bots, foods, projectiles, loots, 
+        activeEvent, eventTimeLeft, castles, bushes, meteorZones 
+    });
 }, 33);
 
 // ==========================================
