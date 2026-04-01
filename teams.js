@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Tryb Drużynowy (PvP & Trening)
+// TEAMS.JS - Tryb Drużynowy (PvP & Trening) - FIX WIDZIALNOŚCI I SKLEPU
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -7,24 +7,20 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
 let castles = []; 
-let bushes = []; // Tablica gąszczy (przeszkód)
-let meteorZones = []; // Strefy uderzeń meteorytów
+let bushes = []; 
+let meteorZones = []; 
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
-// Konfiguracja Drużyn
 let myTeam = null; 
 let gameMode = 'PvP'; 
 
-// Statystyki
 let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 }, weaponPath = 'none'; 
 let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [], lastWinterUseClient = 0; 
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
 
-// --- SYSTEM WELLBEING (Odbierany z Serwera) ---
 let finalDeathMessage = "Gra to nie życie. Odpocznij chwilę i wróć silniejszy.";
 
-// --- EFEKTY POGODOWE ---
 let blizzardParticles = [];
 for (let i = 0; i < 150; i++) {
     blizzardParticles.push({ 
@@ -48,12 +44,10 @@ window.addEventListener('mousemove', (e) => {
         let angle = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
         
-        // --- FIX WIDZIALNOŚCI ---
+        // --- FIX WIDZIALNOŚCI: Natychmiastowe przypisanie kąta ---
         player.moveAngle = angle; 
         
-        if (draggedBotId) {
-            dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
-        }
+        if (draggedBotId) dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
     }
 });
 
@@ -171,6 +165,7 @@ window.startGame = (control, mode) => {
         name: name, 
         color: '#fff', 
         skin: window.playerSkin || 'standard', 
+        // --- FIX WIDZIALNOŚCI: Inicjalizacja liczbowa zamiast undefined ---
         moveAngle: 0, 
         isMoving: false, 
         isSafe: false, 
@@ -198,9 +193,7 @@ socket.on('initTeam', (data) => {
     }
 });
 
-socket.on('levelUp', (data) => { 
-    skillPoints = data.points; 
-});
+socket.on('levelUp', (data) => { skillPoints = data.points; });
 
 socket.on('skillUpdated', (data) => { 
     playerSkills = data.skills; 
@@ -256,18 +249,24 @@ socket.on('serverTick', (data) => {
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
         let sSelf = otherPlayers[myId];
-        // FIX: Synchronizacja spawnu
+        
+        // Synchronizacja pozycji ze spawnem bazy
         if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) {
             player.x = sSelf.x;
             player.y = sSelf.y;
         }
+
         player.score = sSelf.score; 
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 }; 
         player.activeWeapon = sSelf.activeWeapon || 'sword'; 
+        
+        // --- FIX SKLEPU: Prawidłowe odbieranie stanu bezpieczeństwa z serwera ---
         player.isSafe = sSelf.isSafe;
+        
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
         
+        // Zarządzanie widocznością sklepu
         const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) {
             shopUI.style.display = player.isSafe ? 'block' : 'none';
@@ -278,12 +277,6 @@ socket.on('serverTick', (data) => {
 
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
-
-window.changeMapColor = () => {
-    const colors = ['#1e272e', '#2c3e50', '#2d3436', '#1a1a2e'];
-    let bgIndex = Math.floor(Math.random() * colors.length);
-    document.body.style.backgroundColor = colors[bgIndex];
-};
 
 function update() {
     if (gameState !== 'PLAYING') return;
@@ -313,6 +306,7 @@ function update() {
         player.isMoving = true; 
         let moveAngle = Math.atan2(dy, dx); 
         
+        // Na telefonie wzrok śledzi ruch
         if (controlType === 'TOUCH') {
             player.moveAngle = moveAngle;
             lastMoveDir = { x: Math.cos(moveAngle), y: Math.sin(moveAngle) };
@@ -434,18 +428,6 @@ function gameLoop() {
             } else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') {
                 drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2);
             }
-            
-            if (p.teamInitial) {
-                ctx.save();
-                ctx.translate(p.x, p.y);
-                ctx.rotate(rot);
-                ctx.fillStyle = '#fff'; 
-                ctx.font = 'bold 12px Arial'; 
-                ctx.textAlign = 'center'; 
-                ctx.textBaseline = 'middle';
-                ctx.fillText(p.teamInitial, 15, 0); 
-                ctx.restore();
-            }
         });
 
         if (draggedBotId && player) {
@@ -479,7 +461,7 @@ function gameLoop() {
         allEntities.forEach(e => {
             if (e.isSafe && (!player || !player.isSafe)) return;
             
-            // --- FIX WIDZIALNOŚCI (NaN) ---
+            // --- FIX WIDZIALNOŚCI: Zabezpieczenie przed NaN przy rysowaniu ---
             e.moveAngle = (typeof e.moveAngle === 'number') ? e.moveAngle : 0;
             e.isMoving = !!e.isMoving;
             e.skin = e.skin || 'standard';
