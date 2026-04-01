@@ -27,7 +27,12 @@ let finalDeathMessage = "Gra to nie życie. Odpocznij chwilę i wróć silniejsz
 // --- EFEKTY POGODOWE ---
 let blizzardParticles = [];
 for (let i = 0; i < 150; i++) {
-    blizzardParticles.push({ x: Math.random() * 5000, y: Math.random() * 5000, vx: (Math.random() - 0.5) * 5, vy: Math.random() * 5 + 3 });
+    blizzardParticles.push({ 
+        x: Math.random() * 5000, 
+        y: Math.random() * 5000, 
+        vx: (Math.random() - 0.5) * 5, 
+        vy: Math.random() * 5 + 3 
+    });
 }
 
 initMap(WORLD_SIZE); 
@@ -40,12 +45,15 @@ window.addEventListener('mousemove', (e) => {
         const mouseWorldX = (e.clientX - rect.left) + camera.x;
         const mouseWorldY = (e.clientY - rect.top) + camera.y;
         
-        // --- POPRAWKA: Przekazanie kąta widzenia do gracza ---
         let angle = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
-        player.moveAngle = angle; // To przywraca wzrok postaci!
         
-        if (draggedBotId) dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
+        // --- FIX WIDZIALNOŚCI ---
+        player.moveAngle = angle; 
+        
+        if (draggedBotId) {
+            dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
+        }
     }
 });
 
@@ -54,23 +62,33 @@ window.addEventListener('mousedown', (e) => {
         if (e.button === 2) { 
             const mouseWorldX = e.clientX - canvas.getBoundingClientRect().left + camera.x;
             const mouseWorldY = e.clientY - canvas.getBoundingClientRect().top + camera.y;
-            let closestBot = null, minDist = 80; 
+            let closestBot = null;
+            let minDist = 80; 
+            
             bots.forEach(b => {
                 if (b.ownerId === myId) {
                     let d = Math.hypot(b.x - mouseWorldX, b.y - mouseWorldY);
-                    if (d < minDist) { minDist = d; closestBot = b; }
+                    if (d < minDist) { 
+                        minDist = d; 
+                        closestBot = b; 
+                    }
                 }
             });
-            if (closestBot) { draggedBotId = closestBot.id; dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; }
+            if (closestBot) { 
+                draggedBotId = closestBot.id; 
+                dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; 
+            }
         }
-        else if (e.button === 0) socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+        else if (e.button === 0) {
+            socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+        }
     }
     if (gameState === 'PAUSED' && e.button === 0) {
-        socket.disconnect(); location.reload();   
+        socket.disconnect(); 
+        location.reload();   
     }
 });
 
-// --- POPRAWKA: Obsługa ataku z telefonów ---
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player) {
         socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
@@ -79,35 +97,49 @@ window.addEventListener('mobile-attack', () => {
 
 window.addEventListener('mouseup', (e) => {
     if (e.button === 2 && draggedBotId && player) {
-        let dx = dragMouseWorld.x - player.x, dy = dragMouseWorld.y - player.y;
-        socket.emit('setBotOffset', { botId: draggedBotId, angleOffset: Math.atan2(dy, dx) - Math.atan2(lastMoveDir.y, lastMoveDir.x), distOffset: Math.hypot(dx, dy) });
+        let dx = dragMouseWorld.x - player.x;
+        let dy = dragMouseWorld.y - player.y;
+        socket.emit('setBotOffset', { 
+            botId: draggedBotId, 
+            angleOffset: Math.atan2(dy, dx) - Math.atan2(lastMoveDir.y, lastMoveDir.x), 
+            distOffset: Math.hypot(dx, dy) 
+        });
         draggedBotId = null; 
     }
 });
 
 window.onkeydown = (e) => {
     keys[e.code] = true; 
-    if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
+    if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) {
+        gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
+    }
     if (gameState === 'PLAYING') {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
-        if (e.code === 'KeyR' && weaponPath === 'winter') { const now = Date.now(); if (now - lastWinterUseClient >= 15000) { lastWinterUseClient = now; socket.emit('throwWinterSword'); } }
+        if (e.code === 'KeyR' && weaponPath === 'winter') { 
+            const now = Date.now(); 
+            if (now - lastWinterUseClient >= 15000) { 
+                lastWinterUseClient = now; 
+                socket.emit('throwWinterSword'); 
+            } 
+        }
         if (e.code === 'KeyQ' && player.score >= 50) player.isShielding = true;
         if (e.code === 'KeyP') socket.emit('toggleRecruit');
         if (e.code === 'KeyC') socket.emit('switchFormation');
     }
 };
 
-window.onkeyup = (e) => { keys[e.code] = false; if (e.code === 'KeyQ' && player) player.isShielding = false; };
+window.onkeyup = (e) => { 
+    keys[e.code] = false; 
+    if (e.code === 'KeyQ' && player) player.isShielding = false; 
+};
 
-// --- NOWE MENU STARTOWE ---
 window.startGame = (control, mode) => {
     controlType = control;
     gameMode = mode; 
     document.getElementById('ui-layer').style.display = 'none';
     
-    // --- Przycisk Trudności Botów (Tylko dla Treningu) ---
     if (gameMode === 'TRAINING') {
         let diffBtn = document.getElementById('difficulty-btn');
         if (!diffBtn) {
@@ -123,7 +155,6 @@ window.startGame = (control, mode) => {
             diffBtn.onclick = () => {
                 currentDiffIndex = (currentDiffIndex + 1) % 3;
                 diffBtn.innerText = `Trudność Botów: ${diffLevels[currentDiffIndex]}`;
-                // Wysyłamy do serwera informację o zmianie trudności
                 socket.emit('setBotDifficulty', currentDiffIndex); 
             };
         }
@@ -133,12 +164,23 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Żołnierz";
     
     player = {
-        x: 2000, y: 2000, score: 5, level: 1, name: name, color: '#fff', 
+        x: 2000, 
+        y: 2000, 
+        score: 5, 
+        level: 1, 
+        name: name, 
+        color: '#fff', 
         skin: window.playerSkin || 'standard', 
-        // --- POPRAWKA: Deklaracja ruchu (odzyskuje widzialność) ---
-        moveAngle: 0, isMoving: false, 
-        isSafe: false, isShielding: false, aura: null, inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
-        team: null, isRecruiting: false, formation: 0
+        moveAngle: 0, 
+        isMoving: false, 
+        isSafe: false, 
+        isShielding: false, 
+        aura: null, 
+        inventory: { bow: 0, knife: 0, shuriken: 0 }, 
+        activeWeapon: 'sword',
+        team: null, 
+        isRecruiting: false, 
+        formation: 0
     };
     
     socket.emit('joinTeamGame', { name: name, mode: gameMode, skin: player.skin });
@@ -146,7 +188,6 @@ window.startGame = (control, mode) => {
     gameLoop();
 };
 
-// --- KOMUNIKACJA Z SERWEREM ---
 socket.on('initTeam', (data) => { 
     myId = data.id; 
     myTeam = data.team; 
@@ -156,37 +197,76 @@ socket.on('initTeam', (data) => {
         player.color = data.color; 
     }
 });
-socket.on('levelUp', (data) => { skillPoints = data.points; });
-socket.on('skillUpdated', (data) => { playerSkills = data.skills; skillPoints = data.points; weaponPath = data.weaponPath || 'none'; });
-socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
-socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
-socket.on('recruitToggled', (state) => { if (player) player.isRecruiting = state; killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
-socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); });
 
-socket.on('shopSuccess', (data) => { killLogs.push({ text: `🛒 Zakupiono: ${data.item}!`, time: 200 }); });
-socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, time: 200 }); });
+socket.on('levelUp', (data) => { 
+    skillPoints = data.points; 
+});
+
+socket.on('skillUpdated', (data) => { 
+    playerSkills = data.skills; 
+    skillPoints = data.points; 
+    weaponPath = data.weaponPath || 'none'; 
+});
+
+socket.on('botEaten', (data) => { 
+    if (player) player.score = data.newScore; 
+});
+
+socket.on('killEvent', (data) => { 
+    killLogs.push({ text: data.text, time: 200 }); 
+});
+
+socket.on('recruitToggled', (state) => { 
+    if (player) player.isRecruiting = state; 
+    killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
+});
+
+socket.on('formationSwitched', (formName) => { 
+    killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
+});
+
+socket.on('shopSuccess', (data) => { 
+    killLogs.push({ text: `🛒 Zakupiono: ${data.item}!`, time: 200 }); 
+});
+
+socket.on('shopError', (data) => { 
+    killLogs.push({ text: `❌ ${data.message}`, time: 200 }); 
+});
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
-    if (data && data.message) finalDeathMessage = data.message;
-    
+    if (data && data.message) {
+        finalDeathMessage = data.message;
+    }
     let diffBtn = document.getElementById('difficulty-btn');
     if (diffBtn) diffBtn.style.display = 'none';
 });
 
 socket.on('serverTick', (data) => {
-    foods = data.foods; bots = data.bots; projectiles = data.projectiles || []; loots = data.loots || [];
-    currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0;
+    foods = data.foods; 
+    bots = data.bots; 
+    projectiles = data.projectiles || []; 
+    loots = data.loots || [];
+    currentEvent = data.activeEvent; 
+    eventTimeLeft = data.eventTimeLeft || 0;
     castles = data.castles || []; 
     bushes = data.bushes || []; 
     meteorZones = data.meteorZones || []; 
     
     otherPlayers = data.players;
     if (myId && otherPlayers[myId]) {
-        player.score = otherPlayers[myId].score; player.inventory = otherPlayers[myId].inventory || { bow: 0, knife: 0, shuriken: 0 }; 
-        player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword'; player.isSafe = otherPlayers[myId].isSafe;
-        if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
-        if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
+        let sSelf = otherPlayers[myId];
+        // FIX: Synchronizacja spawnu
+        if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) {
+            player.x = sSelf.x;
+            player.y = sSelf.y;
+        }
+        player.score = sSelf.score; 
+        player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 }; 
+        player.activeWeapon = sSelf.activeWeapon || 'sword'; 
+        player.isSafe = sSelf.isSafe;
+        if (sSelf.formation !== undefined) player.formation = sSelf.formation;
+        if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
         
         const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) {
@@ -199,17 +279,30 @@ socket.on('serverTick', (data) => {
 window.upgrade = (name) => { socket.emit('upgradeSkill', name); };
 window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
 
-// --- POPRAWKA: Pełne przywrócenie kontroli mobilnej w Teams ---
+window.changeMapColor = () => {
+    const colors = ['#1e272e', '#2c3e50', '#2d3436', '#1a1a2e'];
+    let bgIndex = Math.floor(Math.random() * colors.length);
+    document.body.style.backgroundColor = colors[bgIndex];
+};
+
 function update() {
     if (gameState !== 'PLAYING') return;
     if (player.aura && player.aura.time > 0) player.aura.time--;
 
-    let dx = 0, dy = 0;
+    let dx = 0;
+    let dy = 0;
+
     if (controlType === 'WASD') { 
-        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++; 
+        if (keys['KeyW']) dy--; 
+        if (keys['KeyS']) dy++; 
+        if (keys['KeyA']) dx--; 
+        if (keys['KeyD']) dx++; 
     } 
     else if (controlType === 'ARROWS') { 
-        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++; 
+        if (keys['ArrowUp']) dy--; 
+        if (keys['ArrowDown']) dy++; 
+        if (keys['ArrowLeft']) dx--; 
+        if (keys['ArrowRight']) dx++; 
     } 
     else if (controlType === 'TOUCH' && window.mobileJoy && window.mobileJoy.active) {
         dx = window.mobileJoy.dx;
@@ -217,32 +310,39 @@ function update() {
     }
     
     if (dx !== 0 || dy !== 0) {
-        player.isMoving = true; // Animacja nóg
-        let moveDirAngle = Math.atan2(dy, dx); 
+        player.isMoving = true; 
+        let moveAngle = Math.atan2(dy, dx); 
         
-        // Na telefonie patrzymy tam, gdzie biegniemy
         if (controlType === 'TOUCH') {
-            player.moveAngle = moveDirAngle;
-            lastMoveDir = { x: Math.cos(moveDirAngle), y: Math.sin(moveDirAngle) };
+            player.moveAngle = moveAngle;
+            lastMoveDir = { x: Math.cos(moveAngle), y: Math.sin(moveAngle) };
         }
 
         let speed = 5 + (playerSkills.speed * 0.5);
         if (currentEvent === 'BLIZZARD') speed *= 0.4; 
         
         let inBush = bushes.some(b => Math.hypot(player.x - b.x, player.y - b.y) < b.radius);
-        if (inBush) speed *= 0.5; 
+        if (inBush) speed *= 0.5;
 
-        player.x += Math.cos(moveDirAngle) * speed; 
-        player.y += Math.sin(moveDirAngle) * speed;
+        player.x += Math.cos(moveAngle) * speed; 
+        player.y += Math.sin(moveAngle) * speed;
     } else {
-        player.isMoving = false; // Zatrzymanie animacji nóg
+        player.isMoving = false;
     }
     
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovementTeam', { x: -100, y: -100, score: player.score, isShielding: false });
     } else {
-        camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-        socket.emit('playerMovementTeam', { x: player.x, y: player.y, score: player.score, isShielding: player.isShielding });
+        camera.x = player.x - canvas.width / 2; 
+        camera.y = player.y - canvas.height / 2;
+        socket.emit('playerMovementTeam', { 
+            x: player.x, 
+            y: player.y, 
+            score: player.score, 
+            isShielding: player.isShielding,
+            moveAngle: player.moveAngle,
+            isMoving: player.isMoving
+        });
     }
 }
 
@@ -277,7 +377,9 @@ function gameLoop() {
         }
         ctx.restore();
 
-        ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+        ctx.strokeStyle = '#e74c3c'; 
+        ctx.lineWidth = 10; 
+        ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
         castles.forEach(c => {
             ctx.fillStyle = c.color;
@@ -287,15 +389,23 @@ function gameLoop() {
             ctx.strokeStyle = c.color; ctx.lineWidth = 5; ctx.stroke();
 
             if (c.captureProgress > 0) {
-                ctx.fillStyle = 'black'; ctx.fillRect(c.x - 50, c.y - c.radius - 30, 100, 15);
+                ctx.fillStyle = 'black'; 
+                ctx.fillRect(c.x - 50, c.y - c.radius - 30, 100, 15);
                 ctx.fillStyle = c.captureProgress >= 100 ? '#e74c3c' : '#f1c40f'; 
                 ctx.fillRect(c.x - 48, c.y - c.radius - 28, (c.captureProgress / 100) * 96, 11);
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
+                ctx.fillStyle = '#fff'; 
+                ctx.font = 'bold 10px Arial'; 
+                ctx.textAlign = 'center';
                 ctx.fillText(c.captureProgress >= 100 ? "PRZEJĘTO!" : "OBLĘŻENIE...", c.x, c.y - c.radius - 20);
             }
         });
         
-        foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
+        foods.forEach(f => { 
+            ctx.fillStyle = '#e67e22'; 
+            ctx.beginPath(); 
+            ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); 
+            ctx.fill(); 
+        });
         
         loots.forEach(l => { 
             ctx.font = "30px Arial";
@@ -312,7 +422,9 @@ function gameLoop() {
                 rot += (Date.now() / 100); 
                 drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
             } else if (p.projType.includes('bow') || p.projType === 'crossbow' || p.projType === 'shotgun') {
-                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot); 
+                ctx.save(); 
+                ctx.translate(p.x, p.y); 
+                ctx.rotate(rot); 
                 ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-10,-1,20,2); 
                 ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10,-3,4,6); 
                 ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(15,0); ctx.lineTo(10,3); ctx.fill(); 
@@ -327,7 +439,10 @@ function gameLoop() {
                 ctx.save();
                 ctx.translate(p.x, p.y);
                 ctx.rotate(rot);
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillStyle = '#fff'; 
+                ctx.font = 'bold 12px Arial'; 
+                ctx.textAlign = 'center'; 
+                ctx.textBaseline = 'middle';
                 ctx.fillText(p.teamInitial, 15, 0); 
                 ctx.restore();
             }
@@ -335,15 +450,27 @@ function gameLoop() {
 
         if (draggedBotId && player) {
             ctx.save();
-            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
-            ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y); ctx.stroke();
-            ctx.beginPath(); ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; 
+            ctx.lineWidth = 2; 
+            ctx.setLineDash([5, 5]);
+            ctx.beginPath(); 
+            ctx.moveTo(player.x, player.y); 
+            ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y); 
+            ctx.stroke();
+            ctx.beginPath(); 
+            ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; 
+            ctx.fill(); 
+            ctx.stroke();
 
             let b = bots.find(bot => bot.id === draggedBotId);
             if (b) {
-                ctx.setLineDash([]); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); ctx.stroke();
+                ctx.setLineDash([]); 
+                ctx.strokeStyle = '#f1c40f'; 
+                ctx.lineWidth = 4;
+                ctx.beginPath(); 
+                ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); 
+                ctx.stroke();
             }
             ctx.restore();
         }
@@ -352,10 +479,13 @@ function gameLoop() {
         allEntities.forEach(e => {
             if (e.isSafe && (!player || !player.isSafe)) return;
             
+            // --- FIX WIDZIALNOŚCI (NaN) ---
+            e.moveAngle = (typeof e.moveAngle === 'number') ? e.moveAngle : 0;
+            e.isMoving = !!e.isMoving;
+            e.skin = e.skin || 'standard';
+
             let radius = 25 * (1 + Math.pow(Math.max(0, e.score - 1), 0.45) * 0.15);
             let scale = radius / 25; 
-            
-            e.skin = e.skin || 'standard';
 
             if (e.team === 'N') e.color = '#3498db'; 
             else if (e.team === 'S') e.color = '#e74c3c'; 
@@ -372,7 +502,8 @@ function gameLoop() {
                 ctx.translate(e.x, e.y); 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
                 ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`;
-                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.textAlign = 'center'; 
+                ctx.textBaseline = 'middle';
                 ctx.fillText(e.team, 0, 0);
 
                 const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' };
@@ -386,58 +517,68 @@ function gameLoop() {
         bushes.forEach(b => {
             ctx.globalAlpha = 0.85; 
             ctx.fillStyle = '#27ae60'; 
-            ctx.beginPath();
-            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.beginPath(); 
+            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); 
             ctx.fill();
             
             ctx.fillStyle = '#2ecc71';
-            ctx.beginPath(); ctx.arc(b.x - b.radius/3, b.y - b.radius/3, b.radius/2, 0, Math.PI*2); ctx.fill();
-            ctx.beginPath(); ctx.arc(b.x + b.radius/3, b.y + b.radius/4, b.radius/2.5, 0, Math.PI*2); ctx.fill();
+            ctx.beginPath(); 
+            ctx.arc(b.x - b.radius/3, b.y - b.radius/3, b.radius/2, 0, Math.PI*2); 
+            ctx.fill();
+            
             ctx.globalAlpha = 1.0;
         });
 
         // --- RYSOWANIE STREF METEORYTÓW ---
         meteorZones.forEach(m => {
             ctx.fillStyle = 'rgba(231, 76, 60, 0.2)';
-            ctx.beginPath(); ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 3; ctx.stroke();
+            ctx.beginPath(); 
+            ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2); 
+            ctx.fill();
+            ctx.strokeStyle = '#e74c3c'; 
+            ctx.lineWidth = 3; 
+            ctx.stroke();
             
-            ctx.fillStyle = '#ff4757'; ctx.font = 'bold 22px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ff4757'; 
+            ctx.font = 'bold 22px Arial'; 
+            ctx.textAlign = 'center';
             ctx.fillText("⚠️ ZAGROŻENIE", m.x, m.y);
         });
         
         ctx.restore(); 
         
-        // --- Generowanie cząsteczek zamieci ---
         if (currentEvent === 'BLIZZARD') {
             ctx.fillStyle = 'rgba(236, 240, 241, 0.25)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
-            
             ctx.fillStyle = '#fff';
             blizzardParticles.forEach(p => {
                 ctx.beginPath(); 
-                let drawX = p.x - camera.x;
+                let drawX = p.x - camera.x; 
                 let drawY = p.y - camera.y;
-                if (drawX < 0) p.x += canvas.width;
+                if (drawX < 0) p.x += canvas.width; 
                 if (drawX > canvas.width) p.x -= canvas.width;
-                if (drawY < 0) p.y += canvas.height;
+                if (drawY < 0) p.y += canvas.height; 
                 if (drawY > canvas.height) p.y -= canvas.height;
-                
                 ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1, 0, Math.PI * 2); 
                 ctx.fill();
-                
                 p.x += p.vx; 
                 p.y += p.vy;
             });
-
-            ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#ecf0f1'; 
+            ctx.font = 'bold 24px Arial'; 
+            ctx.textAlign = 'center';
             ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         } else if (currentEvent === 'TOXIC_RAIN') {
-            ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#2ecc71'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#2ecc71'; 
+            ctx.font = 'bold 24px Arial'; 
+            ctx.textAlign = 'center';
             ctx.fillText(`KWAŚNY DESZCZ: ${eventTimeLeft}s`, canvas.width / 2, 80);
         } else if (currentEvent === 'KING_HUNT') {
-            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = '#f1c40f'; 
+            ctx.font = 'bold 24px Arial'; 
+            ctx.textAlign = 'center';
             ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
@@ -454,18 +595,21 @@ function gameLoop() {
         killLogs = killLogs.filter(log => log.time > 0);
 
         if (gameState !== 'GAMEOVER' && player) {
-            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
-            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = 'rgba(0,0,0,0.8)'; 
+            ctx.fillRect(canvas.width - 280, 10, 270, 140);
+            ctx.fillStyle = '#f1c40f'; 
+            ctx.font = 'bold 16px Arial';
             ctx.fillText("🏆 RANKING SERWERA", canvas.width - 265, 30);
             
             topEntities.forEach((p, i) => {
                 let yPos = 55 + i * 20;
-                if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); } 
-                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#fff'; ctx.fillText(`${i+1}. ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); }
+                ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#fff'; 
+                ctx.fillText(`${i+1}. ${p.name} - ${Math.floor(p.score)} pkt`, canvas.width - 265, yPos);
             });
 
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
-            ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
+            ctx.fillStyle = '#fff'; 
+            ctx.font = 'bold 20px Arial';
+            ctx.fillText(`PUNKTY: ${Math.floor(player.score)}`, 20, 40);
             
             if (player.isRecruiting !== undefined) {
                 ctx.font = 'bold 14px Arial';
@@ -475,13 +619,12 @@ function gameLoop() {
         }
 
         if (gameState === 'GAMEOVER') {
-            ctx.fillStyle = 'rgba(0,0,0,0.85)'; ctx.fillRect(0,0,canvas.width,canvas.height);
-            
+            ctx.fillStyle = 'rgba(0,0,0,0.85)'; 
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
             ctx.fillStyle = '#2ecc71'; 
             ctx.font = 'bold 28px Arial'; 
             ctx.textAlign = 'center';
             ctx.fillText(finalDeathMessage, canvas.width/2, canvas.height/2 - 20);
-            
             ctx.fillStyle = '#bdc3c7'; 
             ctx.font = '18px Arial';
             ctx.fillText("Odśwież stronę, aby zagrać ponownie.", canvas.width/2, canvas.height/2 + 40);
