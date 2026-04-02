@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Tryb Drużynowy (PvP & Trening)
+// TEAMS.JS - Tryb Drużynowy (PvP & Trening) - OPARTY NA FREE.JS
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -15,7 +15,9 @@ let controlType = 'WASD', gameState = 'MENU', myId = null;
 let myTeam = null; 
 let gameMode = 'PvP'; 
 
-let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
+// Statystyki RPG, Ekwipunek
+let skillPoints = 0;
+let playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 
 window.weaponPath = 'none'; 
@@ -34,8 +36,9 @@ const frameDuration = 1000 / targetFPS;
 
 let nextGachaTime = 0;
 const GACHA_INTERVAL_MS = 60 * 1000; 
-
 let finalDeathMessage = "Gra to nie życie. Odpocznij chwilę i wróć silniejszy.";
+
+// --- EFEKTY POGODOWE ---
 let blizzardParticles = [];
 let rainParticles = [];
 for (let i = 0; i < 150; i++) blizzardParticles.push({ x: Math.random() * 5000, y: Math.random() * 5000, vx: (Math.random() - 0.5) * 5, vy: Math.random() * 5 + 3 });
@@ -51,6 +54,7 @@ window.addEventListener('mousemove', (e) => {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
+        // Obliczamy myszkę uwzględniając zoom
         const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
         const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
         
@@ -60,8 +64,8 @@ window.addEventListener('mousemove', (e) => {
         let angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
         player.moveAngle = angle; 
-        
-        if (draggedBotId) dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
+
+        if (draggedBotId) { dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; }
     }
 });
 
@@ -120,12 +124,10 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
-// --- NOWOŚĆ: Logika szybkiej zmiany formacji ---
 window.setFormation = (idx) => {
     if (!player) return;
     player.formation = idx; 
-    socket.emit('setFormation', idx); // Wymaga dodania "socket.on('setFormation', ...)" na serwerze!
-    
+    socket.emit('setFormation', idx); 
     const buttons = document.querySelectorAll('.form-btn');
     buttons.forEach((btn, i) => {
         btn.style.borderColor = (i === idx) ? '#f1c40f' : '#2c3e50';
@@ -140,13 +142,11 @@ window.onkeydown = (e) => {
     if (gameState === 'PLAYING') {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
-        
-        // Bezpośrednie klawisze formacji
         if (e.code === 'Digit3') window.setFormation(0); 
         if (e.code === 'Digit4') window.setFormation(1); 
         if (e.code === 'Digit5') window.setFormation(2); 
         if (e.code === 'Digit6') window.setFormation(3); 
-
+        
         if (e.code === 'KeyE' && !player.isSafe) socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         if (e.code === 'KeyR' && paths.weapon === 'winter' && !player.isSafe) { 
             const now = Date.now(); 
@@ -158,7 +158,6 @@ window.onkeydown = (e) => {
         }
         if (e.code === 'KeyQ' && player.score >= 50) player.isShielding = true;
         if (e.code === 'KeyP') socket.emit('toggleRecruit');
-        if (e.code === 'KeyC') socket.emit('switchFormation');
     }
 };
 
@@ -190,7 +189,6 @@ window.startGame = (control, mode) => {
         diffBtn.style.display = 'block';
     }
 
-    // Panel Taktyczny na interfejsie
     let formMenu = document.getElementById('formation-menu');
     if (!formMenu) {
         formMenu = document.createElement('div');
@@ -209,7 +207,7 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Żołnierz";
     
     player = {
-        x: 2000, y: 2000, score: 0, level: 1, name: name, color: '#fff', 
+        x: 2000, y: 2000, score: 5, level: 1, name: name, color: '#fff', 
         skin: window.playerSkin || 'standard', 
         moveAngle: 0, isMoving: false, 
         isSafe: false, isShielding: false, aura: null, inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
@@ -251,6 +249,7 @@ socket.on('formationSwitched', (formName) => {
 socket.on('shopSuccess', (data) => { killLogs.push({ text: `🛒 Zakupiono: ${data.item}!`, time: 200 }); });
 socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, time: 200 }); });
 
+// Wreszcie efekty cząsteczkowe w Teams!
 socket.on('damageText', (data) => {
     damageTexts.push({
         x: data.x + (Math.random() * 20 - 10), y: data.y, val: data.val, color: data.color || '#ff4757', life: 1.0, vx: (Math.random() - 0.5) * 2, vy: -2 - Math.random() * 2 
@@ -280,11 +279,21 @@ socket.on('serverTick', (data) => {
     otherPlayers = data.players;
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
+        
+        // Jeśli nasza masa jest zepsuta (NaN) u nas lub na serwerze, ratujemy ją twardo
+        let safeScore = (sSelf.score && !isNaN(sSelf.score)) ? sSelf.score : 5;
+        player.score = safeScore; 
+        
         if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) { player.x = sSelf.x; player.y = sSelf.y; }
-        player.score = sSelf.score > 0 ? sSelf.score : player.score; 
-        player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 }; player.activeWeapon = sSelf.activeWeapon || 'sword'; player.isSafe = sSelf.isSafe;
+        
+        player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 }; 
+        player.activeWeapon = sSelf.activeWeapon || 'sword'; 
+        player.isSafe = sSelf.isSafe;
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
+        
+        const shopUI = document.getElementById('castle-shop'); 
+        if (shopUI) shopUI.style.display = player.isSafe ? 'block' : 'none';
     }
     delete otherPlayers[myId];
 });
@@ -352,6 +361,54 @@ function update() {
     }
 }
 
+// Rysuje drewniany zamek
+function drawWoodenFort(ctx, castle) {
+    ctx.save();
+    ctx.translate(castle.x, castle.y);
+    
+    // Palisada (zewnętrzna ściana)
+    ctx.fillStyle = '#8b5a2b'; // Ciemne drewno
+    ctx.beginPath();
+    ctx.arc(0, 0, castle.radius, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = '#5c4033';
+    ctx.lineWidth = 15;
+    ctx.stroke();
+
+    // Wewnętrzna, jasna podłoga
+    ctx.fillStyle = '#cd853f'; 
+    ctx.beginPath();
+    ctx.arc(0, 0, castle.radius * 0.8, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Centralna Wieża
+    ctx.fillStyle = '#6b4423';
+    ctx.fillRect(-40, -40, 80, 80);
+    ctx.strokeStyle = '#3e2723';
+    ctx.lineWidth = 5;
+    ctx.strokeRect(-40, -40, 80, 80);
+
+    // Dach / flaga drużyny
+    ctx.fillStyle = castle.color;
+    ctx.globalAlpha = 0.8;
+    ctx.beginPath();
+    ctx.moveTo(0, -60);
+    ctx.lineTo(40, -20);
+    ctx.lineTo(-40, -20);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Napis wewnątrz bazy
+    ctx.globalAlpha = 1.0;
+    ctx.fillStyle = '#fff';
+    ctx.font = 'bold 30px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(castle.team, 0, 10);
+
+    ctx.restore();
+}
+
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
     if (deltaTime < frameDuration) { requestAnimationFrame(gameLoop); return; }
@@ -400,8 +457,7 @@ function gameLoop(currentTime) {
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
         castles.forEach(c => {
-            ctx.fillStyle = c.color; ctx.globalAlpha = 0.3; ctx.beginPath(); ctx.arc(c.x, c.y, c.radius, 0, Math.PI * 2); ctx.fill();
-            ctx.globalAlpha = 1.0; ctx.strokeStyle = c.color; ctx.lineWidth = 5; ctx.stroke();
+            drawWoodenFort(ctx, c); // Użycie nowego modelu twierdzy
             if (c.captureProgress > 0) {
                 ctx.fillStyle = 'black'; ctx.fillRect(c.x - 50, c.y - c.radius - 30, 100, 15);
                 ctx.fillStyle = c.captureProgress >= 100 ? '#e74c3c' : '#f1c40f'; ctx.fillRect(c.x - 48, c.y - c.radius - 28, (c.captureProgress / 100) * 96, 11);
@@ -446,8 +502,11 @@ function gameLoop(currentTime) {
         allEntities.forEach(e => {
             if (e !== player && e.isSafe && (!player || !player.isSafe)) return;
             
-            let renderMass = Math.max(1, e.score || 5);
-            let radius = 25 * (1 + Math.pow(Math.max(0, renderMass - 1), 0.45) * 0.15);
+            // Ostateczne wymuszenie masy = 1 zamiast zera/NaN
+            let renderMass = e.score;
+            if (isNaN(renderMass) || renderMass === undefined || renderMass === null || renderMass < 1) renderMass = 5; 
+            
+            let radius = 25 * (1 + Math.pow(renderMass - 1, 0.45) * 0.15);
             let scale = radius / 25; 
             
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
@@ -455,12 +514,18 @@ function gameLoop(currentTime) {
             e.skin = e.skin || 'standard';
             e.weaponPath = e.paths ? e.paths.weapon : (e === player ? paths.weapon : 'none');
 
-            if (e.team === 'N') e.color = '#3498db'; else if (e.team === 'S') e.color = '#e74c3c'; else if (e.team === 'E') e.color = '#f1c40f'; else if (e.team === 'W') e.color = '#2ecc71'; else if (!e.team && e.name && e.name.includes("Bot")) e.color = '#7f8c8d'; 
+            // --- TWARDA LOGIKA KOLORÓW BOTÓW ---
+            const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
+            if (e.team) {
+                e.color = TEAM_COLORS[e.team] || '#fff';
+            } else if (!e.team && e.name && e.name.includes("Bot")) {
+                e.color = '#7f8c8d'; 
+            }
             
             drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
 
             if (e.team) {
-                ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                 ctx.font = `bold ${Math.floor(radius * 1.2)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(e.team, 0, 0);
                 const teamEmojis = { 'N': '🥶', 'S': '😈', 'E': '👺', 'W': '👹' }; ctx.font = `${Math.floor(radius)}px Arial`; ctx.fillText(teamEmojis[e.team] || '👿', 0, -radius - 45); 
                 ctx.restore();
@@ -561,15 +626,6 @@ function gameLoop(currentTime) {
                 if (currentEvent === 'BLIZZARD') { ctx.font = '16px Arial'; ctx.fillText("Poruszasz się znacznie wolniej!", canvas.width / 2, 75); }
             }
             ctx.restore();
-
-            if (killLogs.length > 0) {
-                ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
-                for (let i = 0; i < killLogs.length; i++) {
-                    let log = killLogs[i]; ctx.fillStyle = `rgba(231, 76, 60, ${log.time / 50})`; 
-                    ctx.fillText("☠️ " + log.text, canvas.width - 20, 170 + (i * 22)); log.time--;
-                }
-                ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
-            }
 
             ctx.save(); let startX = canvas.width / 2 - 60, startY = canvas.height - 80;
             ctx.fillStyle = player.activeWeapon === 'sword' ? 'rgba(46, 204, 113, 0.9)' : 'rgba(44, 62, 80, 0.8)';
