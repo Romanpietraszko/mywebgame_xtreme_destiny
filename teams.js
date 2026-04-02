@@ -7,20 +7,24 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
 let castles = []; 
-let bushes = []; 
-let meteorZones = []; 
+let bushes = []; // Tablica gąszczy (przeszkód)
+let meteorZones = []; // Strefy uderzeń meteorytów
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
+// Konfiguracja Drużyn
 let myTeam = null; 
 let gameMode = 'PvP'; 
 
+// Statystyki
 let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 }, weaponPath = 'none'; 
 let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [], lastWinterUseClient = 0; 
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
 
+// --- SYSTEM WELLBEING (Odbierany z Serwera) ---
 let finalDeathMessage = "Gra to nie życie. Odpocznij chwilę i wróć silniejszy.";
 
+// --- EFEKTY POGODOWE ---
 let blizzardParticles = [];
 for (let i = 0; i < 150; i++) {
     blizzardParticles.push({ 
@@ -28,6 +32,17 @@ for (let i = 0; i < 150; i++) {
         y: Math.random() * 5000, 
         vx: (Math.random() - 0.5) * 5, 
         vy: Math.random() * 5 + 3 
+    });
+}
+
+// NOWOŚĆ: Cząsteczki kwaśnego deszczu!
+let rainParticles = [];
+for (let i = 0; i < 200; i++) {
+    rainParticles.push({
+        x: Math.random() * 5000,
+        y: Math.random() * 5000,
+        vy: 15 + Math.random() * 10,
+        length: 10 + Math.random() * 20
     });
 }
 
@@ -41,9 +56,10 @@ window.addEventListener('mousemove', (e) => {
         const mouseWorldX = (e.clientX - rect.left) + camera.x;
         const mouseWorldY = (e.clientY - rect.top) + camera.y;
         
+        // --- POPRAWKA: Przekazanie kąta widzenia do gracza ---
         let angle = Math.atan2(mouseWorldY - player.y, mouseWorldX - player.x);
         lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
-        player.moveAngle = angle; 
+        player.moveAngle = angle; // To przywraca wzrok postaci!
         
         if (draggedBotId) dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
     }
@@ -81,6 +97,7 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
+// --- POPRAWKA: Obsługa ataku z telefonów ---
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player) {
         socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
@@ -132,6 +149,7 @@ window.startGame = (control, mode) => {
     gameMode = mode; 
     document.getElementById('ui-layer').style.display = 'none';
     
+    // --- Przycisk Trudności Botów (Tylko dla Treningu) ---
     if (gameMode === 'TRAINING') {
         let diffBtn = document.getElementById('difficulty-btn');
         if (!diffBtn) {
@@ -163,6 +181,7 @@ window.startGame = (control, mode) => {
         name: name, 
         color: '#fff', 
         skin: window.playerSkin || 'standard', 
+        // --- FIX WIDZIALNOŚCI: Inicjalizacja liczbowa zamiast undefined ---
         moveAngle: 0, 
         isMoving: false, 
         isSafe: false, 
@@ -454,18 +473,17 @@ function gameLoop() {
 
         // --- RYSOWANIE GRACZY I BOTÓW ---
         allEntities.forEach(e => {
-            // --- FIX ZNIKANIA W BAZIE ---
-            // Gracz rysuje się zawsze, a ukrywamy tylko obcych, jeśli my też jesteśmy bezpieczni.
+            // Bezpieczeństwo ukrywa wrogów w bazie (ale Ty siebie ciągle rysujesz!)
             if (e !== player && e.isSafe && (!player || !player.isSafe)) return;
             
-            // Twarde wartości bazowe dla uniknięcia NaN i krachu Canvasa
-            let renderMass = Math.max(1, e.score || 5);
-            let radius = 25 * (1 + Math.pow(Math.max(0, renderMass - 1), 0.45) * 0.15);
-            let scale = radius / 25; 
-            
+            // --- FIX OSTATECZNY WIDZIALNOŚCI: Chroni engine.js przed pow(0) ---
+            e.score = Math.max(1, e.score || 1); 
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
             e.isMoving = !!e.isMoving;
             e.skin = e.skin || 'standard';
+
+            let radius = 25 * (1 + Math.pow(e.score - 1, 0.45) * 0.15);
+            let scale = radius / 25; 
 
             if (e.team === 'N') e.color = '#3498db'; 
             else if (e.team === 'S') e.color = '#e74c3c'; 
@@ -475,10 +493,8 @@ function gameLoop() {
                 e.color = '#7f8c8d'; 
             }
             
-            // Wywołujemy silnik rysujący
             drawStickman(e, e.x, e.y, scale, e.isSafe, currentKingId);
 
-            // Rysowanie symboli drużynowych
             if (e.team) {
                 ctx.save();
                 ctx.translate(e.x, e.y); 
@@ -511,7 +527,7 @@ function gameLoop() {
             ctx.globalAlpha = 1.0;
         });
 
-        // --- RYSOWANIE STREF METEORYTÓW ---
+        // --- RYSOWANIE STREF I SPADAJĄCYCH METEORYTÓW ---
         meteorZones.forEach(m => {
             ctx.fillStyle = 'rgba(231, 76, 60, 0.2)';
             ctx.beginPath(); 
@@ -525,10 +541,31 @@ function gameLoop() {
             ctx.font = 'bold 22px Arial'; 
             ctx.textAlign = 'center';
             ctx.fillText("⚠️ ZAGROŻENIE", m.x, m.y);
+
+            // Wizualizacja samej spadającej skały (jeśli serwer podał timer)
+            if (m.timer !== undefined) {
+                let meteorY = m.y - (m.timer * 20); // Spada z dużej wysokości
+                let meteorX = m.x + (m.timer * 5);  // Lekko pod kątem
+                
+                ctx.save();
+                ctx.translate(meteorX, meteorY);
+                // Ogon ognia
+                ctx.fillStyle = '#e67e22';
+                ctx.beginPath();
+                ctx.arc(0, -20, m.radius * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+                // Bryła meteorytu
+                ctx.fillStyle = '#2c3e50';
+                ctx.beginPath();
+                ctx.arc(0, 0, m.radius * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.restore();
+            }
         });
         
         ctx.restore(); 
         
+        // --- EFEKTY POGODOWE (Na całym ekranie kamery) ---
         if (currentEvent === 'BLIZZARD') {
             ctx.fillStyle = 'rgba(236, 240, 241, 0.25)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -551,8 +588,27 @@ function gameLoop() {
             ctx.textAlign = 'center';
             ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         } else if (currentEvent === 'TOXIC_RAIN') {
+            // Tło kwaśnego deszczu
             ctx.fillStyle = 'rgba(46, 204, 113, 0.2)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Rysowanie fizycznych kropel deszczu
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            rainParticles.forEach(p => {
+                let drawX = p.x - camera.x;
+                let drawY = p.y - camera.y;
+                if (drawX < 0) p.x += canvas.width;
+                if (drawX > canvas.width) p.x -= canvas.width;
+                if (drawY > canvas.height) p.y -= canvas.height;
+                
+                ctx.moveTo(p.x - camera.x, p.y - camera.y);
+                ctx.lineTo(p.x - camera.x, p.y - camera.y + p.length);
+                p.y += p.vy;
+            });
+            ctx.stroke();
+
             ctx.fillStyle = '#2ecc71'; 
             ctx.font = 'bold 24px Arial'; 
             ctx.textAlign = 'center';
