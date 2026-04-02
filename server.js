@@ -265,6 +265,17 @@ io.on('connection', (socket) => {
 
     // --- DOŁĄCZANIE (TRYB TEAMS) ---
     socket.on('joinTeamGame', (data) => {
+        const skinType = data.skin || 'standard';
+        let baseSpeed = 5;
+        let massGainMult = 1.0; 
+        
+        if (skinType === 'arystokrata') {
+            baseSpeed = 4.8;     
+            massGainMult = 1.15; 
+        } else if (skinType === 'ninja') {
+            baseSpeed = 5.5;      
+        }
+
         const teams = ['N', 'S', 'E', 'W'];
         let teamCounts = { N: 0, S: 0, E: 0, W: 0 };
         Object.values(players).forEach(p => { if (p.team) teamCounts[p.team]++; });
@@ -274,15 +285,20 @@ io.on('connection', (socket) => {
         players[socket.id] = {
             id: socket.id,
             x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
+            baseSpeed: baseSpeed,               // FIX: Ustawianie predkosci w Teams
+            massMultiplier: massGainMult,       // FIX: Prawidłowe nadanie mnożnika
             skills: { speed: 0, strength: 0, weapon: 0 }, 
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
             color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
-            skin: data.skin || 'standard', 
+            skin: skinType, 
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
             isRecruiting: false, formation: 0, moveAngle: 0,
-            team: chosenTeam, gameMode: data.mode 
+            team: chosenTeam, gameMode: data.mode,
+            isTutorialActive: true,             // FIX: Midas aktywny w Teams
+            tutorialFlags: { m15: false, m50: false, m100: false },
+            tutorialText: ""
         };
         
         let base = castles.find(c => c.id === chosenTeam);
@@ -292,6 +308,11 @@ io.on('connection', (socket) => {
         }
 
         socket.emit('initTeam', { id: socket.id, team: chosenTeam, color: TEAM_COLORS[chosenTeam] });
+        
+        let msg = getTutorialMessage(data.name, `join_${skinType}`);
+        players[socket.id].tutorialText = msg;
+        io.to(socket.id).emit('tutorialTick', { text: msg });
+        
         console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
     });
 
@@ -303,6 +324,16 @@ io.on('connection', (socket) => {
         
         console.log(`[TRENING] Trudność botów zmieniona! Mnożnik: x${botDifficultyMultiplier}`);
         io.emit('killEvent', { text: `⚙️ Zmiana trudności AI: ${levelIndex === 0 ? 'ŁATWY' : levelIndex === 1 ? 'NORMALNY' : 'TRUDNY'}`, time: 150 });
+    });
+
+    // --- NOWOŚĆ: Przełączanie formacji z panelu klienta ---
+    socket.on('setFormation', (formationIndex) => {
+        const p = players[socket.id];
+        if (p) {
+            p.formation = formationIndex;
+            let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : (p.formation === 2 ? "LINIA" : "WŁASNA (PPM)"));
+            socket.emit('formationSwitched', formName);
+        }
     });
 
     // --- RUCH (TRYB FREE) ---
@@ -642,7 +673,7 @@ setInterval(() => {
                 io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 });
             }, 20000); // 20 sekund śniegu
         } else {
-            // --- NOWOŚĆ: EVENT DESZCZU METEORYTÓW ---
+            // --- EVENT DESZCZU METEORYTÓW ---
             activeEvent = 'METEOR_SHOWER';
             io.emit('killEvent', { text: `☄️ UWAGA! Zbliża się deszcz meteorytów! Omijajcie czerwone strefy!`, time: 300 });
             
@@ -1134,7 +1165,7 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
-    // --- NOWOŚĆ: WYSYŁANIE ŚRODOWISKA (KRZAKI, METEORY) ---
+    // --- WYSYŁANIE ŚRODOWISKA (KRZAKI, METEORY) ---
     io.emit('serverTick', { 
         players, bots, foods, projectiles, loots, 
         activeEvent, eventTimeLeft, castles, bushes, meteorZones 
