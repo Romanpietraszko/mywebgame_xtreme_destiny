@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Tryb Drużynowy (PvP & Trening) - Przebudowa na silniku Free.js
+// TEAMS.JS - Tryb Drużynowy (PvP & Trening)
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -15,9 +15,7 @@ let controlType = 'WASD', gameState = 'MENU', myId = null;
 let myTeam = null; 
 let gameMode = 'PvP'; 
 
-// Statystyki RPG, Ekwipunek
-let skillPoints = 0;
-let playerSkills = { speed: 0, strength: 0, weapon: 0 };
+let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 
 window.weaponPath = 'none'; 
@@ -53,7 +51,6 @@ window.addEventListener('mousemove', (e) => {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // FIX ZOOMA: Prawidłowe obliczanie pozycji myszy w świecie gry
         const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
         const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
         
@@ -123,6 +120,19 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
+// --- NOWOŚĆ: Logika szybkiej zmiany formacji ---
+window.setFormation = (idx) => {
+    if (!player) return;
+    player.formation = idx; 
+    socket.emit('setFormation', idx); // Wymaga dodania "socket.on('setFormation', ...)" na serwerze!
+    
+    const buttons = document.querySelectorAll('.form-btn');
+    buttons.forEach((btn, i) => {
+        btn.style.borderColor = (i === idx) ? '#f1c40f' : '#2c3e50';
+        btn.style.background = (i === idx) ? '#2c3e50' : '#34495e';
+    });
+};
+
 window.onkeydown = (e) => {
     keys[e.code] = true; 
     if (e.code === 'KeyH' && player) player.isTutorialActive = !player.isTutorialActive;
@@ -130,6 +140,13 @@ window.onkeydown = (e) => {
     if (gameState === 'PLAYING') {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
+        
+        // Bezpośrednie klawisze formacji
+        if (e.code === 'Digit3') window.setFormation(0); 
+        if (e.code === 'Digit4') window.setFormation(1); 
+        if (e.code === 'Digit5') window.setFormation(2); 
+        if (e.code === 'Digit6') window.setFormation(3); 
+
         if (e.code === 'KeyE' && !player.isSafe) socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         if (e.code === 'KeyR' && paths.weapon === 'winter' && !player.isSafe) { 
             const now = Date.now(); 
@@ -173,6 +190,22 @@ window.startGame = (control, mode) => {
         diffBtn.style.display = 'block';
     }
 
+    // Panel Taktyczny na interfejsie
+    let formMenu = document.getElementById('formation-menu');
+    if (!formMenu) {
+        formMenu = document.createElement('div');
+        formMenu.id = 'formation-menu';
+        formMenu.style.cssText = "position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; z-index: 100;";
+        formMenu.innerHTML = `
+            <button class="form-btn" onclick="setFormation(0)" style="background: #2c3e50; color: white; padding: 8px 15px; border-radius: 8px; border: 2px solid #f1c40f; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">[3] Okrąg</button>
+            <button class="form-btn" onclick="setFormation(1)" style="background: #34495e; color: white; padding: 8px 15px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">[4] Klin</button>
+            <button class="form-btn" onclick="setFormation(2)" style="background: #34495e; color: white; padding: 8px 15px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">[5] Linia</button>
+            <button class="form-btn" onclick="setFormation(3)" style="background: #34495e; color: white; padding: 8px 15px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold; box-shadow: 0 4px 6px rgba(0,0,0,0.3); transition: 0.2s;">[6] Własna</button>
+        `;
+        document.body.appendChild(formMenu);
+    }
+    formMenu.style.display = 'flex';
+
     const name = document.getElementById('playerName').value || "Żołnierz";
     
     player = {
@@ -181,7 +214,7 @@ window.startGame = (control, mode) => {
         moveAngle: 0, isMoving: false, 
         isSafe: false, isShielding: false, aura: null, inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
         team: null, isRecruiting: false, formation: 0,
-        isTutorialActive: true, tutorialText: "Ładowanie areny..."
+        isTutorialActive: true, tutorialText: "Pobieranie rozkazów..."
     };
     
     socket.emit('joinTeamGame', { name: name, mode: gameMode, skin: player.skin });
@@ -194,8 +227,7 @@ window.startGame = (control, mode) => {
 
 // --- KOMUNIKACJA Z SERWEREM ---
 socket.on('initTeam', (data) => { 
-    myId = data.id; 
-    myTeam = data.team; 
+    myId = data.id; myTeam = data.team; 
     if (player) { player.id = myId; player.team = myTeam; player.color = data.color; }
 });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
@@ -204,7 +236,18 @@ socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
 socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
 socket.on('tutorialTick', (data) => { if (player) { player.tutorialText = data.text; player.isTutorialActive = true; } });
 socket.on('recruitToggled', (state) => { if (player) player.isRecruiting = state; killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); });
-socket.on('formationSwitched', (formName) => { killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); });
+
+socket.on('formationSwitched', (formName) => { 
+    killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
+    if(player) {
+        const buttons = document.querySelectorAll('.form-btn');
+        buttons.forEach((btn, i) => {
+            btn.style.borderColor = (i === player.formation) ? '#f1c40f' : '#2c3e50';
+            btn.style.background = (i === player.formation) ? '#2c3e50' : '#34495e';
+        });
+    }
+});
+
 socket.on('shopSuccess', (data) => { killLogs.push({ text: `🛒 Zakupiono: ${data.item}!`, time: 200 }); });
 socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, time: 200 }); });
 
@@ -226,6 +269,7 @@ socket.on('gameOver', (data) => {
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
     let diffBtn = document.getElementById('difficulty-btn'); if (diffBtn) diffBtn.style.display = 'none';
+    let formMenu = document.getElementById('formation-menu'); if (formMenu) formMenu.style.display = 'none';
 });
 
 socket.on('serverTick', (data) => {
