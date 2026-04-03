@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - OSTATECZNA WERSJA
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -14,7 +14,7 @@ let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 window.weaponPath = 'none'; 
 
-let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [];
+let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, killLogs = [];
 let lastWinterUseClient = 0, lastDashUseClient = 0; 
 let lastSkillMenuState = '';
 
@@ -114,7 +114,7 @@ window.addEventListener('mobile-attack', () => {
     }
 });
 
-// --- STRATEGIA RTS ---
+// --- STRATEGIA RTS (ZMIANA FORMACJI) ---
 window.setFormation = (idx) => {
     if (!player) return;
     player.formation = idx; 
@@ -183,6 +183,7 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Dowódca";
     window.playerSkin = document.querySelector('.char-card.selected') ? document.querySelector('.char-card.selected').id.replace('char-', '') : 'standard';
 
+    // WAITING ROOM
     gameState = 'WAITING';
     let lobbyDiv = document.createElement('div');
     lobbyDiv.id = 'waiting-room';
@@ -268,7 +269,7 @@ socket.on('gameOver', (data) => {
     if (data && data.message) finalDeathMessage = data.message;
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
-    let formMenu = document.getElementById('formation-panel'); if (formMenu) formMenu.style.display = 'none';
+    const panel = document.getElementById('formation-panel'); if (panel) panel.style.display = 'none';
     
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
@@ -320,11 +321,22 @@ window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
 
 function checkEquipmentUpgrades() {
     if (!player) return;
-    let total = getTier(player.score, [100, 450, 850]) + getTier(player.score, [500, 800, 1150]) + getTier(player.score, [15, 300, 700]) + getTier(playerSkills.speed, [3, 6, 9]) + getTier(player.score, [50, 150, 300]); 
+    let total = 0;
+    total += getTier(player.score, [100, 450, 850]); 
+    total += getTier(player.score, [500, 800, 1150]); 
+    total += getTier(player.score, [15, 300, 700]); 
+    total += getTier(playerSkills.speed, [3, 6, 9]); 
+    total += getTier(player.score, [50, 150, 300]); 
+    
     if (lastCalculatedTier > 0 && total > lastCalculatedTier) {
-        let auraColor = total >= 10 ? '#f1c40f' : (total >= 5 ? '#3498db' : '#ffffff'); 
+        let auraColor = '#ffffff'; 
+        if (total >= 10) auraColor = '#f1c40f'; 
+        else if (total >= 5) auraColor = '#3498db'; 
+
         player.aura = { time: 45, maxTime: 45, color: auraColor };
-        document.body.classList.remove('shield-flash'); void document.body.offsetWidth; document.body.classList.add('shield-flash');
+        document.body.classList.remove('shield-flash');
+        void document.body.offsetWidth; 
+        document.body.classList.add('shield-flash');
         setTimeout(() => document.body.classList.remove('shield-flash'), 400);
     }
     lastCalculatedTier = total;
@@ -368,8 +380,7 @@ function update() {
     }
     
     // ==========================================
-    // TWARDA NAPRAWA DUCHA I KOLIZJI 
-    // Obliczamy lokalnie strefę bezpieczną, aby zignorować błąd servera!
+    // TWARDA NAPRAWA DUCHA I SKLEPU 
     // ==========================================
     player.isSafe = castles.some(c => c.owner === player.team && Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
 
@@ -379,12 +390,12 @@ function update() {
         if (!isNaN(player.x) && !isNaN(player.y)) { 
             camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2; 
         }
-        // Hack: Wysyłamy stary Event playerMovement (z free.js), który zmusza serwer do przyjęcia flagi isSafe!
+        // Wysyłamy do serwera dokładne pozycje, MASĘ i FLAGE ISSAFE, żeby uaktualnić zjadanie!
         socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
     }
 }
 
-// --- GWIEZDNE FORTECE (Zastępują zwykłe zamki) ---
+// --- GWIEZDNE FORTECE ---
 function drawStarBase(ctx, z) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -437,6 +448,7 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        // Mroczny klimat tła
         ctx.fillStyle = '#0a1128'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -508,9 +520,10 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // ZABEZPIECZONE RYSOWANIE
+        // --- ZABEZPIECZONE RYSOWANIE (UKRYWANIE TYLKO TYCH CO SĄ W BAZIE) ---
         allEntities.forEach(e => {
-            if (e !== player && e.isSafe && (!player || !player.isSafe)) return;
+            // UKRYWAMY CAŁKOWICIE, JEŚLI JEST W BAZIE/SKLEPIE (Dotyczy to też samego gracza)
+            if (e.isSafe) return; 
             
             let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
@@ -519,8 +532,7 @@ function gameLoop(currentTime) {
             if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
             else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
             
-            // Wymuszamy RYSOWANIE zawsze (omijamy ukrywanie engine.js)
-            drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
+            drawStickman(e, e.x, e.y, getScale(renderMass), e.isSafe, currentKingId); 
             
             if (e.team) {
                 ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
@@ -530,6 +542,7 @@ function gameLoop(currentTime) {
             }
         });
 
+        // Cząsteczki
         if (particles.length > 300) particles.shift();
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.85; p.vy *= 0.85; p.life -= p.decay; 
@@ -537,6 +550,7 @@ function gameLoop(currentTime) {
             if (p.life <= 0) particles.splice(i, 1);
         }
 
+        // Cyferki
         for (let i = damageTexts.length - 1; i >= 0; i--) {
             let dt = damageTexts[i]; dt.x += dt.vx; dt.y += dt.vy; dt.life -= 0.02; 
             ctx.save(); ctx.globalAlpha = Math.max(0, dt.life); ctx.fillStyle = dt.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
@@ -572,7 +586,7 @@ function gameLoop(currentTime) {
         }
         wasSafe = player.isSafe; 
         
-        // ZABEZPIECZONA ŚNIEŻYCA
+        // ŚNIEŻYCA I DESZCZ
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save(); ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
             rainParticles.forEach(p => {
@@ -587,7 +601,7 @@ function gameLoop(currentTime) {
             blizzardParticles.forEach(p => {
                 let drawX = p.x - camera.x; let drawY = p.y - camera.y;
                 if (drawX < 0) p.x += canvas.width; if (drawX > canvas.width) p.x -= canvas.width; if (drawY < 0) p.y += canvas.height; if (drawY > canvas.height) p.y -= canvas.height;
-                ctx.moveTo(p.x - camera.x, p.y - camera.y); // FIX ZROBIONY (Koniec pajączyn)
+                ctx.moveTo(p.x - camera.x, p.y - camera.y); 
                 ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1.5, 0, Math.PI * 2); p.x += p.vx; p.y += p.vy;
             });
             ctx.fill(); ctx.restore();
