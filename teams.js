@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - OSTATECZNA WERSJA
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -14,7 +14,7 @@ let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 window.weaponPath = 'none'; 
 
-let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, killLogs = [];
+let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [];
 let lastWinterUseClient = 0, lastDashUseClient = 0; 
 let lastSkillMenuState = '';
 
@@ -114,7 +114,7 @@ window.addEventListener('mobile-attack', () => {
     }
 });
 
-// --- STRATEGIA RTS (ZMIANA FORMACJI) ---
+// --- STRATEGIA RTS ---
 window.setFormation = (idx) => {
     if (!player) return;
     player.formation = idx; 
@@ -296,7 +296,6 @@ socket.on('serverTick', (data) => {
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
         
-        // ZABEZPIECZENIE POZYCJI
         if (sSelf.x !== undefined && sSelf.y !== undefined && !isNaN(sSelf.x) && !isNaN(sSelf.y)) {
             if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) { 
                 player.x = sSelf.x; 
@@ -308,9 +307,15 @@ socket.on('serverTick', (data) => {
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = sSelf.activeWeapon || 'sword';
 
+        // --- KLUCZ: Ufamy tylko LOKALNEJ fizyce jeśli chodzi o sklep i widzialność ---
+        // Usunięto player.isSafe = sSelf.isSafe, zapobiegając nadpisywaniu ze złego serwera!
+
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
         if (sSelf.skin) player.skin = sSelf.skin; 
+        
+        const shopUI = document.getElementById('castle-shop'); 
+        if (shopUI) shopUI.style.display = player.isSafe ? 'flex' : 'none';
     }
     delete otherPlayers[myId];
 });
@@ -321,22 +326,11 @@ window.buyItem = (itemName) => { socket.emit('buyShopItem', itemName); };
 
 function checkEquipmentUpgrades() {
     if (!player) return;
-    let total = 0;
-    total += getTier(player.score, [100, 450, 850]); 
-    total += getTier(player.score, [500, 800, 1150]); 
-    total += getTier(player.score, [15, 300, 700]); 
-    total += getTier(playerSkills.speed, [3, 6, 9]); 
-    total += getTier(player.score, [50, 150, 300]); 
-    
+    let total = getTier(player.score, [100, 450, 850]) + getTier(player.score, [500, 800, 1150]) + getTier(player.score, [15, 300, 700]) + getTier(playerSkills.speed, [3, 6, 9]) + getTier(player.score, [50, 150, 300]); 
     if (lastCalculatedTier > 0 && total > lastCalculatedTier) {
-        let auraColor = '#ffffff'; 
-        if (total >= 10) auraColor = '#f1c40f'; 
-        else if (total >= 5) auraColor = '#3498db'; 
-
+        let auraColor = total >= 10 ? '#f1c40f' : (total >= 5 ? '#3498db' : '#ffffff'); 
         player.aura = { time: 45, maxTime: 45, color: auraColor };
-        document.body.classList.remove('shield-flash');
-        void document.body.offsetWidth; 
-        document.body.classList.add('shield-flash');
+        document.body.classList.remove('shield-flash'); void document.body.offsetWidth; document.body.classList.add('shield-flash');
         setTimeout(() => document.body.classList.remove('shield-flash'), 400);
     }
     lastCalculatedTier = total;
@@ -380,7 +374,8 @@ function update() {
     }
     
     // ==========================================
-    // TWARDA NAPRAWA DUCHA I SKLEPU 
+    // LOKALNE ZARZĄDZANIE BAZĄ 
+    // Odłączamy się od zbugowanej flagi serwera i liczymy wszystko u siebie.
     // ==========================================
     player.isSafe = castles.some(c => c.owner === player.team && Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
 
@@ -390,12 +385,11 @@ function update() {
         if (!isNaN(player.x) && !isNaN(player.y)) { 
             camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2; 
         }
-        // Wysyłamy do serwera dokładne pozycje, MASĘ i FLAGE ISSAFE, żeby uaktualnić zjadanie!
+        // Używamy Eventu 'playerMovement', aby przeforsować na serwerze poprawną flagę z lokalnego isSafe!
         socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
     }
 }
 
-// --- GWIEZDNE FORTECE ---
 function drawStarBase(ctx, z) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -447,16 +441,11 @@ function gameLoop(currentTime) {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        // Mroczny klimat tła
-        ctx.fillStyle = '#0a1128'; 
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#0a1128'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        let vWidth = canvas.width / globalScale; 
-        let vHeight = canvas.height / globalScale;
+        let vWidth = canvas.width / globalScale; let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
-        if (isNaN(vCamera.x)) vCamera.x = 0; 
-        if (isNaN(vCamera.y)) vCamera.y = 0;
+        if (isNaN(vCamera.x)) vCamera.x = 0; if (isNaN(vCamera.y)) vCamera.y = 0;
 
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -520,9 +509,11 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // --- ZABEZPIECZONE RYSOWANIE (UKRYWANIE TYLKO TYCH CO SĄ W BAZIE) ---
+        // ==========================================
+        // RYSOWANIE GRACZY I BOTÓW
+        // ==========================================
         allEntities.forEach(e => {
-            // UKRYWAMY CAŁKOWICIE, JEŚLI JEST W BAZIE/SKLEPIE (Dotyczy to też samego gracza)
+            // CAŁKOWITE UKRYCIE GRACZA I JEGO NICKU W SKLEPIE
             if (e.isSafe) return; 
             
             let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
@@ -532,7 +523,7 @@ function gameLoop(currentTime) {
             if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
             else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
             
-            drawStickman(e, e.x, e.y, getScale(renderMass), e.isSafe, currentKingId); 
+            drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
             
             if (e.team) {
                 ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
@@ -542,7 +533,6 @@ function gameLoop(currentTime) {
             }
         });
 
-        // Cząsteczki
         if (particles.length > 300) particles.shift();
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.85; p.vy *= 0.85; p.life -= p.decay; 
@@ -550,7 +540,6 @@ function gameLoop(currentTime) {
             if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Cyferki
         for (let i = damageTexts.length - 1; i >= 0; i--) {
             let dt = damageTexts[i]; dt.x += dt.vx; dt.y += dt.vy; dt.life -= 0.02; 
             ctx.save(); ctx.globalAlpha = Math.max(0, dt.life); ctx.fillStyle = dt.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
@@ -577,16 +566,7 @@ function gameLoop(currentTime) {
 
         ctx.restore(); 
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
-
-        // SKLEP (Synch oparty na lokalnym isSafe zamiast pingu z serwera)
-        if (player.isSafe && !wasSafe) {
-            const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'flex';
-        } else if (!player.isSafe && wasSafe) {
-            const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
-        }
-        wasSafe = player.isSafe; 
         
-        // ŚNIEŻYCA I DESZCZ
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save(); ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
             rainParticles.forEach(p => {
