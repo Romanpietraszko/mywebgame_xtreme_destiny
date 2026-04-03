@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - OSTATECZNA WERSJA
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -14,7 +14,7 @@ let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 window.weaponPath = 'none'; 
 
-let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, killLogs = [];
+let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [];
 let lastWinterUseClient = 0, lastDashUseClient = 0; 
 let lastSkillMenuState = '';
 
@@ -114,7 +114,7 @@ window.addEventListener('mobile-attack', () => {
     }
 });
 
-// --- STRATEGIA RTS (ZMIANA FORMACJI) ---
+// --- STRATEGIA RTS ---
 window.setFormation = (idx) => {
     if (!player) return;
     player.formation = idx; 
@@ -183,13 +183,12 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Dowódca";
     window.playerSkin = document.querySelector('.char-card.selected') ? document.querySelector('.char-card.selected').id.replace('char-', '') : 'standard';
 
-    // WAITING ROOM
     gameState = 'WAITING';
     let lobbyDiv = document.createElement('div');
     lobbyDiv.id = 'waiting-room';
     lobbyDiv.style.cssText = "position: fixed; inset: 0; background: rgba(10, 17, 40, 0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 200; color: white;";
     lobbyDiv.innerHTML = `
-        <h1 style="font-family: 'Permanent Marker', cursive; font-size: 40px; color: #f1c40f; margin-bottom: 10px;">Wojna Frakcji</h1>
+        <h1 style="font-family: 'Permanent Marker', cursive; font-size: 40px; color: #f1c40f; margin-bottom: 10px;">Gwiezdne Frakcje</h1>
         <p style="margin-bottom: 30px; color: #bdc3c7;">Wybierz sojusz, pod którym wyruszysz na bitwę.</p>
         <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; max-width: 600px;">
             <button onclick="joinLobbyTeam('N')" style="background: #3498db; padding: 20px 40px; border: none; border-radius: 10px; color: white; font-size: 20px; font-weight: bold; cursor: pointer; box-shadow: 0 5px 0 #2980b9;">Północ 🥶</button>
@@ -269,7 +268,7 @@ socket.on('gameOver', (data) => {
     if (data && data.message) finalDeathMessage = data.message;
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
-    const panel = document.getElementById('formation-panel'); if (panel) panel.style.display = 'none';
+    let formMenu = document.getElementById('formation-panel'); if (formMenu) formMenu.style.display = 'none';
     
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
@@ -296,7 +295,7 @@ socket.on('serverTick', (data) => {
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
         
-        // POTĘŻNA TARCZA KORYGUJĄCA POZYCJĘ
+        // ZABEZPIECZENIE POZYCJI
         if (sSelf.x !== undefined && sSelf.y !== undefined && !isNaN(sSelf.x) && !isNaN(sSelf.y)) {
             if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) { 
                 player.x = sSelf.x; 
@@ -307,18 +306,10 @@ socket.on('serverTick', (data) => {
         player.score = (typeof sSelf.score === 'number' && !isNaN(sSelf.score)) ? sSelf.score : 5;
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = sSelf.activeWeapon || 'sword';
-        
-        // --- STAN isSafe ODBIERANY Z SERWERA ---
-        player.isSafe = !!sSelf.isSafe;
 
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
         if (sSelf.skin) player.skin = sSelf.skin; 
-        
-        const shopUI = document.getElementById('castle-shop'); 
-        if (shopUI) {
-            shopUI.style.display = player.isSafe ? 'flex' : 'none';
-        }
     }
     delete otherPlayers[myId];
 });
@@ -376,13 +367,20 @@ function update() {
         player.isMoving = false;
     }
     
+    // ==========================================
+    // TWARDA NAPRAWA DUCHA I KOLIZJI 
+    // Obliczamy lokalnie strefę bezpieczną, aby zignorować błąd servera!
+    // ==========================================
+    player.isSafe = castles.some(c => c.owner === player.team && Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
+
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
-        socket.emit('playerMovementTeam', { x: -100, y: -100, score: player.score, isShielding: false });
+        socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
         if (!isNaN(player.x) && !isNaN(player.y)) { 
             camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2; 
         }
-        socket.emit('playerMovementTeam', { x: player.x, y: player.y, score: player.score, isShielding: player.isShielding, moveAngle: player.moveAngle, isMoving: player.isMoving });
+        // Hack: Wysyłamy stary Event playerMovement (z free.js), który zmusza serwer do przyjęcia flagi isSafe!
+        socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
     }
 }
 
@@ -438,11 +436,15 @@ function gameLoop(currentTime) {
 
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#0a1128'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        ctx.fillStyle = '#0a1128'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        let vWidth = canvas.width / globalScale; let vHeight = canvas.height / globalScale;
+        let vWidth = canvas.width / globalScale; 
+        let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
-        if (isNaN(vCamera.x)) vCamera.x = 0; if (isNaN(vCamera.y)) vCamera.y = 0;
+        if (isNaN(vCamera.x)) vCamera.x = 0; 
+        if (isNaN(vCamera.y)) vCamera.y = 0;
 
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
@@ -506,7 +508,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // --- ZABEZPIECZONE RYSOWANIE ENTITIES ---
+        // ZABEZPIECZONE RYSOWANIE
         allEntities.forEach(e => {
             if (e !== player && e.isSafe && (!player || !player.isSafe)) return;
             
@@ -517,8 +519,7 @@ function gameLoop(currentTime) {
             if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
             else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
             
-            // Renderujemy nawet, jeśli isSafe = true (ponieważ problem kolizji był rozwiązany po stronie serwera)
-            // Dzięki temu widzisz siebie (i innych w ich zamkach, jeśli sam jesteś w swoim)
+            // Wymuszamy RYSOWANIE zawsze (omijamy ukrywanie engine.js)
             drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
             
             if (e.team) {
@@ -529,6 +530,7 @@ function gameLoop(currentTime) {
             }
         });
 
+        if (particles.length > 300) particles.shift();
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.85; p.vy *= 0.85; p.life -= p.decay; 
             ctx.save(); ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x, p.y, Math.max(0, p.size * p.life), 0, Math.PI * 2); ctx.fill(); ctx.restore();
@@ -561,7 +563,16 @@ function gameLoop(currentTime) {
 
         ctx.restore(); 
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
+
+        // SKLEP (Synch oparty na lokalnym isSafe zamiast pingu z serwera)
+        if (player.isSafe && !wasSafe) {
+            const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'flex';
+        } else if (!player.isSafe && wasSafe) {
+            const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
+        }
+        wasSafe = player.isSafe; 
         
+        // ZABEZPIECZONA ŚNIEŻYCA
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save(); ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height); ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
             rainParticles.forEach(p => {
@@ -576,7 +587,8 @@ function gameLoop(currentTime) {
             blizzardParticles.forEach(p => {
                 let drawX = p.x - camera.x; let drawY = p.y - camera.y;
                 if (drawX < 0) p.x += canvas.width; if (drawX > canvas.width) p.x -= canvas.width; if (drawY < 0) p.y += canvas.height; if (drawY > canvas.height) p.y -= canvas.height;
-                ctx.moveTo(p.x - camera.x, p.y - camera.y); ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1.5, 0, Math.PI * 2); p.x += p.vx; p.y += p.vy;
+                ctx.moveTo(p.x - camera.x, p.y - camera.y); // FIX ZROBIONY (Koniec pajączyn)
+                ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1.5, 0, Math.PI * 2); p.x += p.vx; p.y += p.vy;
             });
             ctx.fill(); ctx.restore();
             ctx.fillStyle = '#ecf0f1'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(`ZAMIĘĆ ŚNIEŻNA: ${eventTimeLeft}s`, canvas.width / 2, 80);
