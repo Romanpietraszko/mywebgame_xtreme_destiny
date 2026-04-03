@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - WERSJA ZDEBUGOWANA (SENIOR)
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - OSTATECZNA WERSJA
 // ==========================================
 
 const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
@@ -14,7 +14,7 @@ let skillPoints = 0, playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 window.weaponPath = 'none'; 
 
-let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, wasSafe = false, killLogs = [];
+let lastMoveDir = { x: 1, y: 0 }, lastCalculatedTier = 0, killLogs = [];
 let lastWinterUseClient = 0, lastDashUseClient = 0; 
 let lastSkillMenuState = '';
 
@@ -54,7 +54,7 @@ window.addEventListener('mousemove', (e) => {
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         
-        // Tarcza anty-NaN dla kierunku myszki
+        // Zabezpieczenie przed przekazywaniem NaN do silnika
         if (!isNaN(angle)) {
             lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
             player.moveAngle = angle; 
@@ -160,7 +160,7 @@ window.onkeydown = (e) => {
 
 window.onkeyup = (e) => { keys[e.code] = false; if (e.code === 'KeyQ' && player) player.isShielding = false; };
 
-// --- LOGIKA MENU I POCZEKALNI KLANOWEJ ---
+// --- LOGIKA MENU I WAITING ROOM ---
 window.startGame = (control, mode) => {
     controlType = control;
     gameMode = mode;
@@ -176,7 +176,7 @@ window.startGame = (control, mode) => {
             <button class="form-btn" onclick="setFormation(1)" style="background: #34495e; color: white; padding: 10px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold;">[4] Klin</button>
             <button class="form-btn" onclick="setFormation(2)" style="background: #34495e; color: white; padding: 10px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold;">[5] Linia</button>
             <button class="form-btn" onclick="setFormation(3)" style="background: #34495e; color: white; padding: 10px; border-radius: 8px; border: 2px solid #2c3e50; cursor: pointer; font-weight: bold;">[6] Własna</button>
-            <button onclick="socket.emit('massBotThrow', { dx: lastMoveDir.x, dy: lastMoveDir.y })" style="background: #e74c3c; color: white; padding: 10px; border-radius: 8px; border: 2px solid #c0392b; cursor: pointer; font-weight: bold; margin-left: 10px;">[I] Zmasowany Atak</button>
+            <button onclick="socket.emit('massBotThrow', { dx: lastMoveDir.x, dy: lastMoveDir.y })" style="background: #e74c3c; color: white; padding: 10px; border-radius: 8px; border: 2px solid #c0392b; cursor: pointer; font-weight: bold; margin-left: 10px;">[I] Ostrzał</button>
         `;
         document.body.appendChild(formMenu);
     }
@@ -271,7 +271,7 @@ socket.on('gameOver', (data) => {
     if (data && data.message) finalDeathMessage = data.message;
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
-    const panel = document.getElementById('formation-panel'); if (panel) panel.style.display = 'none';
+    let formMenu = document.getElementById('formation-panel'); if (formMenu) formMenu.style.display = 'none';
     
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
@@ -298,7 +298,7 @@ socket.on('serverTick', (data) => {
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
         
-        // POTĘŻNA TARCZA ANTY-NAN NA POZYCJE Z SERWERA
+        // ZABEZPIECZENIE WSPÓŁRZĘDNYCH Z SERWERA
         if (sSelf.x !== undefined && sSelf.y !== undefined && !isNaN(sSelf.x) && !isNaN(sSelf.y)) {
             if (Math.hypot(player.x - sSelf.x, player.y - sSelf.y) > 300) { 
                 player.x = sSelf.x; 
@@ -309,6 +309,8 @@ socket.on('serverTick', (data) => {
         player.score = (typeof sSelf.score === 'number' && !isNaN(sSelf.score)) ? sSelf.score : 5;
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = sSelf.activeWeapon || 'sword';
+        
+        // --- KLUCZ: Ufamy tylko i wyłącznie serwerowi w kwestii isSafe! ---
         player.isSafe = !!sSelf.isSafe;
 
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
@@ -316,7 +318,9 @@ socket.on('serverTick', (data) => {
         if (sSelf.skin) player.skin = sSelf.skin; 
         
         const shopUI = document.getElementById('castle-shop'); 
-        if (shopUI) shopUI.style.display = player.isSafe ? 'flex' : 'none';
+        if (shopUI) {
+            shopUI.style.display = player.isSafe ? 'flex' : 'none';
+        }
     }
     delete otherPlayers[myId];
 });
@@ -471,7 +475,7 @@ function gameLoop(currentTime) {
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
-        ctx.translate(-camera.x - (canvas.width/2)/globalScale, -camera.y - (canvas.height/2)/globalScale);
+        ctx.translate(-player.x, -player.y); 
 
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
@@ -516,7 +520,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // ZABEZPIECZONE RYSOWANIE
+        // ZABEZPIECZONE RYSOWANIE BAZUJĄCE NA FREE.JS
         allEntities.forEach(e => {
             if (e !== player && e.isSafe && (!player || !player.isSafe)) return;
             
@@ -524,11 +528,13 @@ function gameLoop(currentTime) {
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
             e.isMoving = !!e.isMoving; e.skin = e.skin || 'standard'; e.weaponPath = e.paths ? e.paths.weapon : (e === player ? paths.weapon : 'none');
 
+            // Przydział koloru drużyny dla bota
             if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
             else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
             
             drawStickman(e, e.x, e.y, getScale(renderMass), e.isSafe, currentKingId); 
             
+            // Znacznik drużyny nad głową
             if (e.team) {
                 ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                 let r = 25 * getScale(renderMass);
@@ -537,7 +543,7 @@ function gameLoop(currentTime) {
             }
         });
 
-        // OGRANICZENIE CZĄSTECZEK (ŻEBY NIE BYŁO LAGA)
+        // OGRANICZENIE CZĄSTECZEK
         if (particles.length > 300) particles.shift();
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i]; p.x += p.vx; p.y += p.vy; p.vx *= 0.85; p.vy *= 0.85; p.life -= p.decay; 
@@ -588,7 +594,7 @@ function gameLoop(currentTime) {
                 let drawX = p.x - camera.x; let drawY = p.y - camera.y;
                 if (drawX < 0) p.x += canvas.width; if (drawX > canvas.width) p.x -= canvas.width; if (drawY < 0) p.y += canvas.height; if (drawY > canvas.height) p.y -= canvas.height;
                 
-                ctx.beginPath(); // ROZWIĄZANIE PROBLEMU PAJĘCZYNY Z 4 SCREENA
+                ctx.beginPath(); // ROZWIĄZANIE PROBLEMU PAJĘCZYNY 
                 ctx.arc(p.x - camera.x, p.y - camera.y, Math.random() * 3 + 1.5, 0, Math.PI * 2); 
                 ctx.fill();
                 
@@ -605,14 +611,14 @@ function gameLoop(currentTime) {
             ctx.save(); let tutorialX = 20; let tutorialY = canvas.height - 200; 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; ctx.fillRect(tutorialX, tutorialY, 380, 110); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
             if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
-            ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left'; ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
+            ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left'; ctx.fillText("MIDAS (Dowódca):", tutorialX + 110, tutorialY + 25);
             ctx.fillStyle = '#000'; ctx.font = '13px Arial';
             if (player.tutorialText) { if (window.wrapText) { window.wrapText(ctx, player.tutorialText, tutorialX + 110, tutorialY + 50, 250, 18); } else { ctx.fillText(player.tutorialText.substring(0, 50) + "...", tutorialX + 110, tutorialY + 50); } }
             ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial'; ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100); ctx.restore();
         }
 
         if (gameState !== 'GAMEOVER') {
-            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140); ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; ctx.fillText("🏆 RANKING SERWERA", canvas.width - 265, 30);
+            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140); ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; ctx.fillText("🏆 WYNIKI FRAKCJI", canvas.width - 265, 30);
             topEntities.forEach((p, i) => {
                 let yPos = 55 + i * 20; let displayScore = isNaN(p.score) ? 5 : Math.floor(p.score);
                 if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); } 
@@ -620,14 +626,14 @@ function gameLoop(currentTime) {
             });
 
             let displayMyScore = isNaN(player.score) ? 5 : Math.floor(player.score);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`PUNKTY: ${displayMyScore}`, 20, 40);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 40);
             if (player.isRecruiting !== undefined) {
-                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
+                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 60);
             }
 
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
-                for (let i = 0; i < killLogs.length; i++) { let log = killLogs[i]; ctx.fillStyle = `rgba(231, 76, 60, ${log.time / 50})`; ctx.fillText("☠️ " + log.text, canvas.width - 20, 170 + (i * 22)); log.time--; }
+                for (let i = 0; i < killLogs.length; i++) { let log = killLogs[i]; ctx.fillStyle = `rgba(231, 76, 60, ${log.time / 50})`; ctx.fillText("⚔️ " + log.text, canvas.width - 20, 170 + (i * 22)); log.time--; }
                 ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
             }
 
