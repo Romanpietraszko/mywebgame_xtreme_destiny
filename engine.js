@@ -554,4 +554,3 @@ function resize() {
 }
 window.onresize = resize;
 resize();
-to jest engine.js bez zmiany kodu jego strukury. Rozwiń/zaktualizuj go
