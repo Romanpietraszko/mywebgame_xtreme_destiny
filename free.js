@@ -56,6 +56,12 @@ const frameDuration = 1000 / targetFPS; // Ok. 16.66ms na klatkę
 let nextGachaTime = 0;
 const GACHA_INTERVAL_MS = 60 * 1000; // 60 sekund do testów!
 
+// =======================================================
+// NOWOŚĆ: TARCZA DEBUGUJĄCA (ANTI-LAG WATCHDOG)
+// =======================================================
+let lastServerTickTime = Date.now();
+let isServerLagging = false;
+
 window.addEventListener('contextmenu', e => e.preventDefault());
 
 // --- OBSŁUGA MYSZKI ---
@@ -73,7 +79,11 @@ window.addEventListener('mousemove', (e) => {
         const playerScreenY = canvas.height / 2;
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
-        lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
+        
+        // ZABEZPIECZENIE (DEBUG): Chroni przed zablokowaniem myszki w martwym punkcie
+        if (!isNaN(angle)) {
+            lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
+        }
 
         if (draggedBotId) { dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; }
     }
@@ -225,6 +235,7 @@ window.startGame = (type) => {
     gameState = 'PLAYING';
     
     lastFrameTime = performance.now();
+    lastServerTickTime = Date.now(); // Resetujemy czas do sprawdzania laga
     nextGachaTime = Date.now() + GACHA_INTERVAL_MS; // Ustawiamy czas pierwszego Gacha!
     requestAnimationFrame(gameLoop);
 };
@@ -234,17 +245,18 @@ socket.on('init', (data) => { myId = data.id; if (player) player.id = myId; });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 
 socket.on('skillUpdated', (data) => {
+    if(!data) return; // Zabezpieczenie
     playerSkills = data.skills; 
     skillPoints = data.points; 
     paths = data.paths || paths; 
     window.weaponPath = paths.weapon;
 });
 
-socket.on('botEaten', (data) => { if (player) player.score = data.newScore; });
-socket.on('killEvent', (data) => { killLogs.push({ text: data.text, time: 200 }); });
+socket.on('botEaten', (data) => { if (player && data && !isNaN(data.newScore)) player.score = data.newScore; });
+socket.on('killEvent', (data) => { if(data && data.text) killLogs.push({ text: data.text, time: 200 }); });
 
 socket.on('tutorialTick', (data) => {
-    if (player) {
+    if (player && data && data.text) {
         player.tutorialText = data.text;
         player.isTutorialActive = true;
     }
@@ -260,6 +272,11 @@ socket.on('formationSwitched', (formName) => {
 
 // Odbieranie informacji o obrażeniach i GENEROWANIE CZĄSTECZEK
 socket.on('damageText', (data) => {
+    if(!data || isNaN(data.x) || isNaN(data.y)) return; // Zabezpieczenie
+
+    // ZABEZPIECZENIE (DEBUG): Limitujemy ilość żeby RAM nie wybuchł (Max 50 wpisów)
+    if (damageTexts.length > 50) damageTexts.shift();
+
     damageTexts.push({
         x: data.x + (Math.random() * 20 - 10), 
         y: data.y,
@@ -273,19 +290,22 @@ socket.on('damageText', (data) => {
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
     let count = data.val > 20 ? 12 : 6; 
     
-    for (let i = 0; i < count; i++) {
-        let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 6 + 2;
-        particles.push({
-            x: data.x,
-            y: data.y,
-            vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed,
-            life: 1.0,
-            decay: Math.random() * 0.05 + 0.02, 
-            color: particleColor,
-            size: Math.random() * 4 + 2 
-        });
+    // Ograniczenie ilości cząsteczek
+    if (particles.length < 250) {
+        for (let i = 0; i < count; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let speed = Math.random() * 6 + 2;
+            particles.push({
+                x: data.x,
+                y: data.y,
+                vx: Math.cos(angle) * speed,
+                vy: Math.sin(angle) * speed,
+                life: 1.0,
+                decay: Math.random() * 0.05 + 0.02, 
+                color: particleColor,
+                size: Math.random() * 4 + 2 
+            });
+        }
     }
 });
 
@@ -295,6 +315,8 @@ socket.on('gameOver', (data) => {
     document.getElementById('step-1').style.display = 'none';
     document.getElementById('step-2').style.display = 'none';
     
+    let scoreDisplay = (data && !isNaN(data.finalScore)) ? data.finalScore : 0;
+
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
         gameOverDiv = document.createElement('div');
@@ -307,7 +329,7 @@ socket.on('gameOver', (data) => {
     gameOverDiv.innerHTML = `
         <h2 style="color: #e74c3c; font-size: 38px; margin-bottom: 10px; text-transform: uppercase;">Zostałeś pożarty!</h2>
         <p style="font-size: 16px; margin-bottom: 20px;">Twój gang przestał istnieć.</p>
-        <p style="font-size: 24px; color: #f1c40f; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${data.finalScore}</p>
+        <p style="font-size: 24px; color: #f1c40f; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
         <button class="main-btn" onclick="location.reload()">Zagraj ponownie</button>
     `;
     
@@ -316,17 +338,27 @@ socket.on('gameOver', (data) => {
     if (shop) shop.style.display = 'none';
 });
 
+// ZABEZPIECZENIE (DEBUG): Tarcza Sanity Check na Odbiorze Danych
 socket.on('serverTick', (data) => {
-    foods = data.foods; 
-    bots = data.bots; 
-    projectiles = data.projectiles || [];
-    loots = data.loots || [];              
-    currentEvent = data.activeEvent;       
+    lastServerTickTime = Date.now(); // Resetujemy Watchdoga Lagów
+    isServerLagging = false;
+
+    if (!data) return; // Uniknięcie crasha przy pustym pakiecie
+
+    foods = Array.isArray(data.foods) ? data.foods : []; 
+    bots = Array.isArray(data.bots) ? data.bots : []; 
+    projectiles = Array.isArray(data.projectiles) ? data.projectiles : [];
+    loots = Array.isArray(data.loots) ? data.loots : [];              
+    currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
     
-    otherPlayers = data.players;
+    otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
+    
     if (myId && otherPlayers[myId]) {
-        player.score = otherPlayers[myId].score;
+        // Twarda weryfikacja licznika punktów
+        if (typeof otherPlayers[myId].score === 'number' && !isNaN(otherPlayers[myId].score)) {
+            player.score = otherPlayers[myId].score;
+        }
         player.inventory = otherPlayers[myId].inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword';
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
@@ -370,17 +402,18 @@ function update() {
 
     let dx = 0, dy = 0;
     
-    // --- NOWOŚĆ: OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
+    // --- OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
     if (controlType === 'TOUCH') {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
             
-            // Ciało i miecz celują tam, gdzie idziesz
-            lastMoveDir = { x: dx, y: dy };
-            
-            let len = Math.hypot(dx, dy);
-            if (len > 0) { dx /= len; dy /= len; }
+            // ZABEZPIECZENIE: Eliminacja wyliczeń na NaN
+            if (!isNaN(dx) && !isNaN(dy)) {
+                lastMoveDir = { x: dx, y: dy };
+                let len = Math.hypot(dx, dy);
+                if (len > 0) { dx /= len; dy /= len; }
+            }
         }
     } else if (controlType === 'WASD') {
         if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
@@ -402,16 +435,25 @@ function update() {
             }
         }
 
-        player.x += Math.cos(moveAngle) * speed; 
-        player.y += Math.sin(moveAngle) * speed;
+        // TARCZA (DEBUG): Ochrona przed ruchem w nieskończoność
+        if (!isNaN(moveAngle) && !isNaN(speed)) {
+            player.x += Math.cos(moveAngle) * speed; 
+            player.y += Math.sin(moveAngle) * speed;
+        }
     }
     
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
         player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
-        camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-        socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
+        if (!isNaN(player.x) && !isNaN(player.y)) {
+            camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
+        }
+        
+        // ZABEZPIECZENIE (DEBUG): Nie spamujemy serwera jeśli ma laga
+        if (!isServerLagging) {
+            socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
+        }
     }
 }
 
@@ -427,6 +469,11 @@ function gameLoop(currentTime) {
     }
 
     lastFrameTime = currentTime - (deltaTime % frameDuration);
+
+    // ZABEZPIECZENIE (DEBUG): Detektor Laga
+    if (Date.now() - lastServerTickTime > 1500) {
+        isServerLagging = true;
+    }
 
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
@@ -857,6 +904,21 @@ function gameLoop(currentTime) {
                 const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
             }
             wasSafe = player.isSafe; 
+        }
+
+        // =======================================================
+        // ZABEZPIECZENIE (DEBUG): WIZUALNE OSTRZEŻENIE O LAGU
+        // =======================================================
+        if (isServerLagging && gameState === 'PLAYING') {
+            ctx.save();
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.9)';
+            ctx.fillRect(0, 0, canvas.width, 40);
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 18px Arial';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText("⚠️ UTRATA POŁĄCZENIA! Oczekiwanie na odpowiedź serwera...", canvas.width / 2, 20);
+            ctx.restore();
         }
 
         if (gameState === 'PAUSED' && !document.getElementById('gacha-modal').style.display.includes('flex')) {
