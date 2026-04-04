@@ -1,493 +1,502 @@
 <!DOCTYPE html>
 <html lang="pl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
-    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
-    <script>
-    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
-    window.weaponPath = 'none';
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
+    <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    <script>
+    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
+    window.weaponPath = 'none';
 
-    (async function() {
-        try {
-            await window.CrazyGames.SDK.init();
-            console.log("CrazyGames SDK gotowe i czeka!");
-        } catch (e) {
-            console.error("Błąd SDK:", e);
-        }
-    })();
-    </script>
-    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
-    <style>
-        /* === POTĘŻNY, ELASTYCZNY CSS BEZPOŚREDNIO W HTML === */
-        
-        #ui-layer {
-            position: absolute;
-            inset: 0;
-            background: radial-gradient(circle, #1a2a4e 0%, #0a1128 100%);
-            display: flex;
-            justify-content: center;
-            align-items: center; 
-            z-index: 100;
-            overflow-y: auto; /* Przewijanie tła na małych telefonach */
-            padding: 20px 0; 
-        }
+    (async function() {
+        try {
+            await window.CrazyGames.SDK.init();
+            console.log("CrazyGames SDK gotowe i czeka!");
+        } catch (e) {
+            console.error("Błąd SDK:", e);
+        }
+    })();
+    </script>
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
+    <style>
+        /* === POTĘŻNY, ELASTYCZNY CSS BEZPOŚREDNIO W HTML === */
+        
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #ffffff; /* Podstawa dla przezroczystości */
+        }
+        
+        #ui-layer {
+            position: absolute;
+            inset: 0;
+            /* ZESZYTOWE TŁO W KRATKĘ ZAMIAST GWIAZD */
+            background-color: #ffffff;
+            background-image: 
+                linear-gradient(rgba(52, 152, 219, 0.3) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(52, 152, 219, 0.3) 1px, transparent 1px);
+            background-size: 40px 40px; /* Rozmiar pojedynczej kratki */
+            
+            display: flex;
+            justify-content: center;
+            align-items: center; 
+            z-index: 100;
+            overflow-y: auto; /* Przewijanie tła na małych telefonach */
+            padding: 20px 0; 
+        }
 
-        #stars-container, #planets-container, #comets-container { position: absolute; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
-        .star { position: absolute; background-color: white; border-radius: 50%; animation: twinkle linear infinite; box-shadow: 0 0 5px rgba(255, 255, 255, 0.8); }
-        @keyframes twinkle { 0% { opacity: 0; transform: scale(0.5); } 50% { opacity: 1; transform: scale(1.5); box-shadow: 0 0 12px rgba(255, 255, 255, 1); } 100% { opacity: 0; transform: scale(0.5); } }
-        .planet { position: absolute; border-radius: 50%; animation: planetAppear ease-in-out; opacity: 0; }
-        @keyframes planetAppear { 0% { opacity: 0; transform: scale(0); } 10% { opacity: 0.7; transform: scale(1); } 90% { opacity: 0.7; transform: scale(1); } 100% { opacity: 0; transform: scale(0); } }
-        .comet { position: absolute; pointer-events: none; animation: cometFly linear; opacity: 0; }
-        .comet-head { width: 5px; height: 5px; background: white; border-radius: 50%; box-shadow: 0 0 8px white; }
-        .comet-tail { width: 50px; height: 2px; background: linear-gradient(to right, white, transparent); margin-top: -3px; margin-left: -52px; transform: rotate(-10deg); }
-        @keyframes cometFly { 0% { opacity: 0; transform: translate(100vw, -100vh) rotate(45deg); } 5% { opacity: 1; } 95% { opacity: 1; } 100% { opacity: 0; transform: translate(-100vw, 100vh) rotate(45deg); } }
+        /* Usunięto planety i komety z CSS, ale kontenery na wszelki wypadek zostają display: none */
+        #stars-container, #planets-container, #comets-container { display: none !important; }
 
-        /* MAGIA ELASTYCZNEGO MENU */
-        #menu {
-            position: relative;
-            z-index: 10; 
-            background: rgba(255, 255, 255, 0.98); 
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
-            text-align: center;
-            width: 90%;          /* Dynamicznie: Menu zajmuje zawsze 90% szerokości urządzenia */
-            max-width: 450px;    /* Na PC nigdy nie będzie szersze niż 450px */
-            margin: auto;        /* Trzyma menu wyśrodkowane */
-        }
+        /* MAGIA ELASTYCZNEGO MENU */
+        #menu {
+            position: relative;
+            z-index: 10; 
+            background: rgba(255, 255, 255, 0.98); 
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.15); /* Zmniejszono cień, by pasował do jasnego tła */
+            text-align: center;
+            width: 90%;          /* Dynamicznie: Menu zajmuje zawsze 90% szerokości urządzenia */
+            max-width: 450px;    /* Na PC nigdy nie będzie szersze niż 450px */
+            margin: auto;        /* Trzyma menu wyśrodkowane */
+            border: 3px solid #111111; /* Zeszytowa ramka */
+        }
 
-        #menu h1 { font-family: 'Permanent Marker', cursive; font-size: clamp(35px, 8vw, 55px); margin-top: 0; margin-bottom: 5px; letter-spacing: 2px; color: #2c3e50; text-shadow: 3px 3px 0px rgba(0,0,0,0.2); transform: rotate(-2deg); }
-        .paint-x { color: #e74c3c; } .paint-d { color: #3498db; } 
-        #menu p.subtitle { font-size: clamp(12px, 3.5vw, 16px); color: #555; margin-bottom: 15px; font-weight: bold; }
-        .tutorial-box { background: rgba(0, 0, 0, 0.05); padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 12px; text-align: left; line-height: 1.4; border-left: 4px solid #f1c40f; color: #333; }
+        #menu h1 { font-family: 'Permanent Marker', cursive; font-size: clamp(35px, 8vw, 55px); margin-top: 0; margin-bottom: 5px; letter-spacing: 2px; color: #2c3e50; transform: rotate(-2deg); }
+        .paint-x { color: #e74c3c; } .paint-d { color: #3498db; } 
+        #menu p.subtitle { font-size: clamp(12px, 3.5vw, 16px); color: #555; margin-bottom: 15px; font-weight: bold; }
+        .tutorial-box { background: rgba(0, 0, 0, 0.05); padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 12px; text-align: left; line-height: 1.4; border-left: 4px solid #f1c40f; color: #333; }
 
-        /* WSPÓLNE STYLOWANIE FORMULARZY I PRZYCISKÓW */
-        .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; text-align: left; font-size: 14px; }
-        #playerName { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #ccc; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
-        .main-btn { background: #27ae60; color: white; border: none; padding: 16px; width: 100%; border-radius: 12px; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 0px #1e8449; margin-bottom: 10px; box-sizing: border-box;}
-        .main-btn:active { transform: translateY(4px); box-shadow: none; }
+        /* WSPÓLNE STYLOWANIE FORMULARZY I PRZYCISKÓW */
+        .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; text-align: left; font-size: 14px; }
+        #playerName { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #111; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        
+        .main-btn { 
+            background: #27ae60; 
+            color: white; 
+            border: 2px solid #111; 
+            padding: 16px; 
+            width: 100%; 
+            border-radius: 12px; 
+            font-size: clamp(14px, 4vw, 18px); 
+            font-weight: bold; 
+            cursor: pointer; 
+            transition: 0.2s; 
+            box-shadow: 0 4px 0px #111; 
+            margin-bottom: 10px; 
+            box-sizing: border-box;
+        }
+        .main-btn:active { transform: translateY(4px); box-shadow: none; }
 
-        /* KARUZELA KART (KROK 3 - STEROWANIE) */
-        .control-grid { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;}
-        .control-card { flex: 1; min-width: 80px; border: 2px solid #bdc3c7; border-radius: 10px; padding: 15px 5px; cursor: pointer; background: #fff; transition: 0.2s; box-sizing: border-box;}
-        .control-card:hover { border-color: #3498db; background: #eafaf1; }
-        .keys-preview { font-size: clamp(14px, 3vw, 18px); font-weight: bold; color: #e67e22; margin-bottom: 5px; }
-        .control-card span { font-size: 11px; color: #555; font-weight: bold; display: block;}
+        /* KARUZELA KART (KROK 3 - STEROWANIE) */
+        .control-grid { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;}
+        .control-card { flex: 1; min-width: 80px; border: 2px solid #111; border-radius: 10px; padding: 15px 5px; cursor: pointer; background: #fff; transition: 0.2s; box-sizing: border-box; box-shadow: 0 3px 0 #111;}
+        .control-card:hover { background: #f0f0f0; transform: translateY(-2px); }
+        .control-card:active { transform: translateY(3px); box-shadow: none; }
+        .keys-preview { font-size: clamp(14px, 3vw, 18px); font-weight: bold; color: #111; margin-bottom: 5px; }
+        .control-card span { font-size: 11px; color: #555; font-weight: bold; display: block;}
 
-        /* KARUZELA POSTACI (KROK 4 - WYBÓR KLASY) */
-        .char-grid { 
-            display: flex; 
-            gap: 10px; 
-            overflow-x: auto; /* Poziome przewijanie palcem! */
-            padding-bottom: 10px;
-            scroll-snap-type: x mandatory;
-            -webkit-overflow-scrolling: touch;
-            margin-bottom: 15px;
-        }
-        .char-grid::-webkit-scrollbar { height: 6px; }
-        .char-grid::-webkit-scrollbar-thumb { background: #bdc3c7; border-radius: 10px; }
-        .char-card { 
-            flex: 0 0 auto; /* Nie pozwala kartom się zgniatać */
-            width: 100px; 
-            background: #fff; border: 2px solid #bdc3c7; border-radius: 10px; padding: 10px; 
-            cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; 
-        }
-        .char-card.selected { border-color: #2ecc71; background: #eafaf1; box-shadow: 0 0 10px rgba(46, 204, 113, 0.4); }
-        .char-card.locked { filter: grayscale(100%); opacity: 0.7; border-color: #95a5a6; cursor: not-allowed; }
-        .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
-        .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
-        .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
+        /* KARUZELA POSTACI (KROK 4 - WYBÓR KLASY) */
+        .char-grid { 
+            display: flex; 
+            gap: 10px; 
+            overflow-x: auto; /* Poziome przewijanie palcem! */
+            padding-bottom: 10px;
+            scroll-snap-type: x mandatory;
+            -webkit-overflow-scrolling: touch;
+            margin-bottom: 15px;
+        }
+        .char-grid::-webkit-scrollbar { height: 6px; }
+        .char-grid::-webkit-scrollbar-thumb { background: #111; border-radius: 10px; }
+        .char-card { 
+            flex: 0 0 auto; /* Nie pozwala kartom się zgniatać */
+            width: 100px; 
+            background: #fff; border: 2px solid #111; border-radius: 10px; padding: 10px; 
+            cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; 
+            box-shadow: 0 3px 0 #111;
+        }
+        .char-card.selected { border-color: #2ecc71; background: #eafaf1; }
+        .char-card.locked { filter: grayscale(100%); opacity: 0.7; border-color: #95a5a6; cursor: not-allowed; box-shadow: none; }
+        .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
+        .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
+        .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
 
-        /* WSPÓLNE MENU SKLEP I SKILLE (W GRACH) */
-        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #333; border-radius: 10px; display: none; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 220px; z-index: 90; }
-        .sp-label { font-weight: bold; color: #d35400; text-align: center; margin-bottom: 5px; font-size: 14px; }
-        .skill-btn { background: #4CAF50; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; width: 100%; text-align: left; }
-        
-        #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(44, 62, 80, 0.95); border: 2px solid #f1c40f; border-radius: 10px; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5); z-index: 90; color: white; width: 160px; }
-        #castle-shop h2 { margin: 0; color: #f1c40f; font-size: 16px; text-align: center;}
-        #castle-shop p { margin: 0 0 10px 0; font-size: 11px; text-align: center; color: #bdc3c7; }
-        .shop-btn { background: #34495e; color: #fff; border: 1px solid #7f8c8d; padding: 8px; border-radius: 6px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; }
+        /* WSPÓLNE MENU SKLEP I SKILLE (W GRACH) */
+        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #333; border-radius: 10px; display: none; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 220px; z-index: 90; }
+        .sp-label { font-weight: bold; color: #d35400; text-align: center; margin-bottom: 5px; font-size: 14px; }
+        .skill-btn { background: #4CAF50; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; width: 100%; text-align: left; }
+        
+        #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(255, 255, 255, 0.95); border: 2px solid #111; border-radius: 10px; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 4px 4px 0 #111; z-index: 90; color: #111; width: 160px; }
+        #castle-shop h2 { margin: 0; color: #111; font-size: 16px; text-align: center; font-family: 'Permanent Marker', cursive;}
+        #castle-shop p { margin: 0 0 10px 0; font-size: 11px; text-align: center; color: #555; }
+        .shop-btn { background: #fff; color: #111; border: 2px solid #111; padding: 8px; border-radius: 6px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: 2px 2px 0 #111;}
+        .shop-btn:active { transform: translate(2px, 2px); box-shadow: none; }
 
-        /* --- INTERFEJS MOBILNY DLA GRACZA W TRAKCIE GRY --- */
-        #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
-        #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
-        #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
-        #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(241, 196, 15, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-        
-        #action-buttons { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
-        .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(44, 62, 80, 0.6); border: 2px solid rgba(255,255,255,0.3); color: white; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; }
-        .m-btn:active { background: rgba(241, 196, 15, 0.8); transform: scale(0.9); }
-        #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(231, 76, 60, 0.6); border-color: rgba(241, 196, 15, 0.5); }
-        
-        /* ZAKTUALIZOWANE LOGO UCZELNI (NIEŚMIERTELNE) */
-        #university-logo { 
-            position: fixed; 
-            top: 15px; 
-            left: 15px; 
-            z-index: 1000; 
-        }
-        #university-logo img { 
-            height: clamp(40px, 8vw, 60px); 
-            filter: drop-shadow(0px 0px 5px rgba(255,255,255,0.5));
-            transition: transform 0.2s;
-        }
-        #university-logo img:hover {
-            transform: scale(1.1);
-        }
+        /* --- INTERFEJS MOBILNY DLA GRACZA W TRAKCIE GRY --- */
+        #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
+        #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
+        #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(17,17,17,0.5); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
+        #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(17, 17, 17, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        
+        #action-buttons { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
+        .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.8); border: 2px solid #111; color: #111; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; box-shadow: 2px 2px 0 #111;}
+        .m-btn:active { background: rgba(200, 200, 200, 0.8); transform: translate(2px, 2px); box-shadow: none;}
+        #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(255, 255, 255, 0.9); }
+        
+        /* ZAKTUALIZOWANE LOGO UCZELNI (NIEŚMIERTELNE) */
+        #university-logo { 
+            position: fixed; 
+            top: 15px; 
+            left: 15px; 
+            z-index: 1000; 
+        }
+        #university-logo img { 
+            height: clamp(40px, 8vw, 60px); 
+            filter: drop-shadow(2px 2px 0px rgba(17,17,17,0.5));
+            transition: transform 0.2s;
+        }
+        #university-logo img:hover {
+            transform: scale(1.1);
+        }
 
-        @media (max-height: 600px) {
-            #ui-layer { align-items: flex-start; } 
-        }
+        @media (max-height: 600px) {
+            #ui-layer { align-items: flex-start; } 
+        }
 
-        /* --- ANIMACJE GACHA (SKRZYNI) --- */
-        @keyframes floatChest { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
-        @keyframes shakeChest { 0% { transform: translateX(0); } 25% { transform: translateX(-15px) rotate(-10deg); } 50% { transform: translateX(15px) rotate(10deg); } 75% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: translateX(0); } }
-        @keyframes glowReward { 0% { text-shadow: 0 0 10px #f1c40f, 0 0 20px #f1c40f; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #f1c40f, 0 0 50px #f39c12; transform: scale(1.2); opacity: 1;} }
-    </style>
-    <link rel="stylesheet" href="style.css">
+        /* --- ANIMACJE GACHA (SKRZYNI) --- */
+        @keyframes floatChest { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
+        @keyframes shakeChest { 0% { transform: translateX(0); } 25% { transform: translateX(-15px) rotate(-10deg); } 50% { transform: translateX(15px) rotate(10deg); } 75% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: translateX(0); } }
+        @keyframes glowReward { 0% { text-shadow: 0 0 10px #111, 0 0 20px #111; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #111, 0 0 50px #111; transform: scale(1.2); opacity: 1;} }
+    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
-    <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
-        <img src="logo.svg" alt="WSIZ Logo">
-    </a>
+    <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
+        <img src="logo.svg" alt="WSIZ Logo">
+    </a>
 
-    <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
-        <h2 id="gacha-title" style="color:#f1c40f; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px; text-shadow: 0 0 20px rgba(241, 196, 15, 0.5);">Niespodzianka!</h2>
-        <div id="gacha-chest" style="font-size:120px; cursor:pointer; user-select:none; animation: floatChest 2s infinite;">🎁</div>
-        <p id="gacha-hint" style="color:#bdc3c7; margin-top:10px; font-weight:bold;">Kliknij, aby otworzyć...</p>
-        <div id="gacha-reward" style="display:none; color:white; font-size:32px; font-family:'Permanent Marker', cursive; margin-top:20px;"></div>
-        <button id="gacha-close" class="main-btn" style="display:none; width:auto; padding: 15px 40px; margin-top:40px; background:#3498db; box-shadow: 0 4px 0 #2980b9;">Zabierz Nagrodę</button>
-    </div>
+    <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.9); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
+        <h2 id="gacha-title" style="color:#111; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px;">Niespodzianka!</h2>
+        <div id="gacha-chest" style="font-size:120px; cursor:pointer; user-select:none; animation: floatChest 2s infinite;">🎁</div>
+        <p id="gacha-hint" style="color:#555; margin-top:10px; font-weight:bold;">Kliknij, aby otworzyć...</p>
+        <div id="gacha-reward" style="display:none; color:#111; font-size:32px; font-family:'Permanent Marker', cursive; margin-top:20px;"></div>
+        <button id="gacha-close" class="main-btn" style="display:none; width:auto; padding: 15px 40px; margin-top:40px; background:#fff; color:#111;">Zabierz Nagrodę</button>
+    </div>
 
-    <div id="mobile-controls">
-        <div id="joystick-zone"></div>
-        <div id="joystick-base"><div id="joystick-stick"></div></div>
-        <div id="action-buttons">
-            <div class="m-btn" id="btn-m-shield">🛡️</div>
-            <div class="m-btn" id="btn-m-attack">⚔️</div>
-        </div>
-    </div>
+    <div id="mobile-controls">
+        <div id="joystick-zone"></div>
+        <div id="joystick-base"><div id="joystick-stick"></div></div>
+        <div id="action-buttons">
+            <div class="m-btn" id="btn-m-shield">🛡️</div>
+            <div class="m-btn" id="btn-m-attack">⚔️</div>
+        </div>
+    </div>
 
-    <div id="ui-layer">
-        <div id="stars-container"></div>
-        <div id="planets-container"></div>
-        <div id="comets-container"></div>
+    <div id="ui-layer">
+        <div id="menu">
+            <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
+            <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
 
-        <div id="menu">
-            <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
-            <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
+            <div class="tutorial-box">
+                <b>📜 Szybki poradnik:</b><br>
+                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
+                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
+                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
+                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!
+            </div>
 
-            <div class="tutorial-box">
-                <b>📜 Szybki poradnik:</b><br>
-                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
-                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
-                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
-                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!
-            </div>
+            <div id="step-1">
+                <div class="input-group">
+                    <label for="playerName">Twój Nick:</label>
+                    <input type="text" id="playerName" placeholder="Wpisz nick..." maxlength="12" autofocus>
+                </div>
+                
+                <input type="color" id="playerColor" value="#ff4444" style="display: none;">
+                
+                <button id="nextBtn" class="main-btn" style="background: #111;">DALEJ</button>
+            </div>
 
-            <div id="step-1">
-                <div class="input-group">
-                    <label for="playerName">Twój Nick:</label>
-                    <input type="text" id="playerName" placeholder="Wpisz nick..." maxlength="12" autofocus>
-                </div>
-                
-                <input type="color" id="playerColor" value="#ff4444" style="display: none;">
-                
-                <button id="nextBtn" class="main-btn">DALEJ</button>
-            </div>
+            <div id="step-2" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz Tryb Gry:</h3>
+                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
+                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #fff; color: #111;">👑 KAMPANIA: Od zera do Króla (RPG)</button>
+                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #fff; color: #111;">🔥 Każdy na każdego (Multiplayer)</button>
+                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #fff; color: #111;">⚔️ Wojna Drużyn (PvP)</button>
+                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #fff; color: #111;">🤖 Trening Drużynowy (PvE)</button>
+                </div>
+                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+            </div>
 
-            <div id="step-2" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz Tryb Gry:</h3>
-                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #f1c40f; color: #2c3e50; border: 2px solid #e67e22; box-shadow: 0 0 15px rgba(241, 196, 15, 0.5);">👑 KAMPANIA: Od zera do Króla (RPG)</button>
-                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #e67e22;">🔥 Każdy na każdego (Multiplayer)</button>
-                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #8e44ad;">⚔️ Wojna Drużyn (PvP)</button>
-                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #27ae60;">🤖 Trening Drużynowy (PvE)</button>
-                </div>
-                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
-            </div>
+            <div id="step-3" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz sterowanie:</h3>
+                <div class="control-grid">
+                    <div class="control-card" onclick="launchGame('WASD')">
+                        <div class="keys-preview">WASD</div>
+                        <span>Klasyczne</span>
+                    </div>
+                    
+                    <div class="control-card" onclick="launchGame('ARROWS')">
+                        <div class="keys-preview">↑↓←→</div>
+                        <span>Strzałki</span>
+                    </div>
 
-            <div id="step-3" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz sterowanie:</h3>
-                <div class="control-grid">
-                    <div class="control-card" onclick="launchGame('WASD')">
-                        <div class="keys-preview">WASD</div>
-                        <span>Klasyczne</span>
-                    </div>
-                    
-                    <div class="control-card" onclick="launchGame('ARROWS')">
-                        <div class="keys-preview">↑↓←→</div>
-                        <span>Strzałki</span>
-                    </div>
+                    <div class="control-card" onclick="launchGame('TOUCH')">
+                        <div class="keys-preview" style="font-size: 24px;">📱</div>
+                        <span>Dotyk (Mobile)</span>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+            </div>
 
-                    <div class="control-card" onclick="launchGame('TOUCH')" style="border-color: #3498db;">
-                        <div class="keys-preview" style="font-size: 24px;">📱</div>
-                        <span>Dotyk (Mobile)</span>
-                    </div>
-                </div>
-                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
-            </div>
+            <div id="step-4" style="display: none;">
+                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz swoją Klasę:</h3>
+                <div class="char-grid">
+                    <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
+                        <img src="xtreme-destiny-postac.png" alt="Standard">
+                        <h4>Standard</h4>
+                        <p>+2% zysku Masy</p>
+                    </div>
+                    <div class="char-card" id="char-ninja" onclick="selectSkin('ninja')">
+                        <img src="ninja-transparent.png" alt="Ninja">
+                        <h4>Ninja</h4>
+                        <p>+5% Szybkości</p>
+                    </div>
+                    <div class="char-card" id="char-arystokrata" onclick="selectSkin('arystokrata')">
+                        <img src="postac-bez-tla.png" alt="Arystokrata">
+                        <h4>Arystokrata</h4>
+                        <p>-5% Cen w Sklepie</p>
+                        <div id="arystokrata-progress" style="font-size: 10px; color: #e74c3c; margin-top: 5px; font-weight: bold;">Fragmenty: 0/3</div>
+                    </div>
+                </div>
+                <button onclick="launchGameFinal()" class="main-btn" style="background: #111;">WEJDŹ NA ARENĘ</button>
+                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
+            </div>
 
-            <div id="step-4" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz swoją Klasę:</h3>
-                <div class="char-grid">
-                    <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
-                        <img src="xtreme-destiny-postac.png" alt="Standard">
-                        <h4>Standard</h4>
-                        <p>+2% zysku Masy</p>
-                    </div>
-                    <div class="char-card" id="char-ninja" onclick="selectSkin('ninja')">
-                        <img src="ninja-transparent.png" alt="Ninja">
-                        <h4>Ninja</h4>
-                        <p>+5% Szybkości</p>
-                    </div>
-                    <div class="char-card" id="char-arystokrata" onclick="selectSkin('arystokrata')">
-                        <img src="postac-bez-tla.png" alt="Arystokrata">
-                        <h4>Arystokrata</h4>
-                        <p>-5% Cen w Sklepie</p>
-                        <div id="arystokrata-progress" style="font-size: 10px; color: #e74c3c; margin-top: 5px; font-weight: bold;">Fragmenty: 0/3</div>
-                    </div>
-                </div>
-                <button onclick="launchGameFinal()" class="main-btn" style="background: #2ecc71;">WEJDŹ NA ARENĘ</button>
-                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
-            </div>
+            <div id="game-info" style="margin-top: 20px;">
+                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2, 3, 4] Zmiana broni | [Q] Tarcza (50 pkt)</small>
+            </div>
+        </div>
+    </div>
 
-            <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt)</small>
-            </div>
-        </div>
-    </div>
+    <div id="skill-menu"></div>
+    <div id="castle-shop"></div>
 
-    <div id="skill-menu">
-        <div class="sp-label">Punkty Umiejętności: <span id="sp-count" style="color:#000; background:#f1c40f; padding: 2px 8px; border-radius: 10px;">0</span></div>
-        <div id="skills-container"></div>
-    </div>
+    <canvas id="gameCanvas"></canvas>
 
-    <div id="castle-shop">
-        <h2>🏰 Tajny Sklep</h2>
-        <p>Kupuj i ulepszaj bronie za masę!</p>
-        <button id="btn-bow" class="shop-btn" onclick="buyItem('bow')"><span>🏹 Łuk</span> <span>$100</span></button>
-        <button id="btn-knife" class="shop-btn" onclick="buyItem('knife')"><span>🗡️ Nóż</span> <span>$50</span></button>
-        <button id="btn-shuriken" class="shop-btn" onclick="buyItem('shuriken')"><span>🥷 Shuriken</span> <span>$20</span></button>
-        <button onclick="document.getElementById('castle-shop').style.display='none'" style="margin-top: 10px; background: #c0392b; color: white; border: none; padding: 8px; border-radius: 4px; cursor: pointer; font-weight: bold;">Ukryj Sklep</button>
-    </div>
+    <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
+    <script src="map.js"></script>
+    <script src="engine.js"></script>
+    
+    <script>
+        const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
+        let chosenMode = 'FREE'; let chosenSkin = 'standard'; let chosenControlType = 'WASD';
 
-    <canvas id="gameCanvas"></canvas>
+        // ==========================================
+        // SYSTEM ZAPISU I ODBLOKOWYWANIA SKÓREK
+        // ==========================================
+        window.playerData = JSON.parse(localStorage.getItem('xd_playerData')) || { fragments: { arystokrata: 0 } };
+        
+        function updateMenuUI() {
+            let aryFrags = window.playerData.fragments.arystokrata || 0;
+            let progressDiv = document.getElementById('arystokrata-progress');
+            let cardDiv = document.getElementById('char-arystokrata');
+            
+            if (progressDiv && cardDiv) {
+                if (aryFrags >= 3) {
+                    progressDiv.style.color = '#2ecc71';
+                    progressDiv.innerText = 'ODBLOKOWANO!';
+                    cardDiv.classList.remove('locked');
+                } else {
+                    progressDiv.style.color = '#e74c3c';
+                    progressDiv.innerText = `Fragmenty: ${aryFrags}/3`;
+                    cardDiv.classList.add('locked');
+                }
+            }
+        }
+        updateMenuUI();
 
-    <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
-    <script src="map.js"></script>
-    <script src="engine.js"></script>
-    
-    <script>
-        function createStars() { const c = document.getElementById('stars-container'); if(!c) return; for (let i = 0; i < 100; i++) { let s = document.createElement('div'); s.classList.add('star'); s.style.left = Math.random()*100+'%'; s.style.top = Math.random()*100+'%'; let sz = Math.random()*3+2; s.style.width = sz+'px'; s.style.height = sz+'px'; s.style.animationDuration = (Math.random()*3+2)+'s'; s.style.animationDelay = (Math.random()*5)+'s'; c.appendChild(s); } } createStars();
-        function createPlanets() { const c = document.getElementById('planets-container'); if(!c) return; const colors = ['#e67e22', '#3498db', '#bdc3c7', '#c0392b', '#f1c40f']; for (let i = 0; i < 12; i++) { let p = document.createElement('div'); p.classList.add('planet'); let sz = Math.random()*30+15; p.style.width = sz+'px'; p.style.height = sz+'px'; p.style.left = Math.random()*100+'%'; p.style.top = Math.random()*100+'%'; p.style.backgroundColor = colors[Math.floor(Math.random()*colors.length)]; p.style.animationDuration = (Math.random()*60+30)+'s'; p.style.animationDelay = (Math.random()*30)+'s'; c.appendChild(p); } } createPlanets();
-        function createComets() { const c = document.getElementById('comets-container'); if(!c) return; function addComet() { const cm = document.createElement('div'); cm.classList.add('comet'); const hd = document.createElement('div'); hd.classList.add('comet-head'); cm.appendChild(hd); const tl = document.createElement('div'); tl.classList.add('comet-tail'); cm.appendChild(tl); cm.style.animationDuration = (Math.random()*5+3)+'s'; c.appendChild(cm); setTimeout(()=>cm.remove(), parseFloat(cm.style.animationDuration)*1000); } setInterval(addComet, 8000); } createComets();
+        next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = 'red'; alert("Wpisz swój nick, aby kontynuować!"); } };
+        nameInput.addEventListener("keypress", (e) => { if (e.key === "Enter") next.click(); });
+        window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
+        
+        window.selectSkin = (skin) => { 
+            // Blokada kliknięcia jeśli nie mamy fragmentów
+            if (skin === 'arystokrata' && (window.playerData.fragments.arystokrata || 0) < 3) {
+                alert("Klasa Zablokowana! Graj by otrzymać Epicką Skrzynię i wylosować 3 Fragmenty Arystokraty!");
+                return;
+            }
+            chosenSkin = skin; 
+            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected')); 
+            document.getElementById('char-'+skin).classList.add('selected'); 
+        };
+        
+        window.launchGame = (controlType) => { chosenControlType = controlType; document.getElementById('step-3').style.display = 'none'; document.getElementById('step-4').style.display = 'block'; };
 
-        const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
-        let chosenMode = 'FREE'; let chosenSkin = 'standard'; let chosenControlType = 'WASD';
+        window.mobileJoy = { dx: 0, dy: 0, active: false };
 
-        // ==========================================
-        // SYSTEM ZAPISU I ODBLOKOWYWANIA SKÓREK
-        // ==========================================
-        window.playerData = JSON.parse(localStorage.getItem('xd_playerData')) || { fragments: { arystokrata: 0 } };
-        
-        function updateMenuUI() {
-            let aryFrags = window.playerData.fragments.arystokrata || 0;
-            let progressDiv = document.getElementById('arystokrata-progress');
-            let cardDiv = document.getElementById('char-arystokrata');
-            
-            if (progressDiv && cardDiv) {
-                if (aryFrags >= 3) {
-                    progressDiv.style.color = '#2ecc71';
-                    progressDiv.innerText = 'ODBLOKOWANO!';
-                    cardDiv.classList.remove('locked');
-                } else {
-                    progressDiv.style.color = '#e74c3c';
-                    progressDiv.innerText = `Fragmenty: ${aryFrags}/3`;
-                    cardDiv.classList.add('locked');
-                }
-            }
-        }
-        updateMenuUI();
+        window.launchGameFinal = () => {
+            document.getElementById('step-4').style.display = 'none';
+            document.getElementById('game-info').style.display = 'none'; 
+            
+            window.playerSkin = chosenSkin; 
 
-        next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = 'red'; alert("Wpisz swój nick, aby kontynuować!"); } };
-        nameInput.addEventListener("keypress", (e) => { if (e.key === "Enter") next.click(); });
-        window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
-        
-        window.selectSkin = (skin) => { 
-            // Blokada kliknięcia jeśli nie mamy fragmentów
-            if (skin === 'arystokrata' && (window.playerData.fragments.arystokrata || 0) < 3) {
-                alert("Klasa Zablokowana! Graj by otrzymać Epicką Skrzynię i wylosować 3 Fragmenty Arystokraty!");
-                return;
-            }
-            chosenSkin = skin; 
-            document.querySelectorAll('.char-card').forEach(c => c.classList.remove('selected')); 
-            document.getElementById('char-'+skin).classList.add('selected'); 
-        };
-        
-        window.launchGame = (controlType) => { chosenControlType = controlType; document.getElementById('step-3').style.display = 'none'; document.getElementById('step-4').style.display = 'block'; };
+            if (chosenControlType === 'TOUCH') {
+                document.getElementById('mobile-controls').style.display = 'block';
+                initMobileControls();
+            }
 
-        window.mobileJoy = { dx: 0, dy: 0, active: false };
+            // Inicjalizacja skryptu gry
+            let loadingDiv = document.getElementById('loading-step');
+            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
+            loadingDiv.style.display = 'block';
 
-        window.launchGameFinal = () => {
-            document.getElementById('step-4').style.display = 'none';
-            document.getElementById('game-info').style.display = 'none'; 
-            
-            window.playerSkin = chosenSkin; 
+            let scriptSrc = 'free.js';
+            if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
+            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; 
 
-            if (chosenControlType === 'TOUCH') {
-                document.getElementById('mobile-controls').style.display = 'block';
-                initMobileControls();
-            }
+            const script = document.createElement('script'); script.src = scriptSrc;
+            script.onload = () => { 
+                const shopScript = document.createElement('script'); 
+                shopScript.src = 'shop.js'; 
+                shopScript.onload = () => { 
+                    const safeColor = document.getElementById('playerColor').value || '#ffffff'; 
+                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
+                }; 
+                document.body.appendChild(shopScript); 
+            };
+            document.body.appendChild(script);
+        };
 
-            if (chosenSkin === 'arystokrata') { document.querySelector('#btn-bow span:nth-child(2)').innerText = '$95'; document.querySelector('#btn-knife span:nth-child(2)').innerText = '$47'; document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$19'; }
-            else { document.querySelector('#btn-bow span:nth-child(2)').innerText = '$100'; document.querySelector('#btn-knife span:nth-child(2)').innerText = '$50'; document.querySelector('#btn-shuriken span:nth-child(2)').innerText = '$20'; }
-            
-            let loadingDiv = document.getElementById('loading-step');
-            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
-            loadingDiv.style.display = 'block';
+        // ==========================================
+        // SYSTEM LOSOWANIA - GACHA ANIMACJA
+        // ==========================================
+        window.showGachaAnimation = function(onCompleteCallback) {
+            const modal = document.getElementById('gacha-modal');
+            const chest = document.getElementById('gacha-chest');
+            const hint = document.getElementById('gacha-hint');
+            const rewardText = document.getElementById('gacha-reward');
+            const closeBtn = document.getElementById('gacha-close');
+            const title = document.getElementById('gacha-title');
 
-            let scriptSrc = 'free.js';
-            if (chosenMode === 'PvP' || chosenMode === 'TRAINING') scriptSrc = 'teams.js';
-            if (chosenMode === 'CAMPAIGN') scriptSrc = 'campaign.js'; 
+            modal.style.display = 'flex';
+            chest.style.display = 'block';
+            chest.style.animation = 'floatChest 2s infinite';
+            hint.style.display = 'block';
+            rewardText.style.display = 'none';
+            closeBtn.style.display = 'none';
+            title.innerText = "Niespodzianka!";
+            chest.innerText = "🎁";
 
-            const script = document.createElement('script'); script.src = scriptSrc;
-            script.onload = () => { const shopScript = document.createElement('script'); shopScript.src = 'shop.js'; shopScript.onload = () => { const safeColor = document.getElementById('playerColor').value || '#ffffff'; startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); }; document.body.appendChild(shopScript); };
-            document.body.appendChild(script);
-        };
+            chest.onclick = () => {
+                chest.onclick = null; 
+                hint.style.display = 'none';
+                chest.style.animation = 'shakeChest 0.5s'; 
+                
+                setTimeout(() => {
+                    let rand = Math.random();
+                    let rewardType, itemName, itemCode;
+                    
+                    if (rand < 0.4) {
+                        rewardType = 'skin_fragment';
+                        itemName = 'Fragment Arystokraty';
+                        itemCode = 'arystokrata';
+                        
+                        window.playerData.fragments.arystokrata = (window.playerData.fragments.arystokrata || 0) + 1;
+                        localStorage.setItem('xd_playerData', JSON.stringify(window.playerData));
+                        updateMenuUI();
+                        
+                        chest.innerText = "🧩";
+                    } else {
+                        rewardType = 'weapon';
+                        const epicWeapons = [
+                            { code: 'diamond_bow', name: 'Diamentowy Łuk' },
+                            { code: 'cleaver', name: 'Rzeźnicki Tasak' },
+                            { code: 'explosive_kunai', name: 'Wybuchowe Kunai' }
+                        ];
+                        let w = epicWeapons[Math.floor(Math.random() * epicWeapons.length)];
+                        itemName = w.name;
+                        itemCode = w.code;
+                        chest.innerText = "⚔️";
+                    }
 
-        // ==========================================
-        // SYSTEM LOSOWANIA - GACHA ANIMACJA
-        // ==========================================
-        window.showGachaAnimation = function(onCompleteCallback) {
-            const modal = document.getElementById('gacha-modal');
-            const chest = document.getElementById('gacha-chest');
-            const hint = document.getElementById('gacha-hint');
-            const rewardText = document.getElementById('gacha-reward');
-            const closeBtn = document.getElementById('gacha-close');
-            const title = document.getElementById('gacha-title');
+                    chest.style.animation = 'none';
+                    rewardText.style.animation = 'glowReward 1s forwards';
+                    title.innerText = "Wylosowano:";
+                    rewardText.innerText = itemName;
+                    rewardText.style.display = 'block';
+                    closeBtn.style.display = 'block';
 
-            modal.style.display = 'flex';
-            chest.style.display = 'block';
-            chest.style.animation = 'floatChest 2s infinite';
-            hint.style.display = 'block';
-            rewardText.style.display = 'none';
-            closeBtn.style.display = 'none';
-            title.innerText = "Niespodzianka!";
-            chest.innerText = "🎁";
+                    closeBtn.onclick = () => {
+                        modal.style.display = 'none';
+                        if(onCompleteCallback) onCompleteCallback({ type: rewardType, itemName: itemName, item: itemCode });
+                    };
+                }, 1000);
+            };
+        };
 
-            chest.onclick = () => {
-                chest.onclick = null; 
-                hint.style.display = 'none';
-                chest.style.animation = 'shakeChest 0.5s'; // Szybkie trzęsienie
-                
-                setTimeout(() => {
-                    let rand = Math.random();
-                    let rewardType, itemName, itemCode;
-                    
-                    if (rand < 0.4) {
-                        // 40% Szans: Trwały fragment postaci
-                        rewardType = 'skin_fragment';
-                        itemName = 'Fragment Arystokraty';
-                        itemCode = 'arystokrata';
-                        
-                        window.playerData.fragments.arystokrata = (window.playerData.fragments.arystokrata || 0) + 1;
-                        localStorage.setItem('xd_playerData', JSON.stringify(window.playerData));
-                        updateMenuUI();
-                        
-                        chest.innerText = "🧩";
-                    } else {
-                        // 60% Szans: Potężna broń na czas trwania życia gracza
-                        rewardType = 'weapon';
-                        const epicWeapons = [
-                            { code: 'diamond_bow', name: 'Diamentowy Łuk' },
-                            { code: 'cleaver', name: 'Rzeźnicki Tasak' },
-                            { code: 'explosive_kunai', name: 'Wybuchowe Kunai' },
-                            { code: 'shotgun', name: 'Garłacz' }
-                        ];
-                        let w = epicWeapons[Math.floor(Math.random() * epicWeapons.length)];
-                        itemName = w.name;
-                        itemCode = w.code;
-                        chest.innerText = "⚔️";
-                    }
+        function initMobileControls() {
+            const joyZone = document.getElementById('joystick-zone');
+            const joyBase = document.getElementById('joystick-base');
+            const joyStick = document.getElementById('joystick-stick');
+            let joyId = null; let startX = 0, startY = 0;
 
-                    chest.style.animation = 'none';
-                    rewardText.style.animation = 'glowReward 1s forwards';
-                    title.innerText = "Wylosowano:";
-                    rewardText.innerText = itemName;
-                    rewardText.style.display = 'block';
-                    closeBtn.style.display = 'block';
+            joyZone.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                if (joyId !== null) return; 
+                const touch = e.changedTouches[0]; 
+                joyId = touch.identifier; 
+                startX = touch.clientX; startY = touch.clientY; 
+                joyBase.style.display = 'block'; 
+                joyBase.style.left = startX + 'px'; joyBase.style.top = startY + 'px'; 
+                joyStick.style.transform = `translate(-50%, -50%)`; 
+                window.mobileJoy.active = true; 
+            }, {passive: false});
 
-                    closeBtn.onclick = () => {
-                        modal.style.display = 'none';
-                        if(onCompleteCallback) onCompleteCallback({ type: rewardType, itemName: itemName, item: itemCode });
-                    };
-                }, 1000); // 1 sekunda napięcia
-            };
-        };
+            joyZone.addEventListener('touchmove', (e) => { 
+                e.preventDefault(); 
+                if (joyId === null) return; 
+                for (let i=0; i<e.changedTouches.length; i++) { 
+                    if (e.changedTouches[i].identifier === joyId) { 
+                        const touch = e.changedTouches[i]; 
+                        let dx = touch.clientX - startX; 
+                        let dy = touch.clientY - startY; 
+                        const dist = Math.hypot(dx, dy); 
+                        const maxRadius = 40; 
+                        if (dist > maxRadius) { dx = (dx / dist) * maxRadius; dy = (dy / dist) * maxRadius; } 
+                        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; 
+                        window.mobileJoy.dx = dx / maxRadius; window.mobileJoy.dy = dy / maxRadius; 
+                    } 
+                } 
+            }, {passive: false});
 
-        function initMobileControls() {
-            const joyZone = document.getElementById('joystick-zone');
-            const joyBase = document.getElementById('joystick-base');
-            const joyStick = document.getElementById('joystick-stick');
-            let joyId = null; let startX = 0, startY = 0;
+            const endJoy = (e) => { 
+                e.preventDefault(); 
+                for (let i=0; i<e.changedTouches.length; i++) { 
+                    if (e.changedTouches[i].identifier === joyId) { 
+                        joyId = null; joyBase.style.display = 'none'; 
+                        window.mobileJoy = { dx: 0, dy: 0, active: false }; 
+                    } 
+                } 
+            };
+            joyZone.addEventListener('touchend', endJoy, {passive: false}); 
+            joyZone.addEventListener('touchcancel', endJoy, {passive: false});
 
-            joyZone.addEventListener('touchstart', (e) => { 
-                e.preventDefault(); 
-                if (joyId !== null) return; 
-                const touch = e.changedTouches[0]; 
-                joyId = touch.identifier; 
-                startX = touch.clientX; startY = touch.clientY; 
-                joyBase.style.display = 'block'; 
-                joyBase.style.left = startX + 'px'; joyBase.style.top = startY + 'px'; 
-                joyStick.style.transform = `translate(-50%, -50%)`; 
-                window.mobileJoy.active = true; 
-            }, {passive: false});
-
-            joyZone.addEventListener('touchmove', (e) => { 
-                e.preventDefault(); 
-                if (joyId === null) return; 
-                for (let i=0; i<e.changedTouches.length; i++) { 
-                    if (e.changedTouches[i].identifier === joyId) { 
-                        const touch = e.changedTouches[i]; 
-                        let dx = touch.clientX - startX; 
-                        let dy = touch.clientY - startY; 
-                        const dist = Math.hypot(dx, dy); 
-                        const maxRadius = 40; 
-                        if (dist > maxRadius) { dx = (dx / dist) * maxRadius; dy = (dy / dist) * maxRadius; } 
-                        joyStick.style.transform = `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`; 
-                        window.mobileJoy.dx = dx / maxRadius; window.mobileJoy.dy = dy / maxRadius; 
-                    } 
-                } 
-            }, {passive: false});
-
-            const endJoy = (e) => { 
-                e.preventDefault(); 
-                for (let i=0; i<e.changedTouches.length; i++) { 
-                    if (e.changedTouches[i].identifier === joyId) { 
-                        joyId = null; joyBase.style.display = 'none'; 
-                        window.mobileJoy = { dx: 0, dy: 0, active: false }; 
-                    } 
-                } 
-            };
-            joyZone.addEventListener('touchend', endJoy, {passive: false}); 
-            joyZone.addEventListener('touchcancel', endJoy, {passive: false});
-
-            document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mobile-attack')); }, {passive: false});
-            
-            const shieldBtn = document.getElementById('btn-m-shield');
-            shieldBtn.addEventListener('touchstart', (e) => { 
-                e.preventDefault(); 
-                window.dispatchEvent(new KeyboardEvent('keydown', {'key': 'q', 'code': 'KeyQ'})); 
-            }, {passive: false});
-            shieldBtn.addEventListener('touchend', (e) => { 
-                e.preventDefault(); 
-                window.dispatchEvent(new KeyboardEvent('keyup', {'key': 'q', 'code': 'KeyQ'})); 
-            }, {passive: false});
-        }
-    </script>
+            document.getElementById('btn-m-attack').addEventListener('touchstart', (e) => { e.preventDefault(); window.dispatchEvent(new Event('mobile-attack')); }, {passive: false});
+            
+            const shieldBtn = document.getElementById('btn-m-shield');
+            shieldBtn.addEventListener('touchstart', (e) => { 
+                e.preventDefault(); 
+                window.dispatchEvent(new KeyboardEvent('keydown', {'key': 'q', 'code': 'KeyQ'})); 
+            }, {passive: false});
+            shieldBtn.addEventListener('touchend', (e) => { 
+                e.preventDefault(); 
+                window.dispatchEvent(new KeyboardEvent('keyup', {'key': 'q', 'code': 'KeyQ'})); 
+            }, {passive: false});
+        }
+    </script>
 </body>
 </html>
