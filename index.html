@@ -97,7 +97,7 @@
         #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 250px; z-index: 90; }
         .sp-label { font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
         
-        /* ZESZYTOWY SKLEP ZAMKU (Będzie widoczny dzięki temu kodowi) */
+        /* ZESZYTOWY SKLEP ZAMKU */
         #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: #fff; border: 3px solid #111; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 6px 6px 0 rgba(17,17,17,0.2); z-index: 90; color: #111; width: 170px; }
         #castle-shop h2 { margin: 0; color: #111; font-size: 18px; text-align: center; font-family: 'Permanent Marker', cursive; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
         #castle-shop p { margin: 5px 0 10px 0; font-size: 11px; text-align: center; color: #333; font-weight: bold;}
@@ -235,7 +235,12 @@
         </div>
     </div>
 
-    <div id="skill-menu"></div>
+    <div id="skill-menu">
+        <div class="sp-label" style="font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;">
+            Punkty Umiejętności: <span id="sp-count" style="color:#fff; background:#111; padding: 2px 8px; border-radius: 4px;">0</span>
+        </div>
+        <div id="skills-container"></div>
+    </div>
     
     <div id="castle-shop">
         <h2>Tajny Sklep</h2>
@@ -249,8 +254,9 @@
     <canvas id="gameCanvas"></canvas>
 
     <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
-    <script src="map.js"></script>
+    
     <script src="engine.js"></script>
+    <script src="map.js"></script>
     
     <script>
         const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
