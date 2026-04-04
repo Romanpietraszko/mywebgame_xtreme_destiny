@@ -461,69 +461,81 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
 // --- RYSOWANIE PRAWDZIWEGO ZAMKU (Zabezpieczone pod Map.js i Engine.js) ---
 function drawCastle(x, y, radius) {
-    // Tarcza przed konfliktem z plikiem map.js (który podaje ctx jako x)
-    if (typeof x === 'object' && y && y.radius !== undefined) {
-        radius = y.radius;
-        let tempX = y.x;
-        y = y.y;
-        x = tempX;
-    }
+    // Tarcza przed konfliktem z plikiem map.js (który podaje ctx jako x)
+    if (typeof x === 'object' && y && y.radius !== undefined) {
+        radius = y.radius;
+        let tempX = y.x;
+        y = y.y;
+        x = tempX;
+    }
 
-    ctx.save();
-    ctx.translate(x, y);
+    ctx.save();
+    ctx.translate(x, y);
 
-    // 1. FOSA (Woda)
-    ctx.beginPath();
-    ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
-    ctx.fillStyle = 'rgba(41, 128, 185, 0.4)'; // półprzezroczysta woda na trawie
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = 'rgba(52, 152, 219, 0.6)';
-    ctx.stroke();
+    // 1. FOSA (Zeszytowa woda/tusz)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; // Biały papier pod fosą, by odciąć się od kratek
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = '#111111'; // Czarna, przerywana kreska imitująca fosę
+    ctx.setLineDash([8, 12]); 
+    ctx.lineDashOffset = -(Date.now() / 40) % 40; 
+    ctx.stroke(); 
+    ctx.setLineDash([4, 20]); 
+    ctx.lineDashOffset = (Date.now() / 60) % 40; 
+    ctx.stroke(); // Podwójna fala rzeczna w zeszycie
+    ctx.setLineDash([]);
 
-    // 2. DREWNIANY MOST (Od dołu wejście)
-    ctx.fillStyle = '#5c4033'; 
-    ctx.fillRect(-25, radius - 10, 50, 60);
-    ctx.fillStyle = '#8b5a2b'; // deski
-    for(let i=0; i<5; i++) {
-        ctx.fillRect(-23, radius + i*10, 46, 6);
-    }
+    // 2. SZKICOWANY MOST (Białe deski w twardym czarnym obrysie)
+    ctx.fillStyle = '#ffffff'; 
+    ctx.fillRect(-25, radius - 10, 50, 60);
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(-25, radius - 10, 50, 60);
+    // Szkicowane deski na moście
+    ctx.beginPath();
+    for(let i=0; i<5; i++) {
+        ctx.moveTo(-25, radius + i*10);
+        ctx.lineTo(25, radius + i*10);
+    }
+    ctx.stroke();
 
-    // 3. MURY (Zewnętrzny obwód)
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#7f8c8d';
-    ctx.fill();
-    ctx.lineWidth = 8;
-    ctx.strokeStyle = '#2c3e50';
-    ctx.stroke();
+    // 3. MURY (Twarde, geometryczne wielokąty - omijamy gradienty i kolory)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.fillStyle = '#111111'; // Mocna czerń markerowa na mury
+    ctx.fill();
 
-    // 4. BLANKI (Zębatki na murach)
-    ctx.fillStyle = '#95a5a6';
-    for(let i = 0; i < 12; i++) {
-        ctx.save();
-        ctx.rotate((Math.PI * 2 / 12) * i);
-        ctx.fillRect(-15, -radius - 12, 30, 20);
-        ctx.strokeStyle = '#2c3e50';
-        ctx.lineWidth = 3;
-        ctx.strokeRect(-15, -radius - 12, 30, 20);
-        ctx.restore();
-    }
+    // 4. BLANKI ZAMKU (Zębatki - białe z czarnym obrysem)
+    ctx.fillStyle = '#ffffff';
+    for(let i = 0; i < 12; i++) {
+        ctx.save();
+        ctx.rotate((Math.PI * 2 / 12) * i);
+        ctx.fillRect(-15, -radius - 12, 30, 20);
+        ctx.strokeStyle = '#111111';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(-15, -radius - 12, 30, 20);
+        ctx.restore();
+    }
 
-    // 5. WNĘTRZE ZAMKU (Ciemny środek imitujący dach / mrok wewnątrz)
-    ctx.beginPath();
-    ctx.arc(0, 0, radius - 15, 0, Math.PI * 2);
-    ctx.fillStyle = '#1a1a1a'; // Bardzo ciemne wnętrze, bo jesteś pod dachem!
-    ctx.fill();
+    // 5. WNĘTRZE ZAMKU (Puste, żeby sklep był czytelny)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius - 15, 0, Math.PI * 2);
+    ctx.fillStyle = '#ffffff'; // Czyściutki papier wewnątrz bazy
+    ctx.fill();
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#111111';
+    ctx.stroke();
 
-    // 6. IKONA SKLEPU NA ŚRODKU (Wyśrodkowana bez napisu)
-    ctx.fillStyle = '#f1c40f';
-    ctx.font = `bold ${radius * 0.6}px Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('🏰', 0, 0);
+    // 6. IKONA BAZY
+    ctx.fillStyle = '#111111'; // Czarny tusz
+    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('B', 0, 0); // "B" jak "Baza", narysowana flamastrem
 
-    ctx.restore();
+    ctx.restore();
 }
 
 // --- POMOCNICZA FUNKCJA DO ZAWIJANIA TEKSTU (TUTORIAL MIDASA) ---
