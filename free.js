@@ -16,7 +16,7 @@ let startBirds = [];
 let windLines = [];
 let lastWindTrigger = 0;
 
-// Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
+// Inicjalizacja mapy z pliku map.js
 initMap(WORLD_SIZE);
 
 // Statystyki RPG, Ekwipunek
@@ -24,57 +24,50 @@ let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 
-// --- NAPRAWA: Zmienna globalna dla engine.js, żeby się nie psuł i widział miecze! ---
 window.weaponPath = 'none'; 
 
 let lastMoveDir = { x: 1, y: 0 }; 
 let lastCalculatedTier = 0; 
 let wasSafe = false; 
 let killLogs = [];
+
+// Zmienne odliczające czas dla umiejętności (Cooldowny)
 let lastWinterUseClient = 0; 
-
-// --- NOWOŚĆ: Cooldown dla Zrywu (Dasha) ---
 let lastDashUseClient = 0; 
-
-// Zmienna do śledzenia stanu menu
 let lastSkillMenuState = '';
 
-// Tablica na unoszące się cyferki obrażeń!
+// Tablice na wyskakujące obrażenia i krew/iskry
 let damageTexts = [];
-// NOWOŚĆ: Tablica na efekty cząsteczkowe (krew, iskry)
 let particles = [];
 
-// Zmienne do precyzyjnego przeciągania botów (RTS)
+// Zmienne do przeciągania botów prawym przyciskiem myszy
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
 
-// --- NOWOŚĆ: ZMIENNE DO LIMITOWANIA FPS (Nagrywanie bez ścin) ---
+// Zmienne do limitowania i stabilizacji klatek na sekundę (FPS)
 let lastFrameTime = performance.now();
 const targetFPS = 60;
-const frameDuration = 1000 / targetFPS; // Ok. 16.66ms na klatkę
+const frameDuration = 1000 / targetFPS; 
 
-// =======================================================
-// NOWOŚĆ: CZASOWY SYSTEM GACHA (LOOTBOX) - ZMIENIONE NA 60s
-// =======================================================
 let nextGachaTime = 0;
-const GACHA_INTERVAL_MS = 60 * 1000; // 60 sekund do testów!
+const GACHA_INTERVAL_MS = 60 * 1000; 
 
-// =======================================================
-// NOWOŚĆ: TARCZA DEBUGUJĄCA (ANTI-LAG WATCHDOG)
-// =======================================================
+// Zmienne do monitorowania opóźnień serwera (Anti-Lag)
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
-// --- OBSŁUGA MYSZKI ---
+// ==========================================
+// OBSŁUGA STEROWANIA (Mysz i Klawiatura)
+// ==========================================
+
 window.addEventListener('mousemove', (e) => {
     if (gameState === 'PLAYING' && player && controlType !== 'TOUCH') {
         const rect = canvas.getBoundingClientRect();
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // POPRAWKA DLA ZOOMA: Obliczamy myszkę uwzględniając globalScale
         const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
         const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
         
@@ -83,27 +76,27 @@ window.addEventListener('mousemove', (e) => {
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         
-        // ZABEZPIECZENIE (DEBUG): Chroni przed zablokowaniem myszki w martwym punkcie
+        // Zapisujemy wektor ruchu tylko wtedy, gdy matematyka nie zwróciła błędu (NaN)
         if (!isNaN(angle)) {
             lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
         }
 
-        if (draggedBotId) { dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; }
+        if (draggedBotId) { 
+            dragMouseWorld = { x: mouseWorldX, y: mouseWorldY }; 
+        }
     }
 });
 
 window.addEventListener('mousedown', (e) => {
-    // ==========================================================
-    // TARCZA ANTY-KLIKOWA: Jeśli klikamy w menu, ignoruj strzał!
-    // ==========================================================
+    // TARCZA ANTY-KLIKOWA: Jeśli gracz klika w przyciski UI (Sklep/Menu), ignorujemy strzelanie mieczem.
     if (e.target.closest('#skill-menu') || e.target.closest('#castle-shop') || e.target.closest('button')) {
         return; 
     }
 
     if (gameState === 'PLAYING' && player) { 
-        // Blokada ataków, jeśli gracz jest w zamku (bezpieczna strefa)
-        if (player.isSafe) return; 
+        if (player.isSafe) return; // W bazie nie można atakować
 
+        // Prawy przycisk myszy - Przeciąganie własnych botów
         if (e.button === 2) { 
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -114,10 +107,14 @@ window.addEventListener('mousedown', (e) => {
 
             let closestBot = null;
             let minDist = 80; 
+            
             bots.forEach(b => {
                 if (b.ownerId === myId) {
                     let d = Math.hypot(b.x - mouseWorldX, b.y - mouseWorldY);
-                    if (d < minDist) { minDist = d; closestBot = b; }
+                    if (d < minDist) { 
+                        minDist = d; 
+                        closestBot = b; 
+                    }
                 }
             });
 
@@ -126,12 +123,14 @@ window.addEventListener('mousedown', (e) => {
                 dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
             }
         }
+        // Lewy przycisk myszy - Strzał bronią
         else if (e.button === 0) {
             socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         }
     }
+    
     if (gameState === 'PAUSED' && e.button === 0) {
-        // --- NAPRAWA BŁĘDU: Ignoruj kliknięcie wyjścia, jeśli otwarta jest Skrzynia Gacha! ---
+        // Blokada wychodzenia z pauzy, gdy aktywna jest skrzynka Gacha
         const gachaModal = document.getElementById('gacha-modal');
         if (gachaModal && gachaModal.style.display.includes('flex')) return;
 
@@ -142,17 +141,22 @@ window.addEventListener('mousedown', (e) => {
         const btnY = canvas.height / 2 + 10;
         
         if (mouseX >= btnX && mouseX <= btnX + 200 && mouseY >= btnY && mouseY <= btnY + 50) {
-            socket.disconnect(); location.reload();   
+            socket.disconnect(); 
+            location.reload();   
         }
     }
 });
 
 window.addEventListener('mouseup', (e) => {
+    // Zakończenie przeciągania bota i wysłanie nowych koordynatów do serwera
     if (e.button === 2 && draggedBotId && player) {
         let dx = dragMouseWorld.x - player.x;
         let dy = dragMouseWorld.y - player.y;
         
-        if (dx === 0 && dy === 0) { draggedBotId = null; return; }
+        if (dx === 0 && dy === 0) { 
+            draggedBotId = null; 
+            return; 
+        }
         
         let dist = Math.hypot(dx, dy);
         let absAngle = Math.atan2(dy, dx);
@@ -164,18 +168,15 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
-// --- NOWOŚĆ: ODBIÓR STRZAŁU Z WIRTUALNEGO PRZYCISKU MOBILNEGO ---
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player && !player.isSafe) {
         socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
     }
 });
 
-// --- OBSŁUGA KLAWIATURY ---
 window.onkeydown = (e) => {
-    keys[e.code] = true; // Tablica keys pochodzi z engine.js
+    keys[e.code] = true; 
     
-    // --- NOWOŚĆ: UKRYWANIE/POKAZYWANIE TUTORIALA ---
     if (e.code === 'KeyH' && player) {
         player.isTutorialActive = !player.isTutorialActive;
     }
@@ -183,26 +184,27 @@ window.onkeydown = (e) => {
     if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) {
         gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
     }
+    
     if (gameState === 'PLAYING') {
+        // --- NOWOŚĆ: OBSŁUGA AŻ 4 SLOTÓW NA BRONIE ---
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
         if (e.code === 'Digit3') socket.emit('switchWeapon', 3);
         if (e.code === 'Digit4') socket.emit('switchWeapon', 4);
-        
+
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         
-        // Zaktualizowane na nowe zmienne paths
         if (e.code === 'KeyR' && paths.weapon === 'winter') {
             const now = Date.now();
-            if (now - lastWinterUseClient >= 15000) {
-                lastWinterUseClient = now; socket.emit('throwWinterSword');
+            if (now - lastWinterUseClient >= 15000) { 
+                lastWinterUseClient = now; 
+                socket.emit('throwWinterSword');
             }
         }
 
-        // --- NOWOŚĆ: DASH (ZRYW) POD SHIFTEM ---
         if (e.code === 'ShiftLeft' && paths.speed === 'dash') {
             const now = Date.now();
-            if (now - lastDashUseClient >= 3000) { // 3 sekundy cooldownu
+            if (now - lastDashUseClient >= 3000) { 
                 lastDashUseClient = now; 
                 socket.emit('dash', lastMoveDir);
             }
@@ -220,8 +222,9 @@ window.onkeyup = (e) => {
 };
 
 // ==========================================
-// FUNKCJE POMOCNICZE DLA PTAKÓW I ZAMKU
+// SYSTEM EFEKTÓW WIZUALNYCH (Ptaki i Wiatr)
 // ==========================================
+
 function triggerStartBirds(x, y) {
     let birdCount = 80 + Math.floor(Math.random() * 40); 
     for (let i = 0; i < birdCount; i++) {
@@ -259,18 +262,16 @@ function drawNotebookBird(ctx, b) {
     ctx.globalAlpha = Math.max(0, b.life);
     ctx.translate(b.x, b.y);
     
-    // Obrót w kierunku lotu
     let angle = Math.atan2(b.vy, b.vx);
     ctx.rotate(angle + Math.PI / 2); 
 
     let flap = Math.sin(b.wingPhase) * b.size * 0.8;
 
-    ctx.strokeStyle = '#111111'; // Czarny "tusz"
+    ctx.strokeStyle = '#111111'; 
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Rysowanie skrzydła ptaka w formie "V"
     ctx.beginPath();
     ctx.moveTo(-b.size, flap); 
     ctx.lineTo(0, 0);          
@@ -280,60 +281,24 @@ function drawNotebookBird(ctx, b) {
     ctx.restore();
 }
 
-function drawNotebookCastle(ctx, z) {
-    let x = z.x, y = z.y, radius = z.radius;
-    ctx.save();
-    ctx.translate(x, y);
-
-    // Czarna naszkicowana fosa
-    ctx.beginPath(); 
-    ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff'; 
-    ctx.fill();
-    ctx.lineWidth = 2; 
-    ctx.strokeStyle = '#111111'; 
-    ctx.setLineDash([8, 12]); 
-    ctx.lineDashOffset = -(Date.now() / 40) % 40; 
-    ctx.stroke(); 
-    ctx.setLineDash([4, 20]); 
-    ctx.lineDashOffset = (Date.now() / 60) % 40; 
-    ctx.stroke(); 
-    ctx.setLineDash([]);
-
-    // Rdzeń zamku
-    ctx.fillStyle = '#111111';
-    ctx.beginPath(); 
-    ctx.arc(0, 0, radius, 0, Math.PI * 2); 
-    ctx.fill();
-
-    // Wnętrze zamku
-    ctx.beginPath(); 
-    ctx.arc(0, 0, radius - 10, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff'; 
-    ctx.fill();
-    ctx.lineWidth = 4; 
-    ctx.stroke();
-
-    // Ikona Bazy (Litera B)
-    ctx.fillStyle = '#111111';
-    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
-    ctx.textAlign = 'center'; 
-    ctx.textBaseline = 'middle';
-    ctx.fillText('B', 0, 0); 
-
-    ctx.restore();
-}
-
 // --- LOGIKA MENU I STARTU ---
 window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
+    
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
+    
     player = {
-        x: 2000, y: 2000, score: 0, level: 1, 
-        name: name, color: color, isSafe: false,
-        isShielding: false, aura: null, 
+        x: 2000, 
+        y: 2000, 
+        score: 0, 
+        level: 1, 
+        name: name, 
+        color: color, 
+        isSafe: false,
+        isShielding: false, 
+        aura: null, 
         inventory: { bow: 0, knife: 0, shuriken: 0 }, 
         activeWeapon: 'sword',
         isRecruiting: false,
@@ -342,36 +307,54 @@ window.startGame = (type) => {
         tutorialText: "Ładowanie porady z serwera wiedzy...",
         skin: window.playerSkin || 'standard'
     };
-    if (myId) player.id = myId;
     
-    // WYSYŁANIE EVENTU "PTAKI NA START"
+    if (myId) {
+        player.id = myId;
+    }
+    
+    // Wypuszczamy ptaki w koordynatach gracza!
     triggerStartBirds(player.x, player.y);
     lastWindTrigger = Date.now(); 
 
-    // Wysyłamy wybrany skin do serwera!
     socket.emit('joinGame', { name, color, skin: player.skin });
     gameState = 'PLAYING';
     
     lastFrameTime = performance.now();
-    lastServerTickTime = Date.now(); // Resetujemy czas do sprawdzania laga
-    nextGachaTime = Date.now() + GACHA_INTERVAL_MS; // Ustawiamy czas pierwszego Gacha!
+    lastServerTickTime = Date.now(); 
+    nextGachaTime = Date.now() + GACHA_INTERVAL_MS; 
+    
     requestAnimationFrame(gameLoop);
 };
 
 // --- KOMUNIKACJA Z SERWEREM ---
-socket.on('init', (data) => { myId = data.id; if (player) player.id = myId; });
-socket.on('levelUp', (data) => { skillPoints = data.points; });
+socket.on('init', (data) => { 
+    myId = data.id; 
+    if (player) player.id = myId; 
+});
+
+socket.on('levelUp', (data) => { 
+    skillPoints = data.points; 
+});
 
 socket.on('skillUpdated', (data) => {
-    if(!data) return; // Zabezpieczenie
+    if(!data || !data.skills) return; 
     playerSkills = data.skills; 
     skillPoints = data.points; 
     paths = data.paths || paths; 
     window.weaponPath = paths.weapon;
 });
 
-socket.on('botEaten', (data) => { if (player && data && !isNaN(data.newScore)) player.score = data.newScore; });
-socket.on('killEvent', (data) => { if(data && data.text) killLogs.push({ text: data.text, time: 200 }); });
+socket.on('botEaten', (data) => { 
+    if (player && data && !isNaN(data.newScore)) {
+        player.score = data.newScore; 
+    }
+});
+
+socket.on('killEvent', (data) => { 
+    if(data && data.text) {
+        killLogs.push({ text: data.text, time: 200 }); 
+    }
+});
 
 socket.on('tutorialTick', (data) => {
     if (player && data && data.text) {
@@ -384,16 +367,18 @@ socket.on('recruitToggled', (state) => {
     if (player) player.isRecruiting = state;
     killLogs.push({ text: state ? "TRYB: ZWERBUJ (P)" : "TRYB: ZJADAJ (P)", time: 150 }); 
 });
+
 socket.on('formationSwitched', (formName) => { 
     killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
 });
 
-// Odbieranie informacji o obrażeniach i GENEROWANIE CZĄSTECZEK
 socket.on('damageText', (data) => {
-    if(!data || isNaN(data.x) || isNaN(data.y)) return; // Zabezpieczenie
+    if(!data || isNaN(data.x) || isNaN(data.y)) return; 
 
-    // ZABEZPIECZENIE (DEBUG): Limitujemy ilość żeby RAM nie wybuchł (Max 50 wpisów)
-    if (damageTexts.length > 50) damageTexts.shift();
+    // Limitujemy teksty obrażeń do 50, by nie przeładować pamięci
+    if (damageTexts.length > 50) {
+        damageTexts.shift();
+    }
 
     damageTexts.push({
         x: data.x + (Math.random() * 20 - 10), 
@@ -408,7 +393,7 @@ socket.on('damageText', (data) => {
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
     let count = data.val > 20 ? 12 : 6; 
     
-    // Ograniczenie ilości cząsteczek
+    // Generowanie cząsteczek z limitem VRAM (maks 250 na raz)
     if (particles.length < 250) {
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
@@ -429,6 +414,7 @@ socket.on('damageText', (data) => {
 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
+    
     document.getElementById('ui-layer').style.display = 'flex';
     document.getElementById('step-1').style.display = 'none';
     document.getElementById('step-2').style.display = 'none';
@@ -440,14 +426,14 @@ socket.on('gameOver', (data) => {
         gameOverDiv = document.createElement('div');
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.color = 'white';
+        gameOverDiv.style.color = '#111'; 
         document.getElementById('menu').appendChild(gameOverDiv);
     }
     gameOverDiv.style.display = 'block';
     gameOverDiv.innerHTML = `
         <h2 style="color: #e74c3c; font-size: 38px; margin-bottom: 10px; text-transform: uppercase;">Zostałeś pożarty!</h2>
         <p style="font-size: 16px; margin-bottom: 20px;">Twój gang przestał istnieć.</p>
-        <p style="font-size: 24px; color: #f1c40f; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
+        <p style="font-size: 24px; color: #27ae60; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
         <button class="main-btn" onclick="location.reload()">Zagraj ponownie</button>
     `;
     
@@ -456,32 +442,36 @@ socket.on('gameOver', (data) => {
     if (shop) shop.style.display = 'none';
 });
 
-// ZABEZPIECZENIE (DEBUG): Tarcza Sanity Check na Odbiorze Danych
+/**
+ * ODBIÓR DANYCH Z SERWERA (TARCZA ANTY-CRASHOWA)
+ */
 socket.on('serverTick', (data) => {
-    lastServerTickTime = Date.now(); // Resetujemy Watchdoga Lagów
+    lastServerTickTime = Date.now(); 
     isServerLagging = false;
 
-    if (!data) return; // Uniknięcie crasha przy pustym pakiecie
+    if (!data) return; 
 
+    // Sanity Checks (Sprawdzanie integralności danych)
     foods = Array.isArray(data.foods) ? data.foods : []; 
     bots = Array.isArray(data.bots) ? data.bots : []; 
     projectiles = Array.isArray(data.projectiles) ? data.projectiles : [];
     loots = Array.isArray(data.loots) ? data.loots : [];              
+    
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
     
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
     if (myId && otherPlayers[myId]) {
-        // Twarda weryfikacja licznika punktów
         if (typeof otherPlayers[myId].score === 'number' && !isNaN(otherPlayers[myId].score)) {
             player.score = otherPlayers[myId].score;
         }
         player.inventory = otherPlayers[myId].inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword';
+        
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
-        if (otherPlayers[myId].skin) player.skin = otherPlayers[myId].skin; // Twarde zabezpieczenie skórki!
+        if (otherPlayers[myId].skin) player.skin = otherPlayers[myId].skin; 
     }
     delete otherPlayers[myId];
 });
@@ -500,8 +490,11 @@ function checkEquipmentUpgrades() {
     
     if (lastCalculatedTier > 0 && total > lastCalculatedTier) {
         let auraColor = '#ffffff'; 
-        if (total >= 10) auraColor = '#f1c40f'; 
-        else if (total >= 5) auraColor = '#3498db'; 
+        if (total >= 10) {
+            auraColor = '#f1c40f'; 
+        } else if (total >= 5) {
+            auraColor = '#3498db'; 
+        }
 
         player.aura = { time: 45, maxTime: 45, color: auraColor };
         document.body.classList.remove('shield-flash');
@@ -512,45 +505,51 @@ function checkEquipmentUpgrades() {
     lastCalculatedTier = total;
 }
 
-// --- LOGIKA UPDATE I PĘTLA ---
 function update() {
     if (gameState !== 'PLAYING') return;
 
-    if (player.aura && player.aura.time > 0) player.aura.time--;
+    if (player.aura && player.aura.time > 0) {
+        player.aura.time--;
+    }
 
     let dx = 0, dy = 0;
     
-    // --- OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
     if (controlType === 'TOUCH') {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
             
-            // ZABEZPIECZENIE: Eliminacja wyliczeń na NaN
             if (!isNaN(dx) && !isNaN(dy)) {
                 lastMoveDir = { x: dx, y: dy };
                 let len = Math.hypot(dx, dy);
-                if (len > 0) { dx /= len; dy /= len; }
+                if (len > 0) { 
+                    dx /= len; 
+                    dy /= len; 
+                }
             }
         }
     } else if (controlType === 'WASD') {
-        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
+        if (keys['KeyW']) dy--; 
+        if (keys['KeyS']) dy++; 
+        if (keys['KeyA']) dx--; 
+        if (keys['KeyD']) dx++;
     } else {
-        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
+        if (keys['ArrowUp']) dy--; 
+        if (keys['ArrowDown']) dy++; 
+        if (keys['ArrowLeft']) dx--; 
+        if (keys['ArrowRight']) dx++;
     }
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        if (player.skin === 'ninja') {
-            speed *= 1.05; // 5% szybciej!
+        if (player.skin === 'ninja') { 
+            speed *= 1.05; 
         }
-
-        if (currentEvent === 'BLIZZARD') {
-            if (paths.speed !== 'lightweight') {
-                speed *= 0.4; 
-            }
+        
+        if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') { 
+            speed *= 0.4; 
         }
 
         if (!isNaN(moveAngle) && !isNaN(speed)) {
@@ -565,19 +564,27 @@ function update() {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
         player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
-        if (!isNaN(player.x) && !isNaN(player.y)) {
-            camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-        }
         
-        if (!isServerLagging) {
-            socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
+        if (!isNaN(player.x) && !isNaN(player.y)) {
+            camera.x = player.x - canvas.width / 2; 
+            camera.y = player.y - canvas.height / 2;
+            
+            if (!isServerLagging) {
+                socket.emit('playerMovement', { 
+                    x: player.x, 
+                    y: player.y, 
+                    score: player.score, 
+                    isSafe: player.isSafe, 
+                    isShielding: player.isShielding 
+                });
+            }
         }
     }
 }
 
-// ==========================================
-// LIMITOWANIE FPS DO 60 W GŁÓWNEJ PĘTLI
-// ==========================================
+/**
+ * GŁÓWNA PĘTLA GRY (GAME LOOP)
+ */
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
 
@@ -588,26 +595,23 @@ function gameLoop(currentTime) {
 
     lastFrameTime = currentTime - (deltaTime % frameDuration);
 
-    // ZABEZPIECZENIE (DEBUG): Detektor Laga
     if (Date.now() - lastServerTickTime > 1500) {
         isServerLagging = true;
     }
 
     let allEntities = Object.values(otherPlayers).concat(bots);
-    if (player && gameState !== 'GAMEOVER') allEntities.push(player);
-    allEntities.sort((a,b) => b.score - a.score);
+    if (player && gameState !== 'GAMEOVER') {
+        allEntities.push(player);
+    }
+    
+    allEntities.sort((a,b) => (b.score || 0) - (a.score || 0));
     let topEntities = allEntities.slice(0, 5);
     let currentKingId = topEntities.length > 0 ? (topEntities[0].id || topEntities[0].name) : null;
     
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         
-        // =======================================================
-        // NOWOŚĆ: WYZWALACZ CZASOWEGO GACHA!
-        // =======================================================
         if (gameState === 'PLAYING' && Date.now() > nextGachaTime && window.showGachaAnimation) {
-            // Pauzujemy sterowanie żeby gracz mógł odebrać nagrodę
             gameState = 'PAUSED'; 
-            
             window.showGachaAnimation((rewardData) => {
                 socket.emit('claimGachaReward', rewardData);
                 gameState = 'PLAYING';
@@ -616,9 +620,10 @@ function gameLoop(currentTime) {
         }
 
         if (gameState === 'PLAYING') {
-            update(); checkEquipmentUpgrades(); 
+            update(); 
+            checkEquipmentUpgrades(); 
 
-            // --- AKTUALIZACJA PTAKÓW ---
+            // Aktualizacja ptaków
             for (let i = startBirds.length - 1; i >= 0; i--) {
                 let b = startBirds[i];
                 b.x += b.vx;
@@ -633,16 +638,15 @@ function gameLoop(currentTime) {
                 }
             }
 
-            // --- WYZWALACZ WIATRU (Co ok. 30 sekund) ---
+            // Aktualizacja Linii Wiatru
             if (Date.now() - lastWindTrigger > 30000) {
                 triggerWindLines(player.x, player.y);
                 lastWindTrigger = Date.now();
             }
 
-            // --- AKTUALIZACJA LINII WIATRU ---
             for (let i = windLines.length - 1; i >= 0; i--) {
                 let w = windLines[i];
-                w.x -= w.speed; // Wieje z prawej do lewej
+                w.x -= w.speed; 
                 w.life -= 0.01;
                 if (w.life <= 0 || w.x < player.x - 2000) {
                     windLines.splice(i, 1);
@@ -650,59 +654,57 @@ function gameLoop(currentTime) {
             }
         }
 
-        // 1. CZYSZCZENIE EKRANU I CIEMNY MARGINES POZA MAPĄ
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#111111'; 
+        
+        ctx.fillStyle = '#ffffff'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         let vWidth = canvas.width / globalScale;
         let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
 
-        // 2. RYSOWANIE SAMEJ MAPY I DRZEW
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-vWidth / 2, -vHeight / 2);
         
-        ctx.fillStyle = '#27ae60';
-        ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
-        drawForestMap(ctx, vCamera, vWidth, vHeight);
+        if(typeof drawForestMap === 'function') {
+            drawForestMap(ctx, vCamera, vWidth, vHeight);
+        }
         ctx.restore();
 
-        // 3. RYSOWANIE GRACZY, BOTÓW, ŚCIAN
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        // --- RYSOWANIE LINII WIATRU ---
+        // Rysowanie Linii Wiatru
         ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
         windLines.forEach(w => {
-            let waveY = Math.sin(w.x / 100) * 15; // Falowanie wiatru
+            let waveY = Math.sin(w.x / 100) * 15; 
             ctx.moveTo(w.x, w.y + waveY);
             ctx.lineTo(w.x + w.length, w.y + waveY);
         });
         ctx.stroke();
 
-        ctx.strokeStyle = '#e74c3c'; 
-        ctx.lineWidth = 10;
-        ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
-        
-        // Zeszytowe zamki
+        // Rysowanie Zamków poprzez czyste drawCastle z engine.js
         safeZones.forEach(z => {
-            drawNotebookCastle(ctx, z);
+            if(typeof drawCastle === 'function') {
+                drawCastle(ctx, z);
+            }
         }); 
         
         foods.forEach(f => {
-            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#000000'; 
+            ctx.beginPath(); 
+            ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); 
+            ctx.fill();
         });
 
-        // Czarno-Białe Lootboxy (S, M, W)
         loots.forEach(l => {
             ctx.save();
             ctx.translate(l.x, l.y);
@@ -723,16 +725,28 @@ function gameLoop(currentTime) {
             ctx.restore();
         });
         
+        // --- POPRAWKA: RYSOWANIE POCISKÓW BEZ SHOTGUNA I KUSZY ---
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
+            if(isNaN(rot)) rot = 0; 
+            
             if (p.projType === 'sword' || p.projType === 'winter' || !p.projType) {
                 rot += (Date.now() / 100); 
                 drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
             } else if (p.projType.includes('bow')) {
-                ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot); 
-                ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-10,-1,20,2); 
-                ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10,-3,4,6); 
-                ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(15,0); ctx.lineTo(10,3); ctx.fill(); 
+                ctx.save(); 
+                ctx.translate(p.x, p.y); 
+                ctx.rotate(rot); 
+                ctx.fillStyle = '#7f8c8d'; 
+                ctx.fillRect(-10,-1,20,2); 
+                ctx.fillStyle = '#e74c3c'; 
+                ctx.fillRect(-10,-3,4,6); 
+                ctx.fillStyle = '#bdc3c7'; 
+                ctx.beginPath(); 
+                ctx.moveTo(10,-3); 
+                ctx.lineTo(15,0); 
+                ctx.lineTo(10,3); 
+                ctx.fill(); 
                 ctx.restore();
             } else if (p.projType.includes('knife') || p.projType === 'cleaver') {
                 drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8);
@@ -743,19 +757,36 @@ function gameLoop(currentTime) {
 
         if (draggedBotId && player) {
             ctx.save();
-            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; ctx.lineWidth = 2; ctx.setLineDash([5, 5]);
-            ctx.beginPath(); ctx.moveTo(player.x, player.y); ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y); ctx.stroke();
-            ctx.beginPath(); ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; 
+            ctx.lineWidth = 2; 
+            ctx.setLineDash([5, 5]);
+            
+            ctx.beginPath(); 
+            ctx.moveTo(player.x, player.y); 
+            ctx.lineTo(dragMouseWorld.x, dragMouseWorld.y); 
+            ctx.stroke();
+            
+            ctx.beginPath(); 
+            ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; 
+            ctx.fill(); 
+            ctx.stroke();
 
             let b = bots.find(bot => bot.id === draggedBotId);
             if (b) {
-                ctx.setLineDash([]); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4;
-                ctx.beginPath(); ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); ctx.stroke();
+                ctx.setLineDash([]); 
+                ctx.strokeStyle = '#f1c40f'; 
+                ctx.lineWidth = 4;
+                ctx.beginPath(); 
+                ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); 
+                ctx.stroke();
             }
             ctx.restore();
         }
 
+        // ==========================================
+        // RYSOWANIE ENTITIES (Z zachowaniem oryginalnych pętli i flag isSafe)
+        // ==========================================
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
             if (isServerLagging) b.isMoving = false;
@@ -775,10 +806,8 @@ function gameLoop(currentTime) {
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
 
-        // --- RYSOWANIE PTAKÓW W ŚWIECIE ---
         startBirds.forEach(b => drawNotebookBird(ctx, b));
 
-        // Rysowanie fizyki cząsteczek (Krew / Iskry)
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i];
             
@@ -802,7 +831,6 @@ function gameLoop(currentTime) {
             if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Rysowanie wyskakujących obrażeń
         for (let i = damageTexts.length - 1; i >= 0; i--) {
             let dt = damageTexts[i];
             
