@@ -125,14 +125,16 @@
         .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
 
         /* WSPÓLNE MENU SKLEP I SKILLE (W GRACH) */
-        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #333; border-radius: 10px; display: none; flex-direction: column; gap: 6px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); width: 220px; z-index: 90; }
-        .sp-label { font-weight: bold; color: #d35400; text-align: center; margin-bottom: 5px; font-size: 14px; }
-        .skill-btn { background: #4CAF50; color: white; border: none; padding: 8px; border-radius: 6px; font-weight: bold; width: 100%; text-align: left; }
+        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 220px; z-index: 90; }
+        .sp-label { font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
+        .skill-btn { background: #fff; color: #111; border: 2px solid #111; padding: 8px; font-weight: bold; width: 100%; text-align: left; }
         
-        #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: rgba(255, 255, 255, 0.95); border: 2px solid #111; border-radius: 10px; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 4px 4px 0 #111; z-index: 90; color: #111; width: 160px; }
-        #castle-shop h2 { margin: 0; color: #111; font-size: 16px; text-align: center; font-family: 'Permanent Marker', cursive;}
-        #castle-shop p { margin: 0 0 10px 0; font-size: 11px; text-align: center; color: #555; }
-        .shop-btn { background: #fff; color: #111; border: 2px solid #111; padding: 8px; border-radius: 6px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: 2px 2px 0 #111;}
+        /* ZESZYTOWY, CZARNO BIAŁY SKLEP */
+        #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: #fff; border: 3px solid #111; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 6px 6px 0 rgba(17,17,17,0.2); z-index: 90; color: #111; width: 170px; }
+        #castle-shop h2 { margin: 0; color: #111; font-size: 18px; text-align: center; font-family: 'Permanent Marker', cursive; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
+        #castle-shop p { margin: 5px 0 10px 0; font-size: 11px; text-align: center; color: #333; font-weight: bold;}
+        .shop-btn { background: #fff; color: #111; border: 2px solid #111; padding: 8px; font-weight: bold; display: flex; justify-content: space-between; align-items: center; cursor: pointer; box-shadow: 2px 2px 0 #111; transition: 0.1s;}
+        .shop-btn:hover { background: #f0f0f0; }
         .shop-btn:active { transform: translate(2px, 2px); box-shadow: none; }
 
         /* --- INTERFEJS MOBILNY DLA GRACZA W TRAKCIE GRY --- */
@@ -283,7 +285,15 @@
     </div>
 
     <div id="skill-menu"></div>
-    <div id="castle-shop"></div>
+    
+    <div id="castle-shop">
+        <h2>Tajny Sklep</h2>
+        <p>Kupuj broń za zjedzoną masę!</p>
+        <button id="btn-bow" class="shop-btn" onclick="buyItem('bow')"><span>🏹 Łuk</span> <span>$100</span></button>
+        <button id="btn-knife" class="shop-btn" onclick="buyItem('knife')"><span>🗡️ Nóż</span> <span>$50</span></button>
+        <button id="btn-shuriken" class="shop-btn" onclick="buyItem('shuriken')"><span>🥷 Shuriken</span> <span>$20</span></button>
+        <button onclick="document.getElementById('castle-shop').style.display='none'" class="shop-btn" style="margin-top: 10px; justify-content: center; background: #111; color: #fff;">Ukryj Sklep</button>
+    </div>
 
     <canvas id="gameCanvas"></canvas>
 
@@ -351,7 +361,7 @@
 
             // Inicjalizacja skryptu gry
             let loadingDiv = document.getElementById('loading-step');
-            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#333; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
+            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#111; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
             loadingDiv.style.display = 'block';
 
             let scriptSrc = 'free.js';
