@@ -17,11 +17,72 @@ const io = require('socket.io')(http, {
 app.use(express.static(__dirname));
 
 // ==========================================
-// NOWOŚĆ: INTEGRACJA LOKALNEGO AI (QWEN)
+// NOWOŚĆ: KLASA DEBUGUJĄCA (WATCHDOG & DIAGNOSTYKA)
+// ==========================================
+class ServerWatchdog {
+    constructor() {
+        this.lastTickTime = Date.now();
+        this.lagSpikeCount = 0;
+    }
+
+    // 1. FILTR ANTY-NaN (Zabójca Freeze'ów)
+    // Zabezpiecza przed wysłaniem zepsutych liczb do przeglądarki
+    sanitizeEntity(entity, isProjectile = false) {
+        if (!entity) return;
+        
+        if (isNaN(entity.x) || entity.x === null) entity.x = 2000;
+        if (isNaN(entity.y) || entity.y === null) entity.y = 2000;
+        
+        if (!isProjectile) {
+            if (isNaN(entity.score) || entity.score === null) entity.score = 10;
+            if (entity.score < 0) entity.score = 0; 
+        } else {
+            if (isNaN(entity.dx)) entity.dx = 1;
+            if (isNaN(entity.dy)) entity.dy = 0;
+            if (isNaN(entity.speed)) entity.speed = 10;
+        }
+    }
+
+    // 2. MONITOR WYDAJNOŚCI SERWERA
+    checkServerHealth(io) {
+        const now = Date.now();
+        const tickDuration = now - this.lastTickTime;
+        
+        // Oczekujemy ~33ms. Jeśli jest > 150ms, mamy laga po stronie backendu
+        if (tickDuration > 150) {
+            this.lagSpikeCount++;
+            console.warn(`⚠️ [WATCHDOG] OSTRZEŻENIE! Serwer zamrożony na ${tickDuration}ms! (Spike #${this.lagSpikeCount})`);
+            
+            // Jeśli lagi są masywne, wyślij komunikat do graczy
+            if (tickDuration > 500) {
+                io.emit('killEvent', { text: `🚨 UWAGA: Serwer przeciążony! Trwa stabilizacja połączenia...`, time: 300 });
+            }
+        }
+        
+        this.lastTickTime = now;
+    }
+
+    // 3. RAPORT ZASOBÓW (Co 60 sekund)
+    startResourceMonitor(playersObj, botsArr, projectilesArr) {
+        setInterval(() => {
+            const memUsage = Math.round(process.memoryUsage().heapUsed / 1024 / 1024);
+            const pCount = Object.keys(playersObj).length;
+            console.log(`[SYSTEM] RAM: ${memUsage}MB | Graczy: ${pCount} | Botów: ${botsArr.length} | Pocisków: ${projectilesArr.length}`);
+            
+            if (memUsage > 300) {
+                console.error(`🚨 [CRITICAL] Uwaga! Zbliża się limit pamięci (Memory Leak?)`);
+            }
+        }, 60000);
+    }
+}
+
+const watchdog = new ServerWatchdog();
+
+// ==========================================
+// INTEGRACJA LOKALNEGO AI (QWEN)
 // ==========================================
 async function getAIWellbeingMessage(mass) {
     try {
-        // Zabezpieczenie przed "zawieszeniem" serwera (timeout 1.5s)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 1500);
 
@@ -40,8 +101,6 @@ async function getAIWellbeingMessage(mass) {
         const data = await response.json();
         return data.response.trim();
     } catch (error) {
-        // Jeśli Qwen jest wyłączony lub działa za wolno - cichy fallback
-        // console.log("[AI ERROR] Używam fallbacku dla śmierci.");
         const fallbacks = [
             `Koniec misji z wynikiem ${mass}. Zrób sobie przerwę na łyk wody i przewietrz głowę.`,
             `Niestety, zostałeś pożarty. Masa: ${mass}. Pamiętaj, gra to nie życie. Wróć, jak odpoczniesz.`,
@@ -65,7 +124,7 @@ let projectiles = []; // Miecze rzucane na E
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
-// --- NOWOŚĆ: ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
+// --- ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
 let bushes = [];
 let meteorZones = [];
 let botDifficultyMultiplier = 1.0; // Mnożnik trudności AI (Trening)
@@ -78,6 +137,9 @@ for (let i = 0; i < 35; i++) {
         radius: 60 + Math.random() * 60
     });
 }
+
+// Uruchomienie monitoringu zasobów Watchdoga
+watchdog.startResourceMonitor(players, bots, projectiles);
 
 // --- ZMIENNE EVENTOWE I DRUŻYNOWE ---
 let activeEvent = null; 
@@ -114,7 +176,7 @@ const weaponStats = {
     'explosive_kunai': { dmg: 75, life: 85, speed: 38, cost: 30, piercing: true }
 };
 
-// --- AKTUALIZACJA: ASYNCHRONICZNE ZABIJANIE Z QWENEM ---
+// --- ASYNCHRONICZNE ZABIJANIE Z QWENEM ---
 async function killPlayer(pId) {
     const p = players[pId];
     if (p) {
@@ -207,6 +269,11 @@ io.on('connection', (socket) => {
     console.log(`\n===========================================`);
     console.log(`[SOCKET INFO] Nowe połączenie. ID: ${socket.id}`);
     console.log(`===========================================\n`);
+
+    // --- NASŁUCH BŁĘDÓW FRONTENDU PRZEZ WATCHDOGA ---
+    socket.on('frontendError', (errorData) => {
+        console.error(`🚨 [FRONTEND CRASH] Gracz ${socket.id}: \nBłąd: ${errorData.message} \nLinia: ${errorData.line}`);
+    });
 
     // --- DOŁĄCZANIE (TRYB FREE) ---
     socket.on('joinGame', (data) => {
@@ -316,17 +383,17 @@ io.on('connection', (socket) => {
         console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
     });
 
-    // --- NOWOŚĆ: Zmiana Trudności Botów (Odbiór z Klienta) ---
+    // --- Zmiana Trudności Botów ---
     socket.on('setBotDifficulty', (levelIndex) => {
-        if (levelIndex === 0) botDifficultyMultiplier = 0.6; // Łatwy
-        else if (levelIndex === 1) botDifficultyMultiplier = 1.0; // Normalny
-        else if (levelIndex === 2) botDifficultyMultiplier = 1.5; // Trudny
+        if (levelIndex === 0) botDifficultyMultiplier = 0.6; 
+        else if (levelIndex === 1) botDifficultyMultiplier = 1.0; 
+        else if (levelIndex === 2) botDifficultyMultiplier = 1.5; 
         
         console.log(`[TRENING] Trudność botów zmieniona! Mnożnik: x${botDifficultyMultiplier}`);
         io.emit('killEvent', { text: `⚙️ Zmiana trudności AI: ${levelIndex === 0 ? 'ŁATWY' : levelIndex === 1 ? 'NORMALNY' : 'TRUDNY'}`, time: 150 });
     });
 
-    // --- NOWOŚĆ: Przełączanie formacji z panelu klienta ---
+    // --- Przełączanie formacji ---
     socket.on('setFormation', (formationIndex) => {
         const p = players[socket.id];
         if (p) {
@@ -554,6 +621,8 @@ io.on('connection', (socket) => {
 
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
+    watchdog.checkServerHealth(io); // Monitorowanie płynności backendu
+
     eventTickCounter++;
 
     // Kary za ucieczkę z mapy
@@ -561,7 +630,6 @@ setInterval(() => {
     for (let i = pKeysList.length - 1; i >= 0; i--) {
         let pId = pKeysList[i];
         let p = players[pId];
-        // Ochrona dla graczy z flagą isSafe = true (np. w trakcie śmierci)
         if (!p.isSafe && (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10)) {
             io.emit('killEvent', { text: `${p.name} zginął poza mapą!` }); 
             killPlayer(pId);
@@ -614,16 +682,13 @@ setInterval(() => {
         }
     });
 
-    // --- SYSTEM EVENTÓW (Król, Deszcz, Śnieżyca lub Meteoryty) ---
+    // --- SYSTEM EVENTÓW ---
     eventTimer++;
-    // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
         let rand = Math.random();
         
-        // Losujemy typ eventu (25% szans na każdy)
         if (rand < 0.25 && playersArray.length > 0) {
-            // EVENT: Polowanie na Króla
             playersArray.sort((a, b) => b.score - a.score);
             let topPlayer = playersArray[0];
 
@@ -640,12 +705,11 @@ setInterval(() => {
                     activeEvent = null;
                     currentKingId = null;
                     eventTimer = 0;
-                }, 30000); // 30 sekund
+                }, 30000); 
             } else {
                 eventTimer = 0; 
             }
         } else if (rand < 0.5) {
-            // EVENT: Kwaśny Deszcz
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
             
@@ -657,9 +721,8 @@ setInterval(() => {
                 activeEvent = null;
                 eventTimer = 0;
                 io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
-            }, 25000); // 25 sekund deszczu
+            }, 25000); 
         } else if (rand < 0.75) {
-            // EVENT: Zamięć Śnieżna
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
 
@@ -671,19 +734,17 @@ setInterval(() => {
                 activeEvent = null;
                 eventTimer = 0;
                 io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 });
-            }, 20000); // 20 sekund śniegu
+            }, 20000); 
         } else {
-            // --- EVENT DESZCZU METEORYTÓW ---
             activeEvent = 'METEOR_SHOWER';
             io.emit('killEvent', { text: `☄️ UWAGA! Zbliża się deszcz meteorytów! Omijajcie czerwone strefy!`, time: 300 });
             
-            // Generujemy 10 stref uderzeń
             for(let m = 0; m < 10; m++) {
                 meteorZones.push({
                     x: Math.random() * WORLD_SIZE,
                     y: Math.random() * WORLD_SIZE,
                     radius: 150 + Math.random() * 100,
-                    timer: 90 // 3 sekundy do uderzenia (30 ticków/sek * 3)
+                    timer: 90 
                 });
             }
 
@@ -700,10 +761,9 @@ setInterval(() => {
         let m = meteorZones[i];
         m.timer--;
         if (m.timer <= 0) {
-            // BOOM! Uderzenie w strefę!
             Object.values(players).forEach(p => {
                 if (!p.isSafe && Math.hypot(p.x - m.x, p.y - m.y) < m.radius) {
-                    p.score = Math.max(1, p.score - 100); // 100 pkt obrażeń obszarowych!
+                    p.score = Math.max(1, p.score - 100);
                     io.emit('damageText', { x: p.x, y: p.y - 30, val: 100, color: '#e74c3c' });
                     if(p.score <= 1) killPlayer(p.id);
                 }
@@ -714,12 +774,11 @@ setInterval(() => {
                     io.emit('damageText', { x: b.x, y: b.y - 30, val: 100, color: '#e74c3c' });
                 }
             });
-            // Usuwamy strefę po uderzeniu
             meteorZones.splice(i, 1);
         }
     }
 
-    // Obrażenia od deszczu (Co około 1 sekundę = 30 ticków)
+    // Obrażenia od deszczu
     if (activeEvent === 'TOXIC_RAIN' && eventTickCounter % 30 === 0) {
         Object.values(players).forEach(p => {
             if (!p.isSafe && p.score > 5) {
@@ -732,18 +791,16 @@ setInterval(() => {
         });
     }
 
-    // REGENERACJA TYTANA (Gdy stoi w miejscu)
-    if (eventTickCounter % 30 === 0) { // Co 1 sekundę
+    if (eventTickCounter % 30 === 0) { 
         Object.values(players).forEach(p => {
             if (p.paths.strength === 'titan') {
                 if (!p.isMoving) p.idleTime++;
-                if (p.idleTime >= 3) { // Jeśli stoi 3 sekundy
-                    p.score += 2;      // Leczy +2 co sekundę
+                if (p.idleTime >= 3) { 
+                    p.score += 2;      
                 }
             }
         });
         
-        // --- NOWOŚĆ: PASYWNY WZROST DZIKICH BOTÓW Z MNOŻNIKIEM TRUDNOŚCI ---
         bots.forEach(b => {
             if (!b.ownerId) { 
                 let growthChance = (b.score < 30 ? 0.4 : 0.1) * botDifficultyMultiplier;
@@ -783,10 +840,8 @@ setInterval(() => {
     // 1. Logika Ruchu Botów i Formacji
     for (let i = bots.length - 1; i >= 0; i--) {
         let b = bots[i];
-        
         let owner = b.ownerId ? players[b.ownerId] : null;
 
-        // --- NOWOŚĆ: SKALOWANIE PRĘDKOŚCI BOTA NA BAZIE TRUDNOŚCI ---
         let botSpeedFromOwner = owner ? owner.baseSpeed : (2.5 * botDifficultyMultiplier); 
         let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
         
@@ -914,7 +969,6 @@ setInterval(() => {
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
             
-            // --- NOWOŚĆ: CZĘSTOTLIWOŚĆ STRZELANIA ZALEŻNA OD TRUDNOŚCI ---
             let shootChance = 0.03 * botDifficultyMultiplier;
             if (b.score >= 15 && Math.random() < shootChance) {
                 let type = b.activeWeapon;
@@ -969,11 +1023,9 @@ setInterval(() => {
             let r2 = 25 * (1 + Math.pow(Math.max(0, b2.score - 1), 0.45) * 0.15);
 
             if (dist < r1 && b1.score > b2.score * 1.15) {
-                io.emit('killEvent', { text: `${b1.name} pożarł ${b2.name}` }); 
                 b1.score += Math.floor(b2.score * 0.5);
                 bots[j] = spawnBot(); 
             } else if (dist < r2 && b2.score > b1.score * 1.15) {
-                io.emit('killEvent', { text: `${b2.name} pożarł ${b1.name}` }); 
                 b2.score += Math.floor(b1.score * 0.5);
                 bots[i] = spawnBot(); 
             }
@@ -1038,7 +1090,6 @@ setInterval(() => {
 
                     if (dist < pRadius && p.score > b.score * 1.15) {
                         if (p.isRecruiting) {
-                            io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
                             b.ownerId = p.id;
                             b.team = p.team; 
                             b.score = 5; 
@@ -1054,14 +1105,12 @@ setInterval(() => {
                             b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
 
                         } else {
-                            io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
                             p.score += Math.floor(b.score * 0.5);
                             bots[bi] = spawnBot(); 
                         }
                         io.to(p.id).emit('botEaten', { newScore: p.score });
                     }
                     else if (dist < bRadius && b.score > p.score * 1.15) {
-                        io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
                         b.score += Math.floor(p.score * 0.5);
                         killPlayer(p.id); 
                     }
@@ -1165,7 +1214,12 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
-    // --- WYSYŁANIE ŚRODOWISKA (KRZAKI, METEORY) ---
+    // Uruchomienie filtra Anti-NaN na wszystkich obiektach PRZED wysłaniem danych!
+    for (let id in players) watchdog.sanitizeEntity(players[id]);
+    bots.forEach(b => watchdog.sanitizeEntity(b));
+    projectiles.forEach(p => watchdog.sanitizeEntity(p, true));
+
+    // --- WYSYŁANIE ŚRODOWISKA ---
     io.emit('serverTick', { 
         players, bots, foods, projectiles, loots, 
         activeEvent, eventTimeLeft, castles, bushes, meteorZones 
@@ -1173,7 +1227,7 @@ setInterval(() => {
 }, 33);
 
 // ==========================================
-// MIDAS - WIRTUALNY PRZEWODNIK (ZAPROGRAMOWANY)
+// MIDAS - WIRTUALNY PRZEWODNIK
 // ==========================================
 function getTutorialMessage(playerName, eventType) {
     const messages = {
