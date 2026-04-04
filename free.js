@@ -217,20 +217,20 @@ window.onkeyup = (e) => {
 // FUNKCJE POMOCNICZE DLA PTAKÓW
 // ==========================================
 function triggerStartBirds(x, y) {
-    let birdCount = 15 + Math.floor(Math.random() * 10); 
+    let birdCount = 80 + Math.floor(Math.random() * 40); 
     for (let i = 0; i < birdCount; i++) {
         let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 4 + 4; 
+        let speed = Math.random() * 6 + 4; 
         startBirds.push({
-            x: x + (Math.random() * 60 - 30),
-            y: y + (Math.random() * 60 - 30),
+            x: x + (Math.random() * 120 - 60),
+            y: y + (Math.random() * 120 - 60),
             vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - 1.5, 
+            vy: Math.sin(angle) * speed - 2, 
             life: 1.0,
-            decay: Math.random() * 0.005 + 0.003, 
+            decay: Math.random() * 0.001 + 0.0033, 
             size: Math.random() * 4 + 3,
             wingPhase: Math.random() * Math.PI * 2,
-            wingSpeed: Math.random() * 0.2 + 0.3
+            wingSpeed: Math.random() * 0.15 + 0.3
         });
     }
 }
