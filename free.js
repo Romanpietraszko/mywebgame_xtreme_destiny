@@ -11,6 +11,9 @@ let currentEvent = null;   // Info o evencie z serwera
 let eventTimeLeft = 0;     // Czas do kolejnego eventu
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
+// NOWOŚĆ: Tablica na ptaki wyfruwające na starcie
+let startBirds = [];
+
 // Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
 initMap(WORLD_SIZE);
 
@@ -210,6 +213,54 @@ window.onkeyup = (e) => {
     if (e.code === 'KeyQ' && player) player.isShielding = false;
 };
 
+// ==========================================
+// FUNKCJE POMOCNICZE DLA PTAKÓW
+// ==========================================
+function triggerStartBirds(x, y) {
+    let birdCount = 15 + Math.floor(Math.random() * 10); 
+    for (let i = 0; i < birdCount; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let speed = Math.random() * 4 + 4; 
+        startBirds.push({
+            x: x + (Math.random() * 60 - 30),
+            y: y + (Math.random() * 60 - 30),
+            vx: Math.cos(angle) * speed,
+            vy: Math.sin(angle) * speed - 1.5, 
+            life: 1.0,
+            decay: Math.random() * 0.005 + 0.003, 
+            size: Math.random() * 4 + 3,
+            wingPhase: Math.random() * Math.PI * 2,
+            wingSpeed: Math.random() * 0.2 + 0.3
+        });
+    }
+}
+
+function drawNotebookBird(ctx, b) {
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, b.life);
+    ctx.translate(b.x, b.y);
+    
+    // Obrót w kierunku lotu
+    let angle = Math.atan2(b.vy, b.vx);
+    ctx.rotate(angle + Math.PI / 2); 
+
+    let flap = Math.sin(b.wingPhase) * b.size * 0.8;
+
+    ctx.strokeStyle = '#111111'; // Czarny "tusz"
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = 'round';
+    ctx.lineCap = 'round';
+
+    // Rysowanie skrzydła ptaka w formie "V"
+    ctx.beginPath();
+    ctx.moveTo(-b.size, flap); 
+    ctx.lineTo(0, 0);          
+    ctx.lineTo(b.size, flap);  
+    ctx.stroke();
+
+    ctx.restore();
+}
+
 // --- LOGIKA MENU I STARTU ---
 window.startGame = (type) => {
     controlType = type;
@@ -230,6 +281,9 @@ window.startGame = (type) => {
     };
     if (myId) player.id = myId;
     
+    // WYSYŁANIE EVENTU "PTAKI NA START"
+    triggerStartBirds(player.x, player.y);
+
     // Wysyłamy wybrany skin do serwera!
     socket.emit('joinGame', { name, color, skin: player.skin });
     gameState = 'PLAYING';
@@ -500,6 +554,21 @@ function gameLoop(currentTime) {
 
         if (gameState === 'PLAYING') {
             update(); checkEquipmentUpgrades(); 
+
+            // --- AKTUALIZACJA PTAKÓW ---
+            for (let i = startBirds.length - 1; i >= 0; i--) {
+                let b = startBirds[i];
+                b.x += b.vx;
+                b.y += b.vy;
+                b.vx *= 0.98; // Lekkie zwalnianie w locie
+                b.vy -= 0.05; // Podnoszenie się do góry
+                b.wingPhase += b.wingSpeed;
+                b.life -= b.decay;
+
+                if (b.life <= 0) {
+                    startBirds.splice(i, 1);
+                }
+            }
         }
 
         // 1. CZYSZCZENIE EKRANU I CIEMNY MARGINES POZA MAPĄ
@@ -535,7 +604,7 @@ function gameLoop(currentTime) {
         safeZones.forEach(z => drawCastle(ctx, z)); 
         
         foods.forEach(f => {
-            ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
         loots.forEach(l => {
@@ -600,6 +669,9 @@ function gameLoop(currentTime) {
             player.weaponPath = paths.weapon || 'none';
             drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
         }
+
+        // --- RYSOWANIE PTAKÓW W ŚWIECIE ---
+        startBirds.forEach(b => drawNotebookBird(ctx, b));
 
         // Rysowanie fizyki cząsteczek (Krew / Iskry)
         for (let i = particles.length - 1; i >= 0; i--) {
@@ -674,7 +746,7 @@ function gameLoop(currentTime) {
             ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            ctx.fillStyle = '#fff';
+            ctx.fillStyle = '#111';
             ctx.beginPath();
             let timeOffset = Date.now() / 15;
             for(let i = 0; i < 200; i++) {
@@ -721,17 +793,18 @@ function gameLoop(currentTime) {
         }
 
         if (gameState !== 'GAMEOVER') {
-            ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
-            ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial';
+            ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
+            ctx.fillStyle = '#e74c3c'; ctx.font = "bold 16px 'Permanent Marker', Arial";
             ctx.fillText("🏆 RANKING SERWERA", canvas.width - 265, 30);
             
             topEntities.forEach((p, i) => {
                 let yPos = 55 + i * 20;
                 if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); } 
-                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#fff'; ctx.fillText(`${i+1}. ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); }
+                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#111'; ctx.fillText(`${i+1}. ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); }
             });
 
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial';
+            ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
             ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
             
             if (player.isRecruiting !== undefined) {
@@ -748,7 +821,7 @@ function gameLoop(currentTime) {
                     ctx.fillStyle = '#e74c3c';
                     ctx.font = 'bold 24px Arial';
                 } else {
-                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.fillStyle = 'rgba(17, 17, 17, 0.8)';
                 }
                 ctx.fillText(`Kolejny event za: ${eventTimeLeft}s`, canvas.width / 2, 40);
             } else {
@@ -762,11 +835,11 @@ function gameLoop(currentTime) {
             ctx.restore();
 
             if (killLogs.length > 0) {
-                ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
+                ctx.save(); ctx.font = "bold 14px 'Permanent Marker', Arial"; ctx.textAlign = 'right';
                 for (let i = 0; i < killLogs.length; i++) {
                     let log = killLogs[i];
                     ctx.fillStyle = `rgba(231, 76, 60, ${log.time / 50})`; 
-                    ctx.fillText("☠️ " + log.text, canvas.width - 20, 170 + (i * 22));
+                    ctx.fillText("⚔️ " + log.text, canvas.width - 20, 170 + (i * 22));
                     log.time--;
                 }
                 ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
@@ -775,14 +848,14 @@ function gameLoop(currentTime) {
             ctx.save();
             let startX = canvas.width / 2 - 60, startY = canvas.height - 80;
             
-            ctx.fillStyle = player.activeWeapon === 'sword' ? 'rgba(46, 204, 113, 0.9)' : 'rgba(44, 62, 80, 0.8)';
-            ctx.fillRect(startX, startY, 50, 50); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 2; ctx.strokeRect(startX, startY, 50, 50);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText('1', startX + 15, startY + 18);
+            ctx.fillStyle = player.activeWeapon === 'sword' ? 'rgba(46, 204, 113, 0.9)' : '#fff';
+            ctx.fillRect(startX, startY, 50, 50); ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(startX, startY, 50, 50);
+            ctx.fillStyle = '#111'; ctx.font = 'bold 14px Arial'; ctx.fillText('1', startX + 15, startY + 18);
             ctx.font = '10px Arial'; ctx.fillText('Miecz', startX + 25, startY + 40);
 
-            ctx.fillStyle = player.activeWeapon !== 'sword' ? 'rgba(46, 204, 113, 0.9)' : 'rgba(44, 62, 80, 0.8)';
+            ctx.fillStyle = player.activeWeapon !== 'sword' ? 'rgba(46, 204, 113, 0.9)' : '#fff';
             ctx.fillRect(startX + 60, startY, 50, 50); ctx.strokeRect(startX + 60, startY, 50, 50);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText('2', startX + 75, startY + 18);
+            ctx.fillStyle = '#111'; ctx.font = 'bold 14px Arial'; ctx.fillText('2', startX + 75, startY + 18);
             
             let secText = 'Brak';
             const types = ['shotgun', 'crossbow', 'diamond_bow', 'golden_bow', 'bow', 'cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife', 'explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'];
@@ -796,11 +869,11 @@ function gameLoop(currentTime) {
                 let timeLeft = Math.ceil((cooldownTotal - timePassed) / 1000);
 
                 let btnX = startX + 120;
-                ctx.fillStyle = 'rgba(44, 62, 80, 0.8)'; ctx.fillRect(btnX, startY, 50, 50);
+                ctx.fillStyle = '#fff'; ctx.fillRect(btnX, startY, 50, 50);
                 ctx.fillStyle = 'rgba(52, 152, 219, 0.8)'; ctx.fillRect(btnX, startY + 50 * (1 - winterProgress), 50, 50 * winterProgress);
-                ctx.strokeStyle = winterProgress >= 1 ? '#3498db' : '#7f8c8d'; ctx.lineWidth = 2; ctx.strokeRect(btnX, startY, 50, 50);
+                ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(btnX, startY, 50, 50);
                 
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 14px Arial'; ctx.fillText('R', btnX + 25, startY + 18);
+                ctx.fillStyle = '#111'; ctx.font = 'bold 14px Arial'; ctx.fillText('R', btnX + 25, startY + 18);
                 
                 ctx.font = '10px Arial'; 
                 if (winterProgress >= 1) {
@@ -819,11 +892,11 @@ function gameLoop(currentTime) {
                 let timeLeftD = Math.ceil((cooldownTotalD - timePassedD) / 1000);
 
                 let btnXD = startX + 180;
-                ctx.fillStyle = 'rgba(44, 62, 80, 0.8)'; ctx.fillRect(btnXD, startY, 50, 50);
+                ctx.fillStyle = '#fff'; ctx.fillRect(btnXD, startY, 50, 50);
                 ctx.fillStyle = 'rgba(46, 204, 113, 0.8)'; ctx.fillRect(btnXD, startY + 50 * (1 - dashProgress), 50, 50 * dashProgress);
-                ctx.strokeStyle = dashProgress >= 1 ? '#2ecc71' : '#7f8c8d'; ctx.lineWidth = 2; ctx.strokeRect(btnXD, startY, 50, 50);
+                ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(btnXD, startY, 50, 50);
                 
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 12px Arial'; ctx.fillText('SHIFT', btnXD + 25, startY + 18);
+                ctx.fillStyle = '#111'; ctx.font = 'bold 12px Arial'; ctx.fillText('SHIFT', btnXD + 25, startY + 18);
                 
                 ctx.font = '10px Arial'; 
                 if (dashProgress >= 1) {
@@ -866,7 +939,7 @@ function gameLoop(currentTime) {
                         
                         // --- NOWOŚĆ: Ewolucja poziomu 20 (Przebudzenie) ---
                         let levelText = lvl >= 20 ? `(Lv. MAX - PRZEBUDZENIE!)` : `(Lv. ${lvl}/20)`;
-                        let titleColor = lvl >= 20 ? '#e67e22' : '#000';
+                        let titleColor = lvl >= 20 ? '#e67e22' : '#111';
                         
                         html += `<div style="display: flex; align-items: center; gap: 10px; margin-bottom: 8px;">
                                     <span style="font-size: 24px;">${cat.icon}</span>
@@ -922,12 +995,12 @@ function gameLoop(currentTime) {
         }
 
         if (gameState === 'PAUSED' && !document.getElementById('gacha-modal').style.display.includes('flex')) {
-            ctx.fillStyle = 'rgba(0,0,0,0.6)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 40px Arial'; ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#111'; ctx.font = "bold 40px 'Permanent Marker', Arial"; ctx.textAlign = 'center';
             ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
             
             const btnX = canvas.width / 2 - 100; const btnY = canvas.height / 2 + 10;
-            ctx.fillStyle = '#e74c3c'; ctx.fillRect(btnX, btnY, 200, 50);
+            ctx.fillStyle = '#e74c3c'; ctx.fillRect(btnX, btnY, 200, 50); ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.strokeRect(btnX, btnY, 200, 50);
             ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.fillText("WYJŚCIE", canvas.width / 2, btnY + 33);
             ctx.textAlign = 'left';
         }
