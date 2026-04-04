@@ -6,13 +6,15 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
-let loots = [];            // Tablica skrzynek z serwera
-let currentEvent = null;   // Info o evencie z serwera
-let eventTimeLeft = 0;     // Czas do kolejnego eventu
+let loots = [];            
+let currentEvent = null;   
+let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
-// NOWOŚĆ: Tablica na ptaki wyfruwające na starcie
+// NOWOŚĆ: Tablica na ptaki wyfruwające na starcie i wiatr
 let startBirds = [];
+let windLines = [];
+let lastWindTrigger = 0;
 
 // Inicjalizacja mapy z pliku map.js (pobiera WORLD_SIZE z engine.js)
 initMap(WORLD_SIZE);
@@ -20,11 +22,8 @@ initMap(WORLD_SIZE);
 // Statystyki RPG, Ekwipunek
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
-
-// --- NOWOŚĆ: Nowy obiekt z 3 ścieżkami ---
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
 
-// --- NAPRAWA: Zmienna globalna dla engine.js, żeby się nie psuł i widział miecze! ---
 window.weaponPath = 'none'; 
 
 let lastMoveDir = { x: 1, y: 0 }; 
@@ -32,36 +31,22 @@ let lastCalculatedTier = 0;
 let wasSafe = false; 
 let killLogs = [];
 let lastWinterUseClient = 0; 
-
-// --- NOWOŚĆ: Cooldown dla Zrywu (Dasha) ---
 let lastDashUseClient = 0; 
-
-// Zmienna do śledzenia stanu menu
 let lastSkillMenuState = '';
 
-// Tablica na unoszące się cyferki obrażeń!
 let damageTexts = [];
-// NOWOŚĆ: Tablica na efekty cząsteczkowe (krew, iskry)
 let particles = [];
 
-// Zmienne do precyzyjnego przeciągania botów (RTS)
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
 
-// --- NOWOŚĆ: ZMIENNE DO LIMITOWANIA FPS (Nagrywanie bez ścin) ---
 let lastFrameTime = performance.now();
 const targetFPS = 60;
-const frameDuration = 1000 / targetFPS; // Ok. 16.66ms na klatkę
+const frameDuration = 1000 / targetFPS; 
 
-// =======================================================
-// NOWOŚĆ: CZASOWY SYSTEM GACHA (LOOTBOX) - ZMIENIONE NA 60s
-// =======================================================
 let nextGachaTime = 0;
-const GACHA_INTERVAL_MS = 60 * 1000; // 60 sekund do testów!
+const GACHA_INTERVAL_MS = 60 * 1000; 
 
-// =======================================================
-// NOWOŚĆ: TARCZA DEBUGUJĄCA (ANTI-LAG WATCHDOG)
-// =======================================================
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
 
@@ -74,7 +59,6 @@ window.addEventListener('mousemove', (e) => {
         const mouseX = e.clientX - rect.left;
         const mouseY = e.clientY - rect.top;
         
-        // POPRAWKA DLA ZOOMA: Obliczamy myszkę uwzględniając globalScale
         const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
         const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
         
@@ -83,7 +67,6 @@ window.addEventListener('mousemove', (e) => {
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         
-        // ZABEZPIECZENIE (DEBUG): Chroni przed zablokowaniem myszki w martwym punkcie
         if (!isNaN(angle)) {
             lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
         }
@@ -93,15 +76,11 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
-    // ==========================================================
-    // TARCZA ANTY-KLIKOWA: Jeśli klikamy w menu, ignoruj strzał!
-    // ==========================================================
     if (e.target.closest('#skill-menu') || e.target.closest('#castle-shop') || e.target.closest('button')) {
         return; 
     }
 
     if (gameState === 'PLAYING' && player) { 
-        // Blokada ataków, jeśli gracz jest w zamku (bezpieczna strefa)
         if (player.isSafe) return; 
 
         if (e.button === 2) { 
@@ -131,7 +110,6 @@ window.addEventListener('mousedown', (e) => {
         }
     }
     if (gameState === 'PAUSED' && e.button === 0) {
-        // --- NAPRAWA BŁĘDU: Ignoruj kliknięcie wyjścia, jeśli otwarta jest Skrzynia Gacha! ---
         const gachaModal = document.getElementById('gacha-modal');
         if (gachaModal && gachaModal.style.display.includes('flex')) return;
 
@@ -151,6 +129,9 @@ window.addEventListener('mouseup', (e) => {
     if (e.button === 2 && draggedBotId && player) {
         let dx = dragMouseWorld.x - player.x;
         let dy = dragMouseWorld.y - player.y;
+        
+        if (dx === 0 && dy === 0) { draggedBotId = null; return; }
+        
         let dist = Math.hypot(dx, dy);
         let absAngle = Math.atan2(dy, dx);
         let playerFaceAngle = Math.atan2(lastMoveDir.y, lastMoveDir.x);
@@ -161,18 +142,15 @@ window.addEventListener('mouseup', (e) => {
     }
 });
 
-// --- NOWOŚĆ: ODBIÓR STRZAŁU Z WIRTUALNEGO PRZYCISKU MOBILNEGO ---
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player && !player.isSafe) {
         socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
     }
 });
 
-// --- OBSŁUGA KLAWIATURY ---
 window.onkeydown = (e) => {
-    keys[e.code] = true; // Tablica keys pochodzi z engine.js
+    keys[e.code] = true; 
     
-    // --- NOWOŚĆ: UKRYWANIE/POKAZYWANIE TUTORIALA ---
     if (e.code === 'KeyH' && player) {
         player.isTutorialActive = !player.isTutorialActive;
     }
@@ -185,7 +163,6 @@ window.onkeydown = (e) => {
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         
-        // Zaktualizowane na nowe zmienne paths
         if (e.code === 'KeyR' && paths.weapon === 'winter') {
             const now = Date.now();
             if (now - lastWinterUseClient >= 15000) {
@@ -193,10 +170,9 @@ window.onkeydown = (e) => {
             }
         }
 
-        // --- NOWOŚĆ: DASH (ZRYW) POD SHIFTEM ---
         if (e.code === 'ShiftLeft' && paths.speed === 'dash') {
             const now = Date.now();
-            if (now - lastDashUseClient >= 3000) { // 3 sekundy cooldownu
+            if (now - lastDashUseClient >= 3000) { 
                 lastDashUseClient = now; 
                 socket.emit('dash', lastMoveDir);
             }
@@ -214,23 +190,36 @@ window.onkeyup = (e) => {
 };
 
 // ==========================================
-// FUNKCJE POMOCNICZE DLA PTAKÓW
+// FUNKCJE POMOCNICZE DLA PTAKÓW I WIATRU
 // ==========================================
 function triggerStartBirds(x, y) {
-    let birdCount = 15 + Math.floor(Math.random() * 10); 
+    let birdCount = 50 + Math.floor(Math.random() * 20); // Ogromne stado: 50-70 sztuk!
     for (let i = 0; i < birdCount; i++) {
         let angle = Math.random() * Math.PI * 2;
-        let speed = Math.random() * 4 + 4; 
+        let speed = Math.random() * 5 + 3; // Rozrzut prędkości
         startBirds.push({
-            x: x + (Math.random() * 60 - 30),
-            y: y + (Math.random() * 60 - 30),
+            x: x + (Math.random() * 80 - 40),
+            y: y + (Math.random() * 80 - 40),
             vx: Math.cos(angle) * speed,
-            vy: Math.sin(angle) * speed - 1.5, 
+            vy: Math.sin(angle) * speed - 2, // Podbicie w górę
             life: 1.0,
-            decay: Math.random() * 0.005 + 0.003, 
+            decay: Math.random() * 0.003 + 0.002, // Dłuższy czas życia
             size: Math.random() * 4 + 3,
             wingPhase: Math.random() * Math.PI * 2,
-            wingSpeed: Math.random() * 0.2 + 0.3
+            wingSpeed: Math.random() * 0.15 + 0.2 
+        });
+    }
+}
+
+function triggerWindLines(playerX, playerY) {
+    let lineCount = 8 + Math.floor(Math.random() * 5); // 8-12 kresek wiatru
+    for (let i = 0; i < lineCount; i++) {
+        windLines.push({
+            x: playerX + 1500 + Math.random() * 1000, // Zaczynają daleko z prawej strony
+            y: playerY + (Math.random() * 2000 - 1000), // Rozrzut po osi Y w stosunku do gracza
+            length: 150 + Math.random() * 300,
+            speed: 30 + Math.random() * 20, // Bardzo szybkie (kreskówkowe)
+            life: 1.0
         });
     }
 }
@@ -240,18 +229,16 @@ function drawNotebookBird(ctx, b) {
     ctx.globalAlpha = Math.max(0, b.life);
     ctx.translate(b.x, b.y);
     
-    // Obrót w kierunku lotu
     let angle = Math.atan2(b.vy, b.vx);
     ctx.rotate(angle + Math.PI / 2); 
 
     let flap = Math.sin(b.wingPhase) * b.size * 0.8;
 
-    ctx.strokeStyle = '#111111'; // Czarny "tusz"
+    ctx.strokeStyle = '#111111'; 
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
 
-    // Rysowanie skrzydła ptaka w formie "V"
     ctx.beginPath();
     ctx.moveTo(-b.size, flap); 
     ctx.lineTo(0, 0);          
@@ -261,7 +248,6 @@ function drawNotebookBird(ctx, b) {
     ctx.restore();
 }
 
-// --- LOGIKA MENU I STARTU ---
 window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
@@ -281,16 +267,15 @@ window.startGame = (type) => {
     };
     if (myId) player.id = myId;
     
-    // WYSYŁANIE EVENTU "PTAKI NA START"
     triggerStartBirds(player.x, player.y);
+    lastWindTrigger = Date.now(); // Inicjalizacja czasu dla wiatru
 
-    // Wysyłamy wybrany skin do serwera!
     socket.emit('joinGame', { name, color, skin: player.skin });
     gameState = 'PLAYING';
     
     lastFrameTime = performance.now();
-    lastServerTickTime = Date.now(); // Resetujemy czas do sprawdzania laga
-    nextGachaTime = Date.now() + GACHA_INTERVAL_MS; // Ustawiamy czas pierwszego Gacha!
+    lastServerTickTime = Date.now(); 
+    nextGachaTime = Date.now() + GACHA_INTERVAL_MS; 
     requestAnimationFrame(gameLoop);
 };
 
@@ -299,7 +284,7 @@ socket.on('init', (data) => { myId = data.id; if (player) player.id = myId; });
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 
 socket.on('skillUpdated', (data) => {
-    if(!data) return; // Zabezpieczenie
+    if(!data || !data.skills) return; 
     playerSkills = data.skills; 
     skillPoints = data.points; 
     paths = data.paths || paths; 
@@ -324,11 +309,9 @@ socket.on('formationSwitched', (formName) => {
     killLogs.push({ text: "FORMACJA: " + formName, time: 150 }); 
 });
 
-// Odbieranie informacji o obrażeniach i GENEROWANIE CZĄSTECZEK
 socket.on('damageText', (data) => {
-    if(!data || isNaN(data.x) || isNaN(data.y)) return; // Zabezpieczenie
+    if(!data || isNaN(data.x) || isNaN(data.y)) return; 
 
-    // ZABEZPIECZENIE (DEBUG): Limitujemy ilość żeby RAM nie wybuchł (Max 50 wpisów)
     if (damageTexts.length > 50) damageTexts.shift();
 
     damageTexts.push({
@@ -344,20 +327,15 @@ socket.on('damageText', (data) => {
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
     let count = data.val > 20 ? 12 : 6; 
     
-    // Ograniczenie ilości cząsteczek
     if (particles.length < 250) {
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
             let speed = Math.random() * 6 + 2;
             particles.push({
-                x: data.x,
-                y: data.y,
-                vx: Math.cos(angle) * speed,
-                vy: Math.sin(angle) * speed,
-                life: 1.0,
-                decay: Math.random() * 0.05 + 0.02, 
-                color: particleColor,
-                size: Math.random() * 4 + 2 
+                x: data.x, y: data.y,
+                vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
+                life: 1.0, decay: Math.random() * 0.05 + 0.02, 
+                color: particleColor, size: Math.random() * 4 + 2 
             });
         }
     }
@@ -376,14 +354,14 @@ socket.on('gameOver', (data) => {
         gameOverDiv = document.createElement('div');
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.color = 'white';
+        gameOverDiv.style.color = '#111'; 
         document.getElementById('menu').appendChild(gameOverDiv);
     }
     gameOverDiv.style.display = 'block';
     gameOverDiv.innerHTML = `
         <h2 style="color: #e74c3c; font-size: 38px; margin-bottom: 10px; text-transform: uppercase;">Zostałeś pożarty!</h2>
         <p style="font-size: 16px; margin-bottom: 20px;">Twój gang przestał istnieć.</p>
-        <p style="font-size: 24px; color: #f1c40f; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
+        <p style="font-size: 24px; color: #27ae60; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
         <button class="main-btn" onclick="location.reload()">Zagraj ponownie</button>
     `;
     
@@ -392,12 +370,11 @@ socket.on('gameOver', (data) => {
     if (shop) shop.style.display = 'none';
 });
 
-// ZABEZPIECZENIE (DEBUG): Tarcza Sanity Check na Odbiorze Danych
 socket.on('serverTick', (data) => {
-    lastServerTickTime = Date.now(); // Resetujemy Watchdoga Lagów
+    lastServerTickTime = Date.now(); 
     isServerLagging = false;
 
-    if (!data) return; // Uniknięcie crasha przy pustym pakiecie
+    if (!data) return; 
 
     foods = Array.isArray(data.foods) ? data.foods : []; 
     bots = Array.isArray(data.bots) ? data.bots : []; 
@@ -409,7 +386,6 @@ socket.on('serverTick', (data) => {
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
     if (myId && otherPlayers[myId]) {
-        // Twarda weryfikacja licznika punktów
         if (typeof otherPlayers[myId].score === 'number' && !isNaN(otherPlayers[myId].score)) {
             player.score = otherPlayers[myId].score;
         }
@@ -417,7 +393,7 @@ socket.on('serverTick', (data) => {
         player.activeWeapon = otherPlayers[myId].activeWeapon || 'sword';
         if (otherPlayers[myId].formation !== undefined) player.formation = otherPlayers[myId].formation;
         if (otherPlayers[myId].isRecruiting !== undefined) player.isRecruiting = otherPlayers[myId].isRecruiting;
-        if (otherPlayers[myId].skin) player.skin = otherPlayers[myId].skin; // Twarde zabezpieczenie skórki!
+        if (otherPlayers[myId].skin) player.skin = otherPlayers[myId].skin; 
     }
     delete otherPlayers[myId];
 });
@@ -448,7 +424,6 @@ function checkEquipmentUpgrades() {
     lastCalculatedTier = total;
 }
 
-// --- LOGIKA UPDATE I PĘTLA ---
 function update() {
     if (gameState !== 'PLAYING') return;
 
@@ -456,13 +431,11 @@ function update() {
 
     let dx = 0, dy = 0;
     
-    // --- OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
     if (controlType === 'TOUCH') {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
             
-            // ZABEZPIECZENIE: Eliminacja wyliczeń na NaN
             if (!isNaN(dx) && !isNaN(dy)) {
                 lastMoveDir = { x: dx, y: dy };
                 let len = Math.hypot(dx, dy);
@@ -479,41 +452,28 @@ function update() {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        if (player.skin === 'ninja') {
-            speed *= 1.05; // 5% szybciej!
-        }
+        if (player.skin === 'ninja') { speed *= 1.05; }
+        if (currentEvent === 'BLIZZARD') { if (paths.speed !== 'lightweight') { speed *= 0.4; } }
 
-        if (currentEvent === 'BLIZZARD') {
-            if (paths.speed !== 'lightweight') {
-                speed *= 0.4; 
-            }
-        }
-
-        // TARCZA (DEBUG): Ochrona przed ruchem w nieskończoność
         if (!isNaN(moveAngle) && !isNaN(speed)) {
             player.x += Math.cos(moveAngle) * speed; 
             player.y += Math.sin(moveAngle) * speed;
         }
     }
     
-    if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
-        socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
-    } else {
+    player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
+    player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
+
+    if (!isNaN(player.x) && !isNaN(player.y)) {
         player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
-        if (!isNaN(player.x) && !isNaN(player.y)) {
-            camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-        }
+        camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
         
-        // ZABEZPIECZENIE (DEBUG): Nie spamujemy serwera jeśli ma laga
         if (!isServerLagging) {
             socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
         }
     }
 }
 
-// ==========================================
-// LIMITOWANIE FPS DO 60 W GŁÓWNEJ PĘTLI
-// ==========================================
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
 
@@ -524,28 +484,21 @@ function gameLoop(currentTime) {
 
     lastFrameTime = currentTime - (deltaTime % frameDuration);
 
-    // ZABEZPIECZENIE (DEBUG): Detektor Laga
     if (Date.now() - lastServerTickTime > 1500) {
         isServerLagging = true;
     }
 
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
-    allEntities.sort((a,b) => b.score - a.score);
+    allEntities.sort((a,b) => (b.score || 0) - (a.score || 0));
     let topEntities = allEntities.slice(0, 5);
     let currentKingId = topEntities.length > 0 ? (topEntities[0].id || topEntities[0].name) : null;
     
     if (gameState === 'PLAYING' || gameState === 'PAUSED' || gameState === 'GAMEOVER') {
         
-        // =======================================================
-        // NOWOŚĆ: WYZWALACZ CZASOWEGO GACHA!
-        // =======================================================
         if (gameState === 'PLAYING' && Date.now() > nextGachaTime && window.showGachaAnimation) {
-            // Pauzujemy sterowanie żeby gracz mógł odebrać nagrodę
             gameState = 'PAUSED'; 
-            
             window.showGachaAnimation((rewardData) => {
-                // Po odebraniu nagrody wracamy do gry i ustawiamy kolejny czas (za 60 sekund)
                 socket.emit('claimGachaReward', rewardData);
                 gameState = 'PLAYING';
                 nextGachaTime = Date.now() + GACHA_INTERVAL_MS;
@@ -560,51 +513,73 @@ function gameLoop(currentTime) {
                 let b = startBirds[i];
                 b.x += b.vx;
                 b.y += b.vy;
-                b.vx *= 0.98; // Lekkie zwalnianie w locie
-                b.vy -= 0.05; // Podnoszenie się do góry
-                b.wingPhase += b.wingSpeed;
                 b.life -= b.decay;
+                b.wingPhase += b.wingSpeed;
 
                 if (b.life <= 0) {
                     startBirds.splice(i, 1);
                 }
             }
+
+            // --- WYZWALACZ WIATRU (Co ok. 30 sekund) ---
+            if (Date.now() - lastWindTrigger > 30000) {
+                triggerWindLines(player.x, player.y);
+                lastWindTrigger = Date.now();
+            }
+
+            // --- AKTUALIZACJA LINII WIATRU ---
+            for (let i = windLines.length - 1; i >= 0; i--) {
+                let w = windLines[i];
+                w.x -= w.speed; // Wieje z prawej do lewej
+                w.life -= 0.01;
+                if (w.life <= 0 || w.x < player.x - 2000) {
+                    windLines.splice(i, 1);
+                }
+            }
         }
 
-        // 1. CZYSZCZENIE EKRANU I CIEMNY MARGINES POZA MAPĄ
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#111111'; 
+        ctx.fillStyle = '#ffffff'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         let vWidth = canvas.width / globalScale;
         let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
 
-        // 2. RYSOWANIE SAMEJ MAPY I DRZEW
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-vWidth / 2, -vHeight / 2);
         
-        ctx.fillStyle = '#27ae60';
-        ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
-        drawForestMap(ctx, vCamera, vWidth, vHeight);
+        if(typeof drawForestMap === 'function') {
+            drawForestMap(ctx, vCamera, vWidth, vHeight);
+        }
         ctx.restore();
 
-        // 3. RYSOWANIE GRACZY, BOTÓW, ŚCIAN
         ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10;
-        ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
-        
-        safeZones.forEach(z => drawCastle(ctx, z)); 
+        // RYSOWANIE LINII WIATRU (W świecie gry, żeby poprawnie się przesuwały)
+        ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
+        ctx.lineWidth = 1.5;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        windLines.forEach(w => {
+            let waveY = Math.sin(w.x / 100) * 15; // Zwiększone falowanie wiatru
+            ctx.moveTo(w.x, w.y + waveY);
+            ctx.lineTo(w.x + w.length, w.y + waveY);
+        });
+        ctx.stroke();
+
+        safeZones.forEach(z => {
+            if(typeof drawCastle === 'function') drawCastle(ctx, z);
+        }); 
         
         foods.forEach(f => {
-            ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#000000'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill();
         });
 
         loots.forEach(l => {
@@ -622,6 +597,8 @@ function gameLoop(currentTime) {
         
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
+            if(isNaN(rot)) rot = 0; 
+            
             if (p.projType === 'sword' || p.projType === 'winter' || !p.projType) {
                 rot += (Date.now() / 100); 
                 drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
@@ -653,86 +630,42 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        bots.forEach(b => {
-            if (b.isSafe && (!player || !player.isSafe)) return;
-            b.weaponPath = b.paths ? b.paths.weapon : 'none';
-            drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); 
+        allEntities.forEach(e => {
+            if (e.isSafe && (!player || !player.isSafe)) return;
+            if (isServerLagging && e !== player) { e.isMoving = false; }
+            e.weaponPath = e.paths ? e.paths.weapon : 'none';
+            drawStickman(e, e.x, e.y, getScale(e.score), false, currentKingId); 
         });
-
-        Object.values(otherPlayers).forEach(p => {
-            if (p.isSafe && (!player || !player.isSafe)) return;
-            p.weaponPath = p.paths ? p.paths.weapon : 'none';
-            drawStickman(p, p.x, p.y, getScale(p.score), p.isSafe, currentKingId);
-        });
-        
-        if (player && gameState !== 'GAMEOVER') {
-            player.weaponPath = paths.weapon || 'none';
-            drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, currentKingId);
-        }
 
         // --- RYSOWANIE PTAKÓW W ŚWIECIE ---
         startBirds.forEach(b => drawNotebookBird(ctx, b));
 
-        // Rysowanie fizyki cząsteczek (Krew / Iskry)
         for (let i = particles.length - 1; i >= 0; i--) {
             let p = particles[i];
-            
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vx *= 0.85; 
-            p.vy *= 0.85; 
-            p.life -= p.decay; 
-
-            ctx.save();
-            ctx.globalAlpha = Math.max(0, p.life);
-            ctx.fillStyle = p.color;
-            ctx.beginPath();
-            
-            let currentRadius = Math.max(0, p.size * p.life);
-            ctx.arc(p.x, p.y, currentRadius, 0, Math.PI * 2);
-            
-            ctx.fill();
-            ctx.restore();
-
+            p.x += p.vx; p.y += p.vy; p.vx *= 0.85; p.vy *= 0.85; p.life -= p.decay; 
+            ctx.save(); ctx.globalAlpha = Math.max(0, p.life); ctx.fillStyle = p.color; ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.max(0, p.size * p.life), 0, Math.PI * 2); ctx.fill(); ctx.restore();
             if (p.life <= 0) particles.splice(i, 1);
         }
 
-        // Rysowanie wyskakujących obrażeń
         for (let i = damageTexts.length - 1; i >= 0; i--) {
-            let dt = damageTexts[i];
-            
-            dt.x += dt.vx;
-            dt.y += dt.vy;
-            dt.life -= 0.02; 
-
-            ctx.save();
-            ctx.globalAlpha = Math.max(0, dt.life);
-            ctx.fillStyle = dt.color;
-            ctx.strokeStyle = '#000';
-            ctx.lineWidth = 3;
-            let fontSize = 20 + (1 - dt.life) * 15;
-            ctx.font = `bold ${fontSize}px 'Permanent Marker', Arial`; 
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'middle';
-            
-            ctx.strokeText(`-${dt.val}`, dt.x, dt.y); 
-            ctx.fillText(`-${dt.val}`, dt.x, dt.y);   
+            let dt = damageTexts[i]; dt.x += dt.vx; dt.y += dt.vy; dt.life -= 0.02; 
+            ctx.save(); ctx.globalAlpha = Math.max(0, dt.life); ctx.fillStyle = dt.color; ctx.strokeStyle = '#fff'; ctx.lineWidth = 3;
+            let fontSize = 20 + (1 - dt.life) * 15; ctx.font = `bold ${fontSize}px 'Permanent Marker', Arial`; 
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.strokeText(`-${dt.val}`, dt.x, dt.y); ctx.fillText(`-${dt.val}`, dt.x, dt.y);   
             ctx.restore();
-
-            if (dt.life <= 0) {
-                damageTexts.splice(i, 1);
-            }
+            if (dt.life <= 0) damageTexts.splice(i, 1);
         }
 
         ctx.restore(); 
         
-        // --- EFEKTY WIZUALNE POGODY ---
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
 
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save();
             ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.strokeStyle = 'rgba(17, 17, 17, 0.8)'; ctx.lineWidth = 2; ctx.beginPath();
             let timeOffset = Date.now() / 5;
             for(let i = 0; i < 150; i++) {
                 let rx = (Math.random() * canvas.width + timeOffset) % canvas.width;
@@ -743,7 +676,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         } else if (currentEvent === 'BLIZZARD') { 
             ctx.save();
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.25)'; 
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.15)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
             ctx.fillStyle = '#111';
@@ -759,53 +692,50 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // --- RYSOWANIE UI ---
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save();
-            let tutorialX = 20; 
-            let tutorialY = canvas.height - 200; 
+            let tutorialX = 20; let tutorialY = canvas.height - 200; 
             
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
             ctx.fillRect(tutorialX, tutorialY, 380, 110);
-            ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; 
+            ctx.strokeStyle = '#111'; ctx.lineWidth = 4; 
             ctx.strokeRect(tutorialX, tutorialY, 380, 110);
             
             if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
                 ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
             }
             
-            ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
+            ctx.fillStyle = '#111'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
             ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
             
-            ctx.fillStyle = '#000'; ctx.font = '13px Arial';
+            ctx.fillStyle = '#333'; ctx.font = '13px Arial';
             if (player.tutorialText) {
-                if (window.wrapText) {
-                    window.wrapText(ctx, player.tutorialText, tutorialX + 110, tutorialY + 50, 250, 18); 
-                } else {
-                    ctx.fillText(player.tutorialText.substring(0, 50) + "...", tutorialX + 110, tutorialY + 50);
-                }
+                if (window.wrapText) { window.wrapText(ctx, player.tutorialText, tutorialX + 110, tutorialY + 50, 250, 18); } 
+                else { ctx.fillText(player.tutorialText.substring(0, 50) + "...", tutorialX + 110, tutorialY + 50); }
             }
             
             ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial';
             ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
-            
             ctx.restore();
         }
 
         if (gameState !== 'GAMEOVER') {
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
+            
             ctx.fillStyle = '#e74c3c'; ctx.font = "bold 16px 'Permanent Marker', Arial";
-            ctx.fillText("🏆 RANKING SERWERA", canvas.width - 265, 30);
+            ctx.fillText("🏆 RANKING ARENY", canvas.width - 265, 30);
             
             topEntities.forEach((p, i) => {
                 let yPos = 55 + i * 20;
-                if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); } 
-                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#111'; ctx.fillText(`${i+1}. ${p.name} - ${p.score} pkt`, canvas.width - 265, yPos); }
+                let displayScore = isNaN(p.score) ? 5 : Math.floor(p.score);
+                if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); } 
+                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
             ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
-            ctx.fillText(`PUNKTY: ${player.score}`, 20, 40);
+            let displayScore = isNaN(player.score) ? 5 : Math.floor(player.score);
+            ctx.fillText(`PUNKTY: ${displayScore}`, 20, 40);
             
             if (player.isRecruiting !== undefined) {
                 ctx.font = 'bold 14px Arial';
@@ -817,12 +747,8 @@ function gameLoop(currentTime) {
             ctx.textAlign = 'center';
             if (currentEvent === null) {
                 ctx.font = 'bold 20px Arial';
-                if (eventTimeLeft <= 10) {
-                    ctx.fillStyle = '#e74c3c';
-                    ctx.font = 'bold 24px Arial';
-                } else {
-                    ctx.fillStyle = 'rgba(17, 17, 17, 0.8)';
-                }
+                if (eventTimeLeft <= 10) { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 24px Arial'; } 
+                else { ctx.fillStyle = 'rgba(17, 17, 17, 0.8)'; }
                 ctx.fillText(`Kolejny event za: ${eventTimeLeft}s`, canvas.width / 2, 40);
             } else {
                 ctx.font = 'bold 28px Arial';
@@ -874,15 +800,9 @@ function gameLoop(currentTime) {
                 ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(btnX, startY, 50, 50);
                 
                 ctx.fillStyle = '#111'; ctx.font = 'bold 14px Arial'; ctx.fillText('R', btnX + 25, startY + 18);
-                
                 ctx.font = '10px Arial'; 
-                if (winterProgress >= 1) {
-                    ctx.fillText('GOTOWE', btnX + 25, startY + 40);
-                } else {
-                    ctx.fillStyle = '#e74c3c'; 
-                    ctx.font = 'bold 14px Arial';
-                    ctx.fillText(`${timeLeft}s`, btnX + 25, startY + 40);
-                }
+                if (winterProgress >= 1) { ctx.fillText('GOTOWE', btnX + 25, startY + 40); } 
+                else { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 14px Arial'; ctx.fillText(`${timeLeft}s`, btnX + 25, startY + 40); }
             }
             
             if (paths.speed === 'dash') {
@@ -897,15 +817,9 @@ function gameLoop(currentTime) {
                 ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(btnXD, startY, 50, 50);
                 
                 ctx.fillStyle = '#111'; ctx.font = 'bold 12px Arial'; ctx.fillText('SHIFT', btnXD + 25, startY + 18);
-                
                 ctx.font = '10px Arial'; 
-                if (dashProgress >= 1) {
-                    ctx.fillText('GOTOWE', btnXD + 25, startY + 40);
-                } else {
-                    ctx.fillStyle = '#e74c3c'; 
-                    ctx.font = 'bold 14px Arial';
-                    ctx.fillText(`${timeLeftD}s`, btnXD + 25, startY + 40);
-                }
+                if (dashProgress >= 1) { ctx.fillText('GOTOWE', btnXD + 25, startY + 40); } 
+                else { ctx.fillStyle = '#e74c3c'; ctx.font = 'bold 14px Arial'; ctx.fillText(`${timeLeftD}s`, btnXD + 25, startY + 40); }
             }
             ctx.restore();
 
@@ -915,7 +829,6 @@ function gameLoop(currentTime) {
             let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
             let hasAnyPath = paths.speed !== 'none' || paths.strength !== 'none' || paths.weapon !== 'none';
 
-            // --- NOWOŚĆ: Stały widok HUD, jeśli masz wybraną ścieżkę lub punkty! ---
             if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath || hasAnyPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
@@ -937,7 +850,6 @@ function gameLoop(currentTime) {
                         let currentPath = paths[cat.id];
                         let canUpgrade = skillPoints > 0 && player.score >= cat.req && lvl < 20; 
                         
-                        // --- NOWOŚĆ: Ewolucja poziomu 20 (Przebudzenie) ---
                         let levelText = lvl >= 20 ? `(Lv. MAX - PRZEBUDZENIE!)` : `(Lv. ${lvl}/20)`;
                         let titleColor = lvl >= 20 ? '#e67e22' : '#111';
                         
@@ -979,9 +891,6 @@ function gameLoop(currentTime) {
             wasSafe = player.isSafe; 
         }
 
-        // =======================================================
-        // ZABEZPIECZENIE (DEBUG): WIZUALNE OSTRZEŻENIE O LAGU
-        // =======================================================
         if (isServerLagging && gameState === 'PLAYING') {
             ctx.save();
             ctx.fillStyle = 'rgba(231, 76, 60, 0.9)';
