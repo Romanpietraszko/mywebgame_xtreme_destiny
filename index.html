@@ -6,9 +6,7 @@
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     <script>
-    // --- TARCZA ANTY-BŁĘDOWA DLA ENGINE.JS ---
     window.weaponPath = 'none';
-
     (async function() {
         try {
             await window.CrazyGames.SDK.init();
@@ -20,49 +18,51 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
-        /* === POTĘŻNY, ELASTYCZNY CSS BEZPOŚREDNIO W HTML === */
-        
+        /* ====================================================
+           WYWALILIŚMY STYLE.CSS! CAŁY WYGLĄD JEST TERAZ TUTAJ.
+           Dzięki temu unikamy gigantycznych, popsutych przycisków.
+           ==================================================== */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #ffffff; /* Podstawa dla przezroczystości */
+            background-color: #ffffff; 
         }
         
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
         #ui-layer {
             position: absolute;
             inset: 0;
-            /* ZESZYTOWE TŁO W KRATKĘ ZAMIAST GWIAZD */
             background-color: #ffffff;
             background-image: 
                 linear-gradient(rgba(52, 152, 219, 0.3) 1px, transparent 1px),
                 linear-gradient(90deg, rgba(52, 152, 219, 0.3) 1px, transparent 1px);
-            background-size: 40px 40px; /* Rozmiar pojedynczej kratki */
-            
+            background-size: 40px 40px;
             display: flex;
             justify-content: center;
             align-items: center; 
             z-index: 100;
-            overflow-y: auto; /* Przewijanie tła na małych telefonach */
+            overflow-y: auto; 
             padding: 20px 0; 
         }
 
-        /* Usunięto planety i komety z CSS, ale kontenery na wszelki wypadek zostają display: none */
-        #stars-container, #planets-container, #comets-container { display: none !important; }
-
-        /* MAGIA ELASTYCZNEGO MENU */
         #menu {
             position: relative;
             z-index: 10; 
             background: rgba(255, 255, 255, 0.98); 
             padding: 30px;
             border-radius: 15px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.15); /* Zmniejszono cień, by pasował do jasnego tła */
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.15); 
             text-align: center;
-            width: 90%;          /* Dynamicznie: Menu zajmuje zawsze 90% szerokości urządzenia */
-            max-width: 450px;    /* Na PC nigdy nie będzie szersze niż 450px */
-            margin: auto;        /* Trzyma menu wyśrodkowane */
-            border: 3px solid #111111; /* Zeszytowa ramka */
+            width: 90%;          
+            max-width: 450px;    
+            margin: auto;        
+            border: 3px solid #111111; 
         }
 
         #menu h1 { font-family: 'Permanent Marker', cursive; font-size: clamp(35px, 8vw, 55px); margin-top: 0; margin-bottom: 5px; letter-spacing: 2px; color: #2c3e50; transform: rotate(-2deg); }
@@ -70,28 +70,12 @@
         #menu p.subtitle { font-size: clamp(12px, 3.5vw, 16px); color: #555; margin-bottom: 15px; font-weight: bold; }
         .tutorial-box { background: rgba(0, 0, 0, 0.05); padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 12px; text-align: left; line-height: 1.4; border-left: 4px solid #f1c40f; color: #333; }
 
-        /* WSPÓLNE STYLOWANIE FORMULARZY I PRZYCISKÓW */
         .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; text-align: left; font-size: 14px; }
         #playerName { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #111; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
         
-        .main-btn { 
-            background: #27ae60; 
-            color: white; 
-            border: 2px solid #111; 
-            padding: 16px; 
-            width: 100%; 
-            border-radius: 12px; 
-            font-size: clamp(14px, 4vw, 18px); 
-            font-weight: bold; 
-            cursor: pointer; 
-            transition: 0.2s; 
-            box-shadow: 0 4px 0px #111; 
-            margin-bottom: 10px; 
-            box-sizing: border-box;
-        }
+        .main-btn { background: #27ae60; color: white; border: 2px solid #111; padding: 16px; width: 100%; border-radius: 12px; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 0px #111; margin-bottom: 10px; box-sizing: border-box;}
         .main-btn:active { transform: translateY(4px); box-shadow: none; }
 
-        /* KARUZELA KART (KROK 3 - STEROWANIE) */
         .control-grid { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;}
         .control-card { flex: 1; min-width: 80px; border: 2px solid #111; border-radius: 10px; padding: 15px 5px; cursor: pointer; background: #fff; transition: 0.2s; box-sizing: border-box; box-shadow: 0 3px 0 #111;}
         .control-card:hover { background: #f0f0f0; transform: translateY(-2px); }
@@ -99,37 +83,21 @@
         .keys-preview { font-size: clamp(14px, 3vw, 18px); font-weight: bold; color: #111; margin-bottom: 5px; }
         .control-card span { font-size: 11px; color: #555; font-weight: bold; display: block;}
 
-        /* KARUZELA POSTACI (KROK 4 - WYBÓR KLASY) */
-        .char-grid { 
-            display: flex; 
-            gap: 10px; 
-            overflow-x: auto; /* Poziome przewijanie palcem! */
-            padding-bottom: 10px;
-            scroll-snap-type: x mandatory;
-            -webkit-overflow-scrolling: touch;
-            margin-bottom: 15px;
-        }
+        .char-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-bottom: 15px; }
         .char-grid::-webkit-scrollbar { height: 6px; }
         .char-grid::-webkit-scrollbar-thumb { background: #111; border-radius: 10px; }
-        .char-card { 
-            flex: 0 0 auto; /* Nie pozwala kartom się zgniatać */
-            width: 100px; 
-            background: #fff; border: 2px solid #111; border-radius: 10px; padding: 10px; 
-            cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; 
-            box-shadow: 0 3px 0 #111;
-        }
+        .char-card { flex: 0 0 auto; width: 100px; background: #fff; border: 2px solid #111; border-radius: 10px; padding: 10px; cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; box-shadow: 0 3px 0 #111; }
         .char-card.selected { border-color: #2ecc71; background: #eafaf1; }
         .char-card.locked { filter: grayscale(100%); opacity: 0.7; border-color: #95a5a6; cursor: not-allowed; box-shadow: none; }
         .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
         .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
         .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
 
-        /* WSPÓLNE MENU SKLEP I SKILLE (W GRACH) */
-        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 220px; z-index: 90; }
+        /* ZESZYTOWE MENU SKILLI (Tylko CSS pozycjonujący, wygląd jest twardo w JS) */
+        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 250px; z-index: 90; }
         .sp-label { font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
-        .skill-btn { background: #fff; color: #111; border: 2px solid #111; padding: 8px; font-weight: bold; width: 100%; text-align: left; }
         
-        /* ZESZYTOWY, CZARNO BIAŁY SKLEP */
+        /* ZESZYTOWY SKLEP ZAMKU (Będzie widoczny dzięki temu kodowi) */
         #castle-shop { position: fixed; right: 10px; top: 50%; transform: translateY(-50%); background: #fff; border: 3px solid #111; padding: 15px; display: none; flex-direction: column; gap: 8px; box-shadow: 6px 6px 0 rgba(17,17,17,0.2); z-index: 90; color: #111; width: 170px; }
         #castle-shop h2 { margin: 0; color: #111; font-size: 18px; text-align: center; font-family: 'Permanent Marker', cursive; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
         #castle-shop p { margin: 5px 0 10px 0; font-size: 11px; text-align: center; color: #333; font-weight: bold;}
@@ -137,43 +105,26 @@
         .shop-btn:hover { background: #f0f0f0; }
         .shop-btn:active { transform: translate(2px, 2px); box-shadow: none; }
 
-        /* --- INTERFEJS MOBILNY DLA GRACZA W TRAKCIE GRY --- */
+        /* MOBILKA */
         #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
         #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
         #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(17,17,17,0.5); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
         #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(17, 17, 17, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
-        
         #action-buttons { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
         .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.8); border: 2px solid #111; color: #111; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; box-shadow: 2px 2px 0 #111;}
         .m-btn:active { background: rgba(200, 200, 200, 0.8); transform: translate(2px, 2px); box-shadow: none;}
         #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(255, 255, 255, 0.9); }
         
-        /* ZAKTUALIZOWANE LOGO UCZELNI (NIEŚMIERTELNE) */
-        #university-logo { 
-            position: fixed; 
-            top: 15px; 
-            left: 15px; 
-            z-index: 1000; 
-        }
-        #university-logo img { 
-            height: clamp(40px, 8vw, 60px); 
-            filter: drop-shadow(2px 2px 0px rgba(17,17,17,0.5));
-            transition: transform 0.2s;
-        }
-        #university-logo img:hover {
-            transform: scale(1.1);
-        }
+        #university-logo { position: fixed; top: 15px; left: 15px; z-index: 1000; }
+        #university-logo img { height: clamp(40px, 8vw, 60px); filter: drop-shadow(2px 2px 0px rgba(17,17,17,0.5)); transition: transform 0.2s; }
+        #university-logo img:hover { transform: scale(1.1); }
 
-        @media (max-height: 600px) {
-            #ui-layer { align-items: flex-start; } 
-        }
+        @media (max-height: 600px) { #ui-layer { align-items: flex-start; } }
 
-        /* --- ANIMACJE GACHA (SKRZYNI) --- */
         @keyframes floatChest { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
         @keyframes shakeChest { 0% { transform: translateX(0); } 25% { transform: translateX(-15px) rotate(-10deg); } 50% { transform: translateX(15px) rotate(10deg); } 75% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: translateX(0); } }
         @keyframes glowReward { 0% { text-shadow: 0 0 10px #111, 0 0 20px #111; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #111, 0 0 50px #111; transform: scale(1.2); opacity: 1;} }
     </style>
-    <link rel="stylesheet" href="style.css">
 </head>
 <body>
 
@@ -219,7 +170,7 @@
                 
                 <input type="color" id="playerColor" value="#ff4444" style="display: none;">
                 
-                <button id="nextBtn" class="main-btn" style="background: #111;">DALEJ</button>
+                <button id="nextBtn" class="main-btn" style="background: #111; color: white;">DALEJ</button>
             </div>
 
             <div id="step-2" style="display: none;">
@@ -274,7 +225,7 @@
                         <div id="arystokrata-progress" style="font-size: 10px; color: #e74c3c; margin-top: 5px; font-weight: bold;">Fragmenty: 0/3</div>
                     </div>
                 </div>
-                <button onclick="launchGameFinal()" class="main-btn" style="background: #111;">WEJDŹ NA ARENĘ</button>
+                <button onclick="launchGameFinal()" class="main-btn" style="background: #111; color: white;">WEJDŹ NA ARENĘ</button>
                 <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
             </div>
 
@@ -305,9 +256,6 @@
         const s1 = document.getElementById('step-1'); const s2 = document.getElementById('step-2'); const s3 = document.getElementById('step-3'); const next = document.getElementById('nextBtn'); const nameInput = document.getElementById('playerName');
         let chosenMode = 'FREE'; let chosenSkin = 'standard'; let chosenControlType = 'WASD';
 
-        // ==========================================
-        // SYSTEM ZAPISU I ODBLOKOWYWANIA SKÓREK
-        // ==========================================
         window.playerData = JSON.parse(localStorage.getItem('xd_playerData')) || { fragments: { arystokrata: 0 } };
         
         function updateMenuUI() {
@@ -334,7 +282,6 @@
         window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
         
         window.selectSkin = (skin) => { 
-            // Blokada kliknięcia jeśli nie mamy fragmentów
             if (skin === 'arystokrata' && (window.playerData.fragments.arystokrata || 0) < 3) {
                 alert("Klasa Zablokowana! Graj by otrzymać Epicką Skrzynię i wylosować 3 Fragmenty Arystokraty!");
                 return;
@@ -359,7 +306,6 @@
                 initMobileControls();
             }
 
-            // Inicjalizacja skryptu gry
             let loadingDiv = document.getElementById('loading-step');
             if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#111; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
             loadingDiv.style.display = 'block';
@@ -381,9 +327,6 @@
             document.body.appendChild(script);
         };
 
-        // ==========================================
-        // SYSTEM LOSOWANIA - GACHA ANIMACJA
-        // ==========================================
         window.showGachaAnimation = function(onCompleteCallback) {
             const modal = document.getElementById('gacha-modal');
             const chest = document.getElementById('gacha-chest');
