@@ -70,7 +70,6 @@ function drawSwordModel(p, x, y, angle, sc, tier = 1) {
     ctx.rotate(angle);
     
     if (p && p.isWinter) {
-        // Optymalizacja Cieni dla Mobile
         if (!window.isMobile) { ctx.shadowBlur = 20 * sc; ctx.shadowColor = 'rgba(135, 206, 235, 0.8)'; }
         ctx.fillStyle = '#a4ebf3'; 
         ctx.beginPath(); ctx.moveTo(0, -6 * sc);
@@ -342,13 +341,13 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     }
 
     // ==========================================
-    // NOWOŚĆ: BRONIE Z PLECAKA RYSOWANE Z TYŁU!
+    // BRONIE Z PLECAKA RYSOWANE Z TYŁU!
     // ==========================================
     if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) { ctx.save(); ctx.translate(x - 5 * sc, y + 2 * sc); ctx.rotate(-Math.PI / 6); ctx.fillStyle = '#4a235a'; ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc); ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc); ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc); ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc); if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') { ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc; ctx.beginPath(); ctx.moveTo(0, -16 * sc); ctx.lineTo(0, 16 * sc); ctx.stroke(); } ctx.restore(); }
     if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
     if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') { ctx.save(); ctx.translate(x - 10 * sc, y + 18 * sc); ctx.fillStyle = '#34495e'; for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); } ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     
-    // Zostawiłem stary pancerz korpusu
+    // Pancerz korpusu
     if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
     let eId = e.id || e.name || 'unknown'; 
@@ -377,11 +376,11 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         
         ctx.drawImage(currentSkinImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
         
-        // NOWOŚĆ: PAS TAKTYCZNY NA BRONIE (Dla Humana)
+        // PAS TAKTYCZNY NA BRONIE (Dla Humana)
         if (score >= 20) {
-            ctx.fillStyle = '#2c3e50'; // Skórzany/Grafitowy kolor paska
+            ctx.fillStyle = '#2c3e50'; 
             ctx.fillRect(-15 * sc, 16 * sc, 30 * sc, 5 * sc); 
-            ctx.fillStyle = '#f1c40f'; // Złota klamra
+            ctx.fillStyle = '#f1c40f'; 
             ctx.fillRect(-3 * sc, 15 * sc, 6 * sc, 7 * sc); 
         }
 
@@ -397,7 +396,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         ctx.fillStyle = e.color || '#2ecc71';
         ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
         
-        // NOWOŚĆ: PAS TAKTYCZNY (Dla Botów AI)
+        // PAS TAKTYCZNY (Dla Botów AI)
         if (score >= 20) {
             ctx.fillStyle = '#2c3e50'; 
             ctx.fillRect(x - 15 * sc, y + 16 * sc, 30 * sc, 5 * sc); 
@@ -462,9 +461,18 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
     }
 
-    ctx.fillStyle = '#fff'; ctx.font = `bold ${13 * sc}px Arial`; ctx.textAlign = 'center';
+    // --- NOWOŚĆ: CZARNA OBWÓDKA NA BIAŁYM TEKŚCIE (Do czytelności na śniegu) ---
+    ctx.font = `bold ${13 * sc}px Arial`; 
+    ctx.textAlign = 'center';
     let displayScore = Math.floor(score);
-    if (e.name !== 'Wojownik') { ctx.fillText(`${e.name || "Bot"} [${displayScore}]`, x, y - 65 * sc); } else { ctx.fillText(`[${displayScore}]`, x, y - 65 * sc); } 
+    let textToShow = (e.name !== 'Wojownik') ? `${e.name || "Bot"} [${displayScore}]` : `[${displayScore}]`;
+    
+    ctx.lineWidth = 3 * sc;
+    ctx.strokeStyle = '#111111';
+    ctx.strokeText(textToShow, x, y - 65 * sc);
+    
+    ctx.fillStyle = '#ffffff'; 
+    ctx.fillText(textToShow, x, y - 65 * sc); 
     
     ctx.restore();
 }
