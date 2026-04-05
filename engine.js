@@ -380,9 +380,9 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         // NOWOŚĆ: PAS TAKTYCZNY NA BRONIE (Dla Humana)
         if (score >= 20) {
             ctx.fillStyle = '#2c3e50'; // Skórzany/Grafitowy kolor paska
-            ctx.fillRect(-18 * sc, 8 * sc, 36 * sc, 6 * sc); 
+            ctx.fillRect(-15 * sc, 16 * sc, 30 * sc, 5 * sc); 
             ctx.fillStyle = '#f1c40f'; // Złota klamra
-            ctx.fillRect(-4 * sc, 7 * sc, 8 * sc, 8 * sc); 
+            ctx.fillRect(-3 * sc, 15 * sc, 6 * sc, 7 * sc); 
         }
 
         drawDynamicArmor(e, 0, 0, sc, equipmentTier);
@@ -400,9 +400,9 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         // NOWOŚĆ: PAS TAKTYCZNY (Dla Botów AI)
         if (score >= 20) {
             ctx.fillStyle = '#2c3e50'; 
-            ctx.fillRect(x - 21 * sc, y + 8 * sc, 42 * sc, 6 * sc); 
+            ctx.fillRect(x - 15 * sc, y + 16 * sc, 30 * sc, 5 * sc); 
             ctx.fillStyle = '#f1c40f'; 
-            ctx.fillRect(x - 4 * sc, y + 7 * sc, 8 * sc, 8 * sc); 
+            ctx.fillRect(x - 3 * sc, y + 15 * sc, 6 * sc, 7 * sc); 
         }
 
         ctx.fillStyle = 'white';
