@@ -1003,14 +1003,15 @@ function gameLoop(currentTime) {
 
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save();
-            let tutorialX = 20; 
-            let tutorialY = canvas.height - 200; 
+            let tutorialWidth = 380;
+            let tutorialX = canvas.width - tutorialWidth - 20; 
+            let tutorialY = canvas.height - 230; 
             
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
-            ctx.fillRect(tutorialX, tutorialY, 380, 110);
+            ctx.fillRect(tutorialX, tutorialY, tutorialWidth, 110);
             ctx.strokeStyle = '#111'; 
             ctx.lineWidth = 4; 
-            ctx.strokeRect(tutorialX, tutorialY, 380, 110);
+            ctx.strokeRect(tutorialX, tutorialY, tutorialWidth, 110);
             
             if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
                 ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
@@ -1038,6 +1039,7 @@ function gameLoop(currentTime) {
         }
 
         if (gameState !== 'GAMEOVER') {
+            
             // --- UI: RANKING ---
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
@@ -1052,22 +1054,6 @@ function gameLoop(currentTime) {
                 else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
-            // --- NOWOŚĆ: LOGIKA RYSOWANIA MAPY (Mały Radar na lewo-góra, Duża po wciśnięciu [M]) ---
-            let smallRadarSize = 120;
-            let smallRadarX = 20;
-            let smallRadarY = 100; // Pod logo uczelni
-            
-            // Rysujemy na stałe mały radar
-            drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
-
-            // Rysujemy dużą mapę taktyczną jeśli gracz wciśnie "M"
-            if (isMapOpen) {
-                let tacMapSize = 250;
-                let tacMapX = 20;
-                let tacMapY = canvas.height - tacMapSize - 100; // Nad panelem ekwipunku/broni
-                drawRadarMap(ctx, tacMapX, tacMapY, tacMapSize, true);
-            }
-
             // --- UI: LEWA GÓRA (Punkty) ---
             ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
             ctx.textAlign = 'left';
@@ -1078,6 +1064,21 @@ function gameLoop(currentTime) {
                 ctx.font = 'bold 14px Arial';
                 ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c';
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
+            }
+
+            // --- MAPA I RADAR ---
+            let smallRadarSize = 120;
+            let smallRadarX = 20;
+            let smallRadarY = 80; 
+            
+            drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
+
+            // --- ZMIANA: MAPA TAKTYCZNA Z LEWEJ STRONY ---
+            if (isMapOpen) {
+                let tacMapSize = 300; 
+                let tacMapX = 20; 
+                let tacMapY = canvas.height / 2 - tacMapSize / 2; 
+                drawRadarMap(ctx, tacMapX, tacMapY, tacMapSize, true);
             }
 
             // --- UI: ŚRODEK (Eventy) ---
@@ -1102,7 +1103,7 @@ function gameLoop(currentTime) {
             }
             ctx.restore();
 
-            // --- UI: PRAWA STRONA (Logi zabójstw) - Przesunięto niżej, żeby nie zachodziły na ranking ---
+            // --- UI: PRAWA STRONA (Logi zabójstw) ---
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = "bold 14px 'Permanent Marker', Arial"; ctx.textAlign = 'right';
                 for (let i = 0; i < killLogs.length; i++) {
