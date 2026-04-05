@@ -332,7 +332,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     }
 }
 
-// --- RYSOWANIE ZESZYTOWEGO ZAMKU (Z PŁYNĄCĄ FOSĄ) ---
+// --- RYSOWANIE ZESZYTOWEGO ZAMKU (Z FOSĄ I MURAMI) ---
 function drawCastle(x, y, radius) {
     if (typeof x === 'object' && y && y.radius !== undefined) {
         radius = y.radius; let tempX = y.x; y = y.y; x = tempX;
@@ -341,26 +341,60 @@ function drawCastle(x, y, radius) {
     ctx.save();
     ctx.translate(x, y);
 
-    // Czarna naszkicowana fosa (Kręcąca się przerywana linia)
-    ctx.beginPath(); ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
-    ctx.fillStyle = activeTheme.bg; // Zamazujemy otoczenie wewnątrz bazy na kolor papieru
+    // 1. CZARNA FOSA (Pofalowany atrament)
+    ctx.fillStyle = activeTheme.spotColor; // Czerń lub kolor plam z motywu
+    ctx.beginPath();
+    let moatRadius = radius + 40;
+    for (let i = 0; i < 32; i++) {
+        let angle = (i / 32) * Math.PI * 2;
+        let offset = Math.sin(angle * 8 + x) * 8; // Lekko pofalowane brzegi fosy
+        let px = Math.cos(angle) * (moatRadius + offset);
+        let py = Math.sin(angle) * (moatRadius + offset);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
+    }
+    ctx.closePath();
     ctx.fill();
-    ctx.lineWidth = 2; ctx.strokeStyle = '#111111'; 
-    ctx.setLineDash([10, 15]); ctx.lineDashOffset = -(Date.now() / 50) % 50; ctx.stroke(); ctx.setLineDash([]);
 
-    // Rdzeń zamku (Marker ciosany markerem)
+    // 2. WYSPA ZAMKOWA (Wnętrze fosy)
+    ctx.beginPath();
+    ctx.arc(0, 0, radius + 15, 0, Math.PI * 2);
+    ctx.fillStyle = activeTheme.bg; // Kolor papieru (czyści środek)
+    ctx.fill();
+
+    // 3. MUR ZAMKOWY
+    ctx.beginPath();
+    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+    ctx.lineWidth = 6;
+    ctx.strokeStyle = '#111111';
+    ctx.stroke();
+
+    // 4. WIEŻYCZKI (8 sztuk na obwodzie muru)
+    let numTowers = 8;
+    for (let i = 0; i < numTowers; i++) {
+        let angle = (i / numTowers) * Math.PI * 2;
+        let tx = Math.cos(angle) * radius;
+        let ty = Math.sin(angle) * radius;
+
+        ctx.save();
+        ctx.translate(tx, ty);
+        ctx.rotate(angle); // Kwadraty obrócone zgodnie z obwodem muru
+
+        // Czarna ramka wieży
+        ctx.fillStyle = '#111111';
+        ctx.fillRect(-12, -12, 24, 24);
+        
+        // Środek wieży (żeby wyglądała na naszkicowaną z pustym środkiem)
+        ctx.fillStyle = activeTheme.bg;
+        ctx.fillRect(-7, -7, 14, 14);
+        
+        ctx.restore();
+    }
+
+    // 5. WNĘTRZE I LITERA (Dziedziniec)
     ctx.fillStyle = '#111111';
-    ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.fill();
-
-    // Wnętrze zamku (Koło dla czytelności sklepu)
-    ctx.beginPath(); ctx.arc(0, 0, radius - 10, 0, Math.PI * 2);
-    ctx.fillStyle = activeTheme.bg; ctx.fill();
-    ctx.lineWidth = 4; ctx.stroke();
-
-    // Ikona (Korona z trójkątów lub Baza rysowana permanentnie markerem)
-    ctx.fillStyle = '#111111';
-    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`; // Używa czcionki naszkicowanej
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText('B', 0, 0); 
 
     ctx.restore();
