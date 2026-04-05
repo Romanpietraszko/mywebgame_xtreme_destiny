@@ -34,6 +34,8 @@ let lastSkillMenuState = '';
 
 let damageTexts = [];
 let particles = [];
+let deathMarkers = []; // NOWOŚĆ: Tablica na ślady śmierci na mapie taktycznej
+let isMapOpen = false; // NOWOŚĆ: Stan otwarcia dużej mapy
 
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
@@ -50,13 +52,11 @@ let isServerLagging = false;
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
-// --- NOWOŚĆ: INICJALIZACJA UI PLECACA (Ekwipunek) ---
 const btnInventory = document.getElementById('btn-inventory');
 const inventoryUI = document.getElementById('inventory-ui');
 
 if (btnInventory && inventoryUI) {
     btnInventory.addEventListener('click', (e) => {
-        // Tarcza przed strzałem przy klikaniu UI
         e.stopPropagation(); 
         if (inventoryUI.style.display === 'none' || inventoryUI.style.display === '') {
             inventoryUI.style.display = 'flex';
@@ -64,16 +64,12 @@ if (btnInventory && inventoryUI) {
             inventoryUI.style.display = 'none';
         }
     });
-
-    // Zabezpieczenie przed strzelaniem podczas klikania w środek ekwipunku
     inventoryUI.addEventListener('mousedown', (e) => e.stopPropagation());
 }
 
-// Funkcja wywoływana, gdy gracz kliknie zapasową broń w Ekwipunku
 window.equipWeaponFromInventory = (weaponCode) => {
-    // Wysyłamy prośbę do serwera, żeby wsadził tę broń z ekwipunku na aktywny SLOT 2
     socket.emit('equipFromInventory', { weaponId: weaponCode, targetSlot: 2 });
-    if (inventoryUI) inventoryUI.style.display = 'none'; // Chowamy plecak po wybraniu broni
+    if (inventoryUI) inventoryUI.style.display = 'none'; 
 };
 
 // ==========================================
@@ -201,10 +197,12 @@ window.onkeydown = (e) => {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
         
-        // NOWOŚĆ: Klawisz 'I' zamyka/otwiera ekwipunek
         if (e.code === 'KeyI') {
             if (btnInventory) btnInventory.click();
         }
+
+        // NOWOŚĆ: Wyświetlanie mapy taktycznej
+        if (e.code === 'KeyM') isMapOpen = true;
 
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         
@@ -233,6 +231,7 @@ window.onkeydown = (e) => {
 window.onkeyup = (e) => {
     keys[e.code] = false;
     if (e.code === 'KeyQ' && player) player.isShielding = false;
+    if (e.code === 'KeyM') isMapOpen = false; // Schowanie mapy
 };
 
 // ==========================================
@@ -300,7 +299,6 @@ window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
     
-    // Pokazanie przycisku ekwipunku
     if (btnInventory) btnInventory.style.display = 'flex';
     
     const name = document.getElementById('playerName').value || "Gracz";
@@ -372,6 +370,13 @@ socket.on('killEvent', (data) => {
     }
 });
 
+// NOWOŚĆ: Rejestrowanie zgonów na serwerze do Mapy Taktycznej (lub symulacja po dużych hitach)
+socket.on('deathMarker', (data) => {
+    if(data && !isNaN(data.x)) {
+        deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
+    }
+});
+
 socket.on('tutorialTick', (data) => {
     if (player && data && data.text) {
         player.tutorialText = data.text;
@@ -404,6 +409,11 @@ socket.on('damageText', (data) => {
         vx: (Math.random() - 0.5) * 2, 
         vy: -2 - Math.random() * 2 
     });
+    
+    // Jeśli obrażenia są potężne, wrzucamy tam "X" na mapie taktycznej (symulacja ostrej walki)
+    if (data.val > 30) {
+        deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
+    }
 
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
     let count = data.val > 20 ? 12 : 6; 
@@ -460,7 +470,7 @@ socket.on('gameOver', (data) => {
 });
 
 /**
- * ODBIÓR DANYCH Z SERWERA (TARCZA ANTY-CRASHOWA)
+ * ODBIÓR DANYCH Z SERWERA
  */
 socket.on('serverTick', (data) => {
     lastServerTickTime = Date.now(); 
@@ -596,6 +606,92 @@ function update() {
     }
 }
 
+// --- NOWOŚĆ: FUNKCJA RYSOWANIA MAPY (Zarówno Radaru, jak i Mapy Taktycznej) ---
+function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
+    ctx.save();
+    
+    // Tło Radaru/Mapy
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    ctx.fillRect(mapX, mapY, mapSize, mapSize);
+    ctx.strokeStyle = '#111';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(mapX, mapY, mapSize, mapSize);
+    
+    // Tytuł Mapy
+    ctx.fillStyle = '#111';
+    ctx.font = "bold 14px 'Permanent Marker', Arial";
+    ctx.textAlign = 'center';
+    ctx.fillText(isTactical ? "MAPA TAKTYCZNA" : "RADAR", mapX + mapSize / 2, mapY - 8);
+
+    let mapScale = mapSize / WORLD_SIZE;
+
+    // Rysowanie Zamków (Stref Bezpiecznych)
+    safeZones.forEach(z => {
+        ctx.beginPath();
+        ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; // Szare strefy
+        ctx.fill();
+        ctx.strokeStyle = '#111';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+    });
+
+    // Rysowanie Śladów Śmierci / Ostrej walki (Tylko na Mapie Taktycznej)
+    if (isTactical) {
+        deathMarkers.forEach(m => {
+            ctx.save();
+            ctx.translate(mapX + m.x * mapScale, mapY + m.y * mapScale);
+            ctx.globalAlpha = Math.max(0, m.life);
+            ctx.strokeStyle = '#e74c3c'; // Czerwony marker
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-4, -4); ctx.lineTo(4, 4);
+            ctx.moveTo(4, -4); ctx.lineTo(-4, 4);
+            ctx.stroke();
+            ctx.restore();
+        });
+    }
+
+    // Rysowanie Króla
+    let currentKingId = null;
+    let allEntities = Object.values(otherPlayers).concat(bots);
+    if (player && gameState !== 'GAMEOVER') allEntities.push(player);
+    allEntities.sort((a,b) => (b.score || 0) - (a.score || 0));
+    if (allEntities.length > 0) currentKingId = allEntities[0].id || allEntities[0].name;
+
+    if (currentKingId) {
+        let king = allEntities.find(e => e.id === currentKingId || e.name === currentKingId);
+        if (king && king !== player) {
+            ctx.beginPath();
+            ctx.arc(mapX + king.x * mapScale, mapY + king.y * mapScale, isTactical ? 4 : 3, 0, Math.PI * 2);
+            ctx.fillStyle = '#f1c40f'; // Złota kropka
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.stroke();
+        }
+    }
+
+    // Rysowanie Gracza
+    if (player) {
+        ctx.beginPath();
+        ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, isTactical ? 5 : 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#2ecc71'; // Świecący zielony
+        ctx.fill();
+        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = '#111';
+        ctx.stroke();
+        
+        // Pulsowanie
+        ctx.beginPath();
+        let pulse = (Date.now() / 300) % 3;
+        ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, (isTactical ? 5 : 4) + pulse * 2, 0, Math.PI * 2);
+        ctx.strokeStyle = `rgba(46, 204, 113, ${1 - pulse/3})`;
+        ctx.stroke();
+    }
+    
+    ctx.restore();
+}
+
 /**
  * GŁÓWNA PĘTLA GRY (GAME LOOP)
  */
@@ -636,6 +732,14 @@ function gameLoop(currentTime) {
         if (gameState === 'PLAYING') {
             update(); 
             checkEquipmentUpgrades(); 
+
+            // Wygaszanie starych śladów śmierci z mapy taktycznej
+            for (let i = deathMarkers.length - 1; i >= 0; i--) {
+                deathMarkers[i].life -= 0.002; // Powolne znikanie
+                if (deathMarkers[i].life <= 0) {
+                    deathMarkers.splice(i, 1);
+                }
+            }
 
             for (let i = startBirds.length - 1; i >= 0; i--) {
                 let b = startBirds[i];
@@ -934,6 +1038,7 @@ function gameLoop(currentTime) {
         }
 
         if (gameState !== 'GAMEOVER') {
+            // --- UI: RANKING ---
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
             
@@ -947,9 +1052,27 @@ function gameLoop(currentTime) {
                 else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
+            // --- NOWOŚĆ: LOGIKA RYSOWANIA MAPY (Mały Radar na lewo-góra, Duża po wciśnięciu [M]) ---
+            let smallRadarSize = 120;
+            let smallRadarX = 20;
+            let smallRadarY = 100; // Pod logo uczelni
+            
+            // Rysujemy na stałe mały radar
+            drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
+
+            // Rysujemy dużą mapę taktyczną jeśli gracz wciśnie "M"
+            if (isMapOpen) {
+                let tacMapSize = 250;
+                let tacMapX = 20;
+                let tacMapY = canvas.height - tacMapSize - 100; // Nad panelem ekwipunku/broni
+                drawRadarMap(ctx, tacMapX, tacMapY, tacMapSize, true);
+            }
+
+            // --- UI: LEWA GÓRA (Punkty) ---
             ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
-            let displayScore = isNaN(player.score) ? 5 : Math.floor(player.score);
-            ctx.fillText(`PUNKTY: ${displayScore}`, 20, 40);
+            ctx.textAlign = 'left';
+            let displayScoreP = isNaN(player.score) ? 5 : Math.floor(player.score);
+            ctx.fillText(`PUNKTY: ${displayScoreP}`, 20, 40);
             
             if (player.isRecruiting !== undefined) {
                 ctx.font = 'bold 14px Arial';
@@ -957,6 +1080,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
+            // --- UI: ŚRODEK (Eventy) ---
             ctx.save();
             ctx.textAlign = 'center';
             if (currentEvent === null) {
@@ -978,6 +1102,7 @@ function gameLoop(currentTime) {
             }
             ctx.restore();
 
+            // --- UI: PRAWA STRONA (Logi zabójstw) - Przesunięto niżej, żeby nie zachodziły na ranking ---
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = "bold 14px 'Permanent Marker', Arial"; ctx.textAlign = 'right';
                 for (let i = 0; i < killLogs.length; i++) {
@@ -989,27 +1114,23 @@ function gameLoop(currentTime) {
                 ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
             }
 
-            // --- NOWOŚĆ: LOGIKA RYSOWANIA PLECACA I AKTYWNYCH SLOTÓW ---
             ctx.save();
             let btnWidth = 50;
             let spacing = 10;
 
             let activeSlots = [
-                { id: 'sword', display: 'MIECZ', key: '1' }, // Slot 1 to zawsze miecz (zwykły, lub ulepszony pasywnie)
-                { id: 'none', display: 'PUSTY', key: '2' }   // Slot 2 to miejsce na broń z plecaka
+                { id: 'sword', display: 'MIECZ', key: '1' }, 
+                { id: 'none', display: 'PUSTY', key: '2' }   
             ];
 
-            // Szukamy, jaką broń dystansową z plecaka aktualnie używamy (żeby pokazać ją w Sloty 2)
             if (player.activeWeapon && player.activeWeapon !== 'sword') {
                 activeSlots[1].id = player.activeWeapon;
                 activeSlots[1].display = player.activeWeapon.replace('_', ' ').toUpperCase();
             }
 
-            // --- Aktualizacja widoku w okienku HTML Ekwipunku (Plecak) ---
             if (inventoryUI && inventoryUI.style.display !== 'none' && player.inventory) {
                 let slotsHTML = '';
                 Object.keys(player.inventory).forEach(key => {
-                    // Pokaż w plecaku tylko bronie, które mamy, i których aktualnie NIE trzymamy w ręce
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
                         let displayName = key.replace('_', ' ').toUpperCase();
                         slotsHTML += `
@@ -1027,8 +1148,6 @@ function gameLoop(currentTime) {
                 
                 document.getElementById('inventory-slots').innerHTML = slotsHTML;
             }
-            // --- Koniec logiki HTML Plecaka ---
-
 
             let activeSkillsCount = (paths.weapon === 'winter' ? 1 : 0) + (paths.speed === 'dash' ? 1 : 0);
             let totalWeaponsWidth = activeSlots.length * (btnWidth + spacing);
@@ -1038,7 +1157,6 @@ function gameLoop(currentTime) {
             let startX = canvas.width / 2 - totalBarWidth / 2;
             let startY = canvas.height - 80;
 
-            // Rysowanie 2 kafelków broni na dole ekranu (Active Slots)
             activeSlots.forEach((w, idx) => {
                 let btnX = startX + idx * (btnWidth + spacing);
                 let isActive = player.activeWeapon && player.activeWeapon.includes(w.id);
@@ -1124,7 +1242,6 @@ function gameLoop(currentTime) {
             let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
             let hasAnyPath = paths.speed !== 'none' || paths.strength !== 'none' || paths.weapon !== 'none';
 
-            // --- NOWOŚĆ: CHOWANIE MENU UMIEJĘTNOŚCI ---
             if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
