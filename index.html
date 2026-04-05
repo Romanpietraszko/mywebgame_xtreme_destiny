@@ -251,6 +251,17 @@
         <button onclick="document.getElementById('castle-shop').style.display='none'" class="shop-btn" style="margin-top: 10px; justify-content: center; background: #111; color: #fff;">Ukryj Sklep</button>
     </div>
 
+    <div id="btn-inventory" style="position: fixed; right: 20px; bottom: 100px; width: 50px; height: 50px; background: #fff; border: 3px solid #111; border-radius: 10px; font-size: 24px; display: none; justify-content: center; align-items: center; cursor: pointer; z-index: 90; box-shadow: 2px 2px 0 #111;">🎒</div>
+
+    <div id="inventory-ui" style="position: fixed; right: 80px; bottom: 100px; background: rgba(255,255,255,0.95); border: 3px solid #111; padding: 10px; border-radius: 10px; box-shadow: 4px 4px 0 rgba(17,17,17,0.2); z-index: 90; width: 160px; display: none; flex-direction: column;">
+        <h3 style="margin: 0 0 10px 0; text-align: center; font-family: 'Permanent Marker', cursive; font-size: 16px; border-bottom: 2px dashed #111; color: #111;">Ekwipunek</h3>
+        
+        <div id="inventory-slots" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; min-height: 50px;">
+            </div>
+        
+        <p style="font-size: 10px; text-align: center; margin: 10px 0 0 0; color: #555; font-weight: bold;">[Drag & Drop]<br>Przeciągnij broń na ekran, by jej użyć.</p>
+    </div>
+
     <canvas id="gameCanvas"></canvas>
 
     <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
