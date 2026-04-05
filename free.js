@@ -72,6 +72,19 @@ window.equipWeaponFromInventory = (weaponCode) => {
     if (inventoryUI) inventoryUI.style.display = 'none'; 
 };
 
+// --- NOWOŚĆ: Prawdziwy Drag & Drop na Canvasie ---
+canvas.addEventListener('dragover', (e) => {
+    e.preventDefault(); 
+});
+
+canvas.addEventListener('drop', (e) => {
+    e.preventDefault();
+    const weaponCode = e.dataTransfer.getData('text/plain');
+    if (weaponCode) {
+        window.equipWeaponFromInventory(weaponCode);
+    }
+});
+
 // ==========================================
 // OBSŁUGA STEROWANIA (Mysz i Klawiatura)
 // ==========================================
@@ -201,7 +214,6 @@ window.onkeydown = (e) => {
             if (btnInventory) btnInventory.click();
         }
 
-        // NOWOŚĆ: Wyświetlanie mapy taktycznej
         if (e.code === 'KeyM') isMapOpen = true;
 
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
@@ -370,7 +382,6 @@ socket.on('killEvent', (data) => {
     }
 });
 
-// NOWOŚĆ: Rejestrowanie zgonów na serwerze do Mapy Taktycznej (lub symulacja po dużych hitach)
 socket.on('deathMarker', (data) => {
     if(data && !isNaN(data.x)) {
         deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
@@ -410,7 +421,6 @@ socket.on('damageText', (data) => {
         vy: -2 - Math.random() * 2 
     });
     
-    // Jeśli obrażenia są potężne, wrzucamy tam "X" na mapie taktycznej (symulacja ostrej walki)
     if (data.val > 30) {
         deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
     }
@@ -606,18 +616,15 @@ function update() {
     }
 }
 
-// --- NOWOŚĆ: FUNKCJA RYSOWANIA MAPY (Zarówno Radaru, jak i Mapy Taktycznej) ---
 function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.save();
     
-    // Tło Radaru/Mapy
     ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
     ctx.fillRect(mapX, mapY, mapSize, mapSize);
     ctx.strokeStyle = '#111';
     ctx.lineWidth = 3;
     ctx.strokeRect(mapX, mapY, mapSize, mapSize);
     
-    // Tytuł Mapy
     ctx.fillStyle = '#111';
     ctx.font = "bold 14px 'Permanent Marker', Arial";
     ctx.textAlign = 'center';
@@ -625,24 +632,22 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
 
     let mapScale = mapSize / WORLD_SIZE;
 
-    // Rysowanie Zamków (Stref Bezpiecznych)
     safeZones.forEach(z => {
         ctx.beginPath();
         ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; // Szare strefy
+        ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
         ctx.fill();
         ctx.strokeStyle = '#111';
         ctx.lineWidth = 1;
         ctx.stroke();
     });
 
-    // Rysowanie Śladów Śmierci / Ostrej walki (Tylko na Mapie Taktycznej)
     if (isTactical) {
         deathMarkers.forEach(m => {
             ctx.save();
             ctx.translate(mapX + m.x * mapScale, mapY + m.y * mapScale);
             ctx.globalAlpha = Math.max(0, m.life);
-            ctx.strokeStyle = '#e74c3c'; // Czerwony marker
+            ctx.strokeStyle = '#e74c3c'; 
             ctx.lineWidth = 2;
             ctx.beginPath();
             ctx.moveTo(-4, -4); ctx.lineTo(4, 4);
@@ -652,7 +657,6 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         });
     }
 
-    // Rysowanie Króla
     let currentKingId = null;
     let allEntities = Object.values(otherPlayers).concat(bots);
     if (player && gameState !== 'GAMEOVER') allEntities.push(player);
@@ -664,24 +668,22 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         if (king && king !== player) {
             ctx.beginPath();
             ctx.arc(mapX + king.x * mapScale, mapY + king.y * mapScale, isTactical ? 4 : 3, 0, Math.PI * 2);
-            ctx.fillStyle = '#f1c40f'; // Złota kropka
+            ctx.fillStyle = '#f1c40f'; 
             ctx.fill();
             ctx.strokeStyle = '#111';
             ctx.stroke();
         }
     }
 
-    // Rysowanie Gracza
     if (player) {
         ctx.beginPath();
         ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, isTactical ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#2ecc71'; // Świecący zielony
+        ctx.fillStyle = '#2ecc71'; 
         ctx.fill();
         ctx.lineWidth = 1.5;
         ctx.strokeStyle = '#111';
         ctx.stroke();
         
-        // Pulsowanie
         ctx.beginPath();
         let pulse = (Date.now() / 300) % 3;
         ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, (isTactical ? 5 : 4) + pulse * 2, 0, Math.PI * 2);
@@ -733,9 +735,8 @@ function gameLoop(currentTime) {
             update(); 
             checkEquipmentUpgrades(); 
 
-            // Wygaszanie starych śladów śmierci z mapy taktycznej
             for (let i = deathMarkers.length - 1; i >= 0; i--) {
-                deathMarkers[i].life -= 0.002; // Powolne znikanie
+                deathMarkers[i].life -= 0.002; 
                 if (deathMarkers[i].life <= 0) {
                     deathMarkers.splice(i, 1);
                 }
@@ -1001,6 +1002,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
+        // --- ZMIANA: PRZESUNIĘTO MIDASA NA PRAWĄ STRONĘ ---
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save();
             let tutorialWidth = 380;
@@ -1135,9 +1137,9 @@ function gameLoop(currentTime) {
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
                         let displayName = key.replace('_', ' ').toUpperCase();
                         slotsHTML += `
-                            <div onclick="window.equipWeaponFromInventory('${key}')" style="background: #f0f0f0; border: 2px solid #111; border-radius: 5px; width: 60px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s;">
-                                <span style="font-size: 20px;">⚔️</span>
-                                <span style="font-size: 8px; font-weight: bold; text-align: center; margin-top: 5px;">${displayName.substring(0, 8)}</span>
+                            <div draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${key}')" onclick="window.equipWeaponFromInventory('${key}')" style="background: #f0f0f0; border: 2px solid #111; border-radius: 5px; width: 60px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: grab; transition: 0.1s;">
+                                <span style="font-size: 20px; pointer-events: none;">⚔️</span>
+                                <span style="font-size: 8px; font-weight: bold; text-align: center; margin-top: 5px; pointer-events: none;">${displayName.substring(0, 8)}</span>
                             </div>
                         `;
                     }
