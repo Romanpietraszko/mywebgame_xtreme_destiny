@@ -6,20 +6,17 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
-let loots = [];            // Tablica skrzynek z serwera
-let currentEvent = null;   // Info o evencie z serwera
-let eventTimeLeft = 0;     // Czas do kolejnego eventu
+let loots = [];            
+let currentEvent = null;   
+let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
-// Tablice na efekty wizualne (Ptaki na starcie i Wiatr)
 let startBirds = [];
 let windLines = [];
 let lastWindTrigger = 0;
 
-// Inicjalizacja mapy z pliku map.js
 initMap(WORLD_SIZE);
 
-// Statystyki RPG, Ekwipunek
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
 let paths = { speed: 'none', strength: 'none', weapon: 'none' }; 
@@ -31,20 +28,16 @@ let lastCalculatedTier = 0;
 let wasSafe = false; 
 let killLogs = [];
 
-// Zmienne odliczające czas dla umiejętności (Cooldowny)
 let lastWinterUseClient = 0; 
 let lastDashUseClient = 0; 
 let lastSkillMenuState = '';
 
-// Tablice na wyskakujące obrażenia i krew/iskry
 let damageTexts = [];
 let particles = [];
 
-// Zmienne do przeciągania botów prawym przyciskiem myszy
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
 
-// Zmienne do limitowania i stabilizacji klatek na sekundę (FPS)
 let lastFrameTime = performance.now();
 const targetFPS = 60;
 const frameDuration = 1000 / targetFPS; 
@@ -52,11 +45,36 @@ const frameDuration = 1000 / targetFPS;
 let nextGachaTime = 0;
 const GACHA_INTERVAL_MS = 60 * 1000; 
 
-// Zmienne do monitorowania opóźnień serwera (Anti-Lag)
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
 
 window.addEventListener('contextmenu', e => e.preventDefault());
+
+// --- NOWOŚĆ: INICJALIZACJA UI PLECACA (Ekwipunek) ---
+const btnInventory = document.getElementById('btn-inventory');
+const inventoryUI = document.getElementById('inventory-ui');
+
+if (btnInventory && inventoryUI) {
+    btnInventory.addEventListener('click', (e) => {
+        // Tarcza przed strzałem przy klikaniu UI
+        e.stopPropagation(); 
+        if (inventoryUI.style.display === 'none' || inventoryUI.style.display === '') {
+            inventoryUI.style.display = 'flex';
+        } else {
+            inventoryUI.style.display = 'none';
+        }
+    });
+
+    // Zabezpieczenie przed strzelaniem podczas klikania w środek ekwipunku
+    inventoryUI.addEventListener('mousedown', (e) => e.stopPropagation());
+}
+
+// Funkcja wywoływana, gdy gracz kliknie zapasową broń w Ekwipunku
+window.equipWeaponFromInventory = (weaponCode) => {
+    // Wysyłamy prośbę do serwera, żeby wsadził tę broń z ekwipunku na aktywny SLOT 2
+    socket.emit('equipFromInventory', { weaponId: weaponCode, targetSlot: 2 });
+    if (inventoryUI) inventoryUI.style.display = 'none'; // Chowamy plecak po wybraniu broni
+};
 
 // ==========================================
 // OBSŁUGA STEROWANIA (Mysz i Klawiatura)
@@ -76,7 +94,6 @@ window.addEventListener('mousemove', (e) => {
         
         const angle = Math.atan2(mouseY - playerScreenY, mouseX - playerScreenX);
         
-        // Zapisujemy wektor ruchu tylko wtedy, gdy matematyka nie zwróciła błędu (NaN)
         if (!isNaN(angle)) {
             lastMoveDir = { x: Math.cos(angle), y: Math.sin(angle) };
         }
@@ -88,15 +105,13 @@ window.addEventListener('mousemove', (e) => {
 });
 
 window.addEventListener('mousedown', (e) => {
-    // TARCZA ANTY-KLIKOWA: Jeśli gracz klika w przyciski UI (Sklep/Menu), ignorujemy strzelanie mieczem.
-    if (e.target.closest('#skill-menu') || e.target.closest('#castle-shop') || e.target.closest('button')) {
+    if (e.target.closest('#skill-menu') || e.target.closest('#castle-shop') || e.target.closest('button') || e.target.closest('#btn-inventory') || e.target.closest('#inventory-ui')) {
         return; 
     }
 
     if (gameState === 'PLAYING' && player) { 
-        if (player.isSafe) return; // W bazie nie można atakować
+        if (player.isSafe) return; 
 
-        // Prawy przycisk myszy - Przeciąganie własnych botów
         if (e.button === 2) { 
             const rect = canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
@@ -123,14 +138,12 @@ window.addEventListener('mousedown', (e) => {
                 dragMouseWorld = { x: mouseWorldX, y: mouseWorldY };
             }
         }
-        // Lewy przycisk myszy - Strzał bronią
         else if (e.button === 0) {
             socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         }
     }
     
     if (gameState === 'PAUSED' && e.button === 0) {
-        // Blokada wychodzenia z pauzy, gdy aktywna jest skrzynka Gacha
         const gachaModal = document.getElementById('gacha-modal');
         if (gachaModal && gachaModal.style.display.includes('flex')) return;
 
@@ -148,7 +161,6 @@ window.addEventListener('mousedown', (e) => {
 });
 
 window.addEventListener('mouseup', (e) => {
-    // Zakończenie przeciągania bota i wysłanie nowych koordynatów do serwera
     if (e.button === 2 && draggedBotId && player) {
         let dx = dragMouseWorld.x - player.x;
         let dy = dragMouseWorld.y - player.y;
@@ -186,11 +198,13 @@ window.onkeydown = (e) => {
     }
     
     if (gameState === 'PLAYING') {
-        // --- NOWOŚĆ: OBSŁUGA AŻ 4 SLOTÓW NA BRONIE ---
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
-        if (e.code === 'Digit3') socket.emit('switchWeapon', 3);
-        if (e.code === 'Digit4') socket.emit('switchWeapon', 4);
+        
+        // NOWOŚĆ: Klawisz 'I' zamyka/otwiera ekwipunek
+        if (e.code === 'KeyI') {
+            if (btnInventory) btnInventory.click();
+        }
 
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
         
@@ -286,6 +300,9 @@ window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
     
+    // Pokazanie przycisku ekwipunku
+    if (btnInventory) btnInventory.style.display = 'flex';
+    
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     
@@ -312,7 +329,6 @@ window.startGame = (type) => {
         player.id = myId;
     }
     
-    // Wypuszczamy ptaki w koordynatach gracza!
     triggerStartBirds(player.x, player.y);
     lastWindTrigger = Date.now(); 
 
@@ -375,7 +391,6 @@ socket.on('formationSwitched', (formName) => {
 socket.on('damageText', (data) => {
     if(!data || isNaN(data.x) || isNaN(data.y)) return; 
 
-    // Limitujemy teksty obrażeń do 50, by nie przeładować pamięci
     if (damageTexts.length > 50) {
         damageTexts.shift();
     }
@@ -393,7 +408,6 @@ socket.on('damageText', (data) => {
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
     let count = data.val > 20 ? 12 : 6; 
     
-    // Generowanie cząsteczek z limitem VRAM (maks 250 na raz)
     if (particles.length < 250) {
         for (let i = 0; i < count; i++) {
             let angle = Math.random() * Math.PI * 2;
@@ -438,6 +452,9 @@ socket.on('gameOver', (data) => {
     `;
     
     document.getElementById('skill-menu').style.display = 'none';
+    if (btnInventory) btnInventory.style.display = 'none';
+    if (inventoryUI) inventoryUI.style.display = 'none';
+    
     const shop = document.getElementById('castle-shop');
     if (shop) shop.style.display = 'none';
 });
@@ -451,7 +468,6 @@ socket.on('serverTick', (data) => {
 
     if (!data) return; 
 
-    // Sanity Checks (Sprawdzanie integralności danych)
     foods = Array.isArray(data.foods) ? data.foods : []; 
     bots = Array.isArray(data.bots) ? data.bots : []; 
     projectiles = Array.isArray(data.projectiles) ? data.projectiles : [];
@@ -558,8 +574,6 @@ function update() {
         }
     }
     
-    // --- ZABEZPIECZENIE: GINĘCIE NA MARGINESACH ---
-    // Klasyczny kod: wjeżdżasz w krawędź = martwy punkt i wysyłasz to do serwera
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
@@ -623,7 +637,6 @@ function gameLoop(currentTime) {
             update(); 
             checkEquipmentUpgrades(); 
 
-            // Aktualizacja ptaków
             for (let i = startBirds.length - 1; i >= 0; i--) {
                 let b = startBirds[i];
                 b.x += b.vx;
@@ -638,7 +651,6 @@ function gameLoop(currentTime) {
                 }
             }
 
-            // Aktualizacja Linii Wiatru
             if (Date.now() - lastWindTrigger > 30000) {
                 triggerWindLines(player.x, player.y);
                 lastWindTrigger = Date.now();
@@ -679,7 +691,6 @@ function gameLoop(currentTime) {
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        // Rysowanie Linii Wiatru
         ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
         ctx.lineWidth = 1.5;
         ctx.lineCap = 'round';
@@ -691,7 +702,6 @@ function gameLoop(currentTime) {
         });
         ctx.stroke();
 
-        // Rysowanie Zamków poprzez czyste drawCastle z engine.js
         safeZones.forEach(z => {
             if(typeof drawCastle === 'function') {
                 drawCastle(ctx, z);
@@ -725,7 +735,6 @@ function gameLoop(currentTime) {
             ctx.restore();
         });
         
-        // --- POPRAWKA: RYSOWANIE POCISKÓW BEZ SHOTGUNA I KUSZY ---
         projectiles.forEach(p => {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
             if(isNaN(rot)) rot = 0; 
@@ -784,9 +793,6 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // ==========================================
-        // RYSOWANIE ENTITIES (Z zachowaniem oryginalnych pętli i flag isSafe)
-        // ==========================================
         bots.forEach(b => {
             if (b.isSafe && (!player || !player.isSafe)) return;
             if (isServerLagging) b.isMoving = false;
@@ -983,46 +989,57 @@ function gameLoop(currentTime) {
                 ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
             }
 
+            // --- NOWOŚĆ: LOGIKA RYSOWANIA PLECACA I AKTYWNYCH SLOTÓW ---
             ctx.save();
             let btnWidth = 50;
             let spacing = 10;
 
-            let availableWeapons = [{ id: 'sword', display: 'MIECZ', key: '1' }];
-            let slotIndex = 2;
-
-            let weaponCategories = [
-                { base: 'bow', names: ['diamond_bow', 'golden_bow', 'bow'] },
-                { base: 'knife', names: ['cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife'] },
-                { base: 'shuriken', names: ['explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'] }
+            let activeSlots = [
+                { id: 'sword', display: 'MIECZ', key: '1' }, // Slot 1 to zawsze miecz (zwykły, lub ulepszony pasywnie)
+                { id: 'none', display: 'PUSTY', key: '2' }   // Slot 2 to miejsce na broń z plecaka
             ];
 
-            weaponCategories.forEach(cat => {
-                let foundWeapon = null;
-                for (let n of cat.names) {
-                    if (player.inventory && player.inventory[n] > 0) {
-                        foundWeapon = n;
-                        break;
+            // Szukamy, jaką broń dystansową z plecaka aktualnie używamy (żeby pokazać ją w Sloty 2)
+            if (player.activeWeapon && player.activeWeapon !== 'sword') {
+                activeSlots[1].id = player.activeWeapon;
+                activeSlots[1].display = player.activeWeapon.replace('_', ' ').toUpperCase();
+            }
+
+            // --- Aktualizacja widoku w okienku HTML Ekwipunku (Plecak) ---
+            if (inventoryUI && inventoryUI.style.display !== 'none' && player.inventory) {
+                let slotsHTML = '';
+                Object.keys(player.inventory).forEach(key => {
+                    // Pokaż w plecaku tylko bronie, które mamy, i których aktualnie NIE trzymamy w ręce
+                    if (player.inventory[key] > 0 && key !== player.activeWeapon) {
+                        let displayName = key.replace('_', ' ').toUpperCase();
+                        slotsHTML += `
+                            <div onclick="window.equipWeaponFromInventory('${key}')" style="background: #f0f0f0; border: 2px solid #111; border-radius: 5px; width: 60px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: pointer; transition: 0.1s;">
+                                <span style="font-size: 20px;">⚔️</span>
+                                <span style="font-size: 8px; font-weight: bold; text-align: center; margin-top: 5px;">${displayName.substring(0, 8)}</span>
+                            </div>
+                        `;
                     }
+                });
+                
+                if (slotsHTML === '') {
+                    slotsHTML = '<p style="font-size: 11px; text-align: center; width: 100%; color: #777;">Twój plecak jest pusty.</p>';
                 }
-                if (foundWeapon) {
-                    availableWeapons.push({
-                        id: cat.base,
-                        display: foundWeapon.replace('_', ' ').toUpperCase(),
-                        key: slotIndex.toString()
-                    });
-                    slotIndex++;
-                }
-            });
+                
+                document.getElementById('inventory-slots').innerHTML = slotsHTML;
+            }
+            // --- Koniec logiki HTML Plecaka ---
+
 
             let activeSkillsCount = (paths.weapon === 'winter' ? 1 : 0) + (paths.speed === 'dash' ? 1 : 0);
-            let totalWeaponsWidth = availableWeapons.length * (btnWidth + spacing);
+            let totalWeaponsWidth = activeSlots.length * (btnWidth + spacing);
             let totalSkillsWidth = activeSkillsCount > 0 ? (activeSkillsCount * (btnWidth + spacing) + 20) : 0;
             let totalBarWidth = totalWeaponsWidth + totalSkillsWidth;
 
             let startX = canvas.width / 2 - totalBarWidth / 2;
             let startY = canvas.height - 80;
 
-            availableWeapons.forEach((w, idx) => {
+            // Rysowanie 2 kafelków broni na dole ekranu (Active Slots)
+            activeSlots.forEach((w, idx) => {
                 let btnX = startX + idx * (btnWidth + spacing);
                 let isActive = player.activeWeapon && player.activeWeapon.includes(w.id);
                 if (w.id === 'sword' && player.activeWeapon === 'sword') isActive = true;
@@ -1107,7 +1124,8 @@ function gameLoop(currentTime) {
             let needsStrengthPath = (playerSkills.strength >= 5 && paths.strength === 'none');
             let hasAnyPath = paths.speed !== 'none' || paths.strength !== 'none' || paths.weapon !== 'none';
 
-            if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath || hasAnyPath) {
+            // --- NOWOŚĆ: CHOWANIE MENU UMIEJĘTNOŚCI ---
+            if (skillPoints > 0 || needsWeaponPath || needsSpeedPath || needsStrengthPath) {
                 skillMenu.style.display = 'flex'; 
                 document.getElementById('sp-count').innerText = skillPoints;
                 
