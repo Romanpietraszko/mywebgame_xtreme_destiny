@@ -7,6 +7,7 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
+let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -533,7 +534,6 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
     
-    // Nadpisujemy strefy pobranymi zamkami z serwera (teraz 4 zamki będą widoczne!)
     if (data.castles) {
         safeZones.length = 0;
         data.castles.forEach(c => safeZones.push(c));
@@ -745,11 +745,16 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     if (gameState === 'SPAWN_SELECTION') {
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#e74c3c'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#111'; ctx.stroke();
+        ctx.fillStyle = '#111111'; // ZMIANA: Celownik na czarny
+        ctx.fill(); 
+        ctx.lineWidth = 2; 
+        ctx.strokeStyle = '#111111'; 
+        ctx.stroke();
         
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#e74c3c'; ctx.stroke();
+        ctx.strokeStyle = '#111111'; // ZMIANA: Animacja celownika na czarno
+        ctx.stroke();
     }
 
     ctx.restore();
@@ -776,10 +781,13 @@ function gameLoop(currentTime) {
     if (gameState === 'SPAWN_SELECTION') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = '#2c3e50';
+        
+        // ZMIANA: Tło zgodne z klimatem gry (jasne z liniami)
+        ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        ctx.fillStyle = '#ecf0f1';
+        // ZMIANA: Czcionki na czarne
+        ctx.fillStyle = '#111111';
         ctx.font = "bold 36px 'Permanent Marker', Arial";
         ctx.textAlign = 'center';
         ctx.fillText("SPACE ROOM - WYBÓR LĄDOWANIA", canvas.width / 2, 80);
@@ -791,7 +799,8 @@ function gameLoop(currentTime) {
         let mapY = canvas.height / 2 - mapSize / 2;
         drawRadarMap(ctx, mapX, mapY, mapSize, true);
 
-        ctx.fillStyle = '#e74c3c';
+        // ZMIANA: Czarne odliczanie
+        ctx.fillStyle = '#111111';
         ctx.font = "bold 48px 'Permanent Marker', Arial";
         ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
 
@@ -1155,7 +1164,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- NOWOŚĆ: TIMER 15 MINUT W PRAWYM GÓRNYM ROGU (Poniżej Rankingu) ---
+            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
@@ -1191,7 +1200,7 @@ function gameLoop(currentTime) {
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // Ostatnia minuta - niech cyfry migają, ale zostają czarno-białe/szare
+            // Ostatnia minuta - niech cyfry migają na szaro
             if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
                 ctx.fillStyle = '#777777'; 
             }
@@ -1199,7 +1208,7 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = timerY + timerH + 20; // 226 - przesunięcie logów 
+            let logStartY = timerY + timerH + 20; 
 
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
