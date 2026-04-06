@@ -2,7 +2,8 @@
 // FREE.JS - Logika trybu "Free"
 // ==========================================
 
-const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+window.socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+const socket = window.socket;
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
@@ -56,6 +57,9 @@ let spawnCountdownTimer = null;
 let selectedSpawn = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
 let gameStartTime = 0;
 const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; // 15 minut
+
+// Zmienna do kontrolowania Drag & Drop
+let lastInventoryStateStr = '';
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -133,7 +137,7 @@ window.addEventListener('mousedown', (e) => {
     if (gameState === 'SPAWN_SELECTION') {
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
+        let mapY = canvas.height / 2 - mapSize / 2 + 20; // Lekkie przesunięcie mapy w dół
         
         if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
             let mapScale = WORLD_SIZE / mapSize;
@@ -1174,7 +1178,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI (Środek, pod eventami) ---
+            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
@@ -1186,28 +1190,33 @@ function gameLoop(currentTime) {
             let timerX = canvas.width / 2 - timerW / 2;
             
             // Dynamiczne wyliczanie Y
-            let timerY = (currentEvent === null) ? 60 : 95;
+            let timerY = (currentEvent === null) ? 65 : 95;
 
             ctx.save();
+            // Białe tło
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(timerX, timerY, timerW, timerH);
+            // Czarna gruba ramka
             ctx.strokeStyle = '#111111';
             ctx.lineWidth = 4;
             ctx.strokeRect(timerX, timerY, timerW, timerH);
 
+            // Ikonki botów w rogach (czarne kuleczki)
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
-            
+            // Oczy botów
             ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
 
+            // Cyfrowy czarny tekst
             ctx.fillStyle = '#111111';
             ctx.font = "bold 28px monospace";
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
+            // Ostatnia minuta - niech cyfry migają na szaro
             if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
                 ctx.fillStyle = '#777777'; 
             }
@@ -1215,7 +1224,7 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = 170; // Przywrócono pierwotną pozycję logów zabójstw
+            let logStartY = 170; // Logi zabójstw po prawej
 
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
@@ -1224,6 +1233,7 @@ function gameLoop(currentTime) {
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
+            // --- MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
@@ -1280,6 +1290,7 @@ function gameLoop(currentTime) {
             }
 
             if (inventoryUI && inventoryUI.style.display !== 'none' && player.inventory) {
+                // ZMIANA: Zoptymalizowano rysowanie ekwipunku dla Drag & Drop
                 let slotsHTML = '';
                 Object.keys(player.inventory).forEach(key => {
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
@@ -1297,7 +1308,10 @@ function gameLoop(currentTime) {
                     slotsHTML = '<p style="font-size: 11px; text-align: center; width: 100%; color: #777;">Twój plecak jest pusty.</p>';
                 }
                 
-                document.getElementById('inventory-slots').innerHTML = slotsHTML;
+                let invSlots = document.getElementById('inventory-slots');
+                if (invSlots && invSlots.innerHTML !== slotsHTML) {
+                    invSlots.innerHTML = slotsHTML; // Ograniczono wywołania do minimum
+                }
             }
 
             let activeSkillsCount = (paths.weapon === 'winter' ? 1 : 0) + (paths.speed === 'dash' ? 1 : 0);
