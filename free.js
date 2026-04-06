@@ -2,12 +2,12 @@
 // FREE.JS - Logika trybu "Free"
 // ==========================================
 
-const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+window.socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+const socket = window.socket;
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
-let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -745,7 +745,7 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     if (gameState === 'SPAWN_SELECTION') {
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#111111'; // ZMIANA: Celownik na czarny
+        ctx.fillStyle = '#111111'; // Celownik na czarny
         ctx.fill(); 
         ctx.lineWidth = 2; 
         ctx.strokeStyle = '#111111'; 
@@ -753,7 +753,7 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#111111'; // ZMIANA: Animacja celownika na czarno
+        ctx.strokeStyle = '#111111'; // Animacja celownika na czarno
         ctx.stroke();
     }
 
@@ -782,11 +782,9 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // ZMIANA: Tło zgodne z klimatem gry (jasne z liniami)
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // ZMIANA: Czcionki na czarne
         ctx.fillStyle = '#111111';
         ctx.font = "bold 36px 'Permanent Marker', Arial";
         ctx.textAlign = 'center';
@@ -799,7 +797,6 @@ function gameLoop(currentTime) {
         let mapY = canvas.height / 2 - mapSize / 2;
         drawRadarMap(ctx, mapX, mapY, mapSize, true);
 
-        // ZMIANA: Czarne odliczanie
         ctx.fillStyle = '#111111';
         ctx.font = "bold 48px 'Permanent Marker', Arial";
         ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
@@ -1164,7 +1161,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
+            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI (Środek, pod eventami) ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
@@ -1173,8 +1170,8 @@ function gameLoop(currentTime) {
 
             let timerW = 160;
             let timerH = 46;
-            let timerX = canvas.width - timerW - 20;
-            let timerY = 160;
+            let timerX = canvas.width / 2 - timerW / 2;
+            let timerY = 95;
 
             ctx.save();
             // Białe tło
@@ -1208,7 +1205,7 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = timerY + timerH + 20; 
+            let logStartY = 170; 
 
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
