@@ -7,7 +7,6 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
-let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -785,7 +784,6 @@ function gameLoop(currentTime) {
         ctx.textAlign = 'center';
         ctx.fillText("SPACE ROOM - WYBÓR LĄDOWANIA", canvas.width / 2, 80);
         ctx.font = "bold 20px Arial";
-        // ZMIANA: Zaktualizowany opis
         ctx.fillText("Wybierz miejsce, gdzie chcesz trafić na mapie.", canvas.width / 2, 120);
 
         let mapSize = 400;
@@ -1157,7 +1155,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
+            // --- NOWOŚĆ: TIMER 15 MINUT W PRAWYM GÓRNYM ROGU (Poniżej Rankingu) ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
