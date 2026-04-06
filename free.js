@@ -7,6 +7,7 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
+let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -49,6 +50,13 @@ const GACHA_INTERVAL_MS = 60 * 1000;
 
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
+
+// --- NOWOŚĆ: SPACE ROOM I LIMIT CZASU ---
+let spawnCountdown = 10;
+let spawnCountdownTimer = null;
+let selectedSpawn = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
+let gameStartTime = 0;
+const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; // 15 minut
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -118,14 +126,28 @@ window.addEventListener('mousedown', (e) => {
         return; 
     }
 
+    const rect = canvas.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
+
+    // --- NOWOŚĆ: WYBÓR MIEJSCA SPAWNU W SPACE ROOMIE ---
+    if (gameState === 'SPAWN_SELECTION') {
+        let mapSize = 400;
+        let mapX = canvas.width / 2 - mapSize / 2;
+        let mapY = canvas.height / 2 - mapSize / 2;
+        
+        if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
+            let mapScale = WORLD_SIZE / mapSize;
+            selectedSpawn.x = (mouseX - mapX) * mapScale;
+            selectedSpawn.y = (mouseY - mapY) * mapScale;
+        }
+        return;
+    }
+
     if (gameState === 'PLAYING' && player) { 
         if (player.isSafe) return; 
 
         if (e.button === 2) { 
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            
             const mouseWorldX = player.x + (mouseX - canvas.width / 2) / globalScale;
             const mouseWorldY = player.y + (mouseY - canvas.height / 2) / globalScale;
 
@@ -156,9 +178,6 @@ window.addEventListener('mousedown', (e) => {
         const gachaModal = document.getElementById('gacha-modal');
         if (gachaModal && gachaModal.style.display.includes('flex')) return;
 
-        const rect = canvas.getBoundingClientRect();
-        const mouseX = e.clientX - rect.left;
-        const mouseY = e.clientY - rect.top;
         const btnX = canvas.width / 2 - 100;
         const btnY = canvas.height / 2 + 10;
         
@@ -214,6 +233,7 @@ window.onkeydown = (e) => {
             if (btnInventory) btnInventory.click();
         }
 
+        // NOWOŚĆ: Wyświetlanie mapy taktycznej
         if (e.code === 'KeyM') isMapOpen = true;
 
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
@@ -306,19 +326,36 @@ function drawNotebookBird(ctx, b) {
     ctx.restore();
 }
 
-// --- LOGIKA MENU I STARTU ---
+// --- LOGIKA MENU I STARTU (ZMIENIONA NA SPACE ROOM) ---
 window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
     
+    // Przechodzimy do wyboru spawnu
+    gameState = 'SPAWN_SELECTION';
+    spawnCountdown = 10;
+    
+    spawnCountdownTimer = setInterval(() => {
+        spawnCountdown--;
+        if (spawnCountdown <= 0) {
+            clearInterval(spawnCountdownTimer);
+            finalizeSpawn();
+        }
+    }, 1000);
+
+    lastFrameTime = performance.now();
+    requestAnimationFrame(gameLoop);
+};
+
+function finalizeSpawn() {
     if (btnInventory) btnInventory.style.display = 'flex';
     
     const name = document.getElementById('playerName').value || "Gracz";
     const color = document.getElementById('playerColor').value;
     
     player = {
-        x: 2000, 
-        y: 2000, 
+        x: selectedSpawn.x, 
+        y: selectedSpawn.y, 
         score: 0, 
         level: 1, 
         name: name, 
@@ -342,15 +379,45 @@ window.startGame = (type) => {
     triggerStartBirds(player.x, player.y);
     lastWindTrigger = Date.now(); 
 
-    socket.emit('joinGame', { name, color, skin: player.skin });
+    socket.emit('joinGame', { name, color, skin: player.skin, spawnX: selectedSpawn.x, spawnY: selectedSpawn.y });
     gameState = 'PLAYING';
     
+    gameStartTime = Date.now(); // Startujemy timer 15 min!
     lastFrameTime = performance.now();
     lastServerTickTime = Date.now(); 
     nextGachaTime = Date.now() + GACHA_INTERVAL_MS; 
+}
+
+function showGameOverScreen(finalScore, reasonText) {
+    gameState = 'GAMEOVER';
     
-    requestAnimationFrame(gameLoop);
-};
+    document.getElementById('ui-layer').style.display = 'flex';
+    document.getElementById('step-1').style.display = 'none';
+    document.getElementById('step-2').style.display = 'none';
+
+    let gameOverDiv = document.getElementById('game-over-screen');
+    if (!gameOverDiv) {
+        gameOverDiv = document.createElement('div');
+        gameOverDiv.id = 'game-over-screen';
+        gameOverDiv.style.textAlign = 'center';
+        gameOverDiv.style.color = '#111'; 
+        document.getElementById('menu').appendChild(gameOverDiv);
+    }
+    gameOverDiv.style.display = 'block';
+    gameOverDiv.innerHTML = `
+        <h2 style="color: #e74c3c; font-size: 38px; margin-bottom: 10px; text-transform: uppercase;">${reasonText}</h2>
+        <p style="font-size: 16px; margin-bottom: 20px;">Twój gang przestał istnieć.</p>
+        <p style="font-size: 24px; color: #27ae60; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${finalScore}</p>
+        <button class="main-btn" onclick="location.reload()">Zagraj ponownie</button>
+    `;
+    
+    document.getElementById('skill-menu').style.display = 'none';
+    if (btnInventory) btnInventory.style.display = 'none';
+    if (inventoryUI) inventoryUI.style.display = 'none';
+    
+    const shop = document.getElementById('castle-shop');
+    if (shop) shop.style.display = 'none';
+}
 
 // --- KOMUNIKACJA Z SERWEREM ---
 socket.on('init', (data) => { 
@@ -447,36 +514,8 @@ socket.on('damageText', (data) => {
 });
 
 socket.on('gameOver', (data) => {
-    gameState = 'GAMEOVER';
-    
-    document.getElementById('ui-layer').style.display = 'flex';
-    document.getElementById('step-1').style.display = 'none';
-    document.getElementById('step-2').style.display = 'none';
-    
     let scoreDisplay = (data && !isNaN(data.finalScore)) ? data.finalScore : 0;
-
-    let gameOverDiv = document.getElementById('game-over-screen');
-    if (!gameOverDiv) {
-        gameOverDiv = document.createElement('div');
-        gameOverDiv.id = 'game-over-screen';
-        gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.color = '#111'; 
-        document.getElementById('menu').appendChild(gameOverDiv);
-    }
-    gameOverDiv.style.display = 'block';
-    gameOverDiv.innerHTML = `
-        <h2 style="color: #e74c3c; font-size: 38px; margin-bottom: 10px; text-transform: uppercase;">Zostałeś pożarty!</h2>
-        <p style="font-size: 16px; margin-bottom: 20px;">Twój gang przestał istnieć.</p>
-        <p style="font-size: 24px; color: #27ae60; font-weight: bold; margin-bottom: 30px;">Zebrałeś masy: ${scoreDisplay}</p>
-        <button class="main-btn" onclick="location.reload()">Zagraj ponownie</button>
-    `;
-    
-    document.getElementById('skill-menu').style.display = 'none';
-    if (btnInventory) btnInventory.style.display = 'none';
-    if (inventoryUI) inventoryUI.style.display = 'none';
-    
-    const shop = document.getElementById('castle-shop');
-    if (shop) shop.style.display = 'none';
+    showGameOverScreen(scoreDisplay, "Zostałeś pożarty!");
 });
 
 /**
@@ -495,6 +534,9 @@ socket.on('serverTick', (data) => {
     
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
+    
+    // Nadpisujemy strefy pobranymi zamkami z serwera (teraz 4 zamki będą widoczne!)
+    if (data.castles) safeZones = data.castles;
     
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
@@ -543,6 +585,13 @@ function checkEquipmentUpgrades() {
 
 function update() {
     if (gameState !== 'PLAYING') return;
+
+    // KONTROLA LIMITU CZASU (15 MINUT)
+    if (Date.now() - gameStartTime >= GAME_TIME_LIMIT_MS) {
+        socket.disconnect(); // Odlaczamy od serwera
+        showGameOverScreen(Math.floor(player.score), "CZAS MINĄŁ!");
+        return;
+    }
 
     if (player.aura && player.aura.time > 0) {
         player.aura.time--;
@@ -691,6 +740,17 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         ctx.stroke();
     }
     
+    // Rysuj wybrany punkt na etapie SPAWN_SELECTION
+    if (gameState === 'SPAWN_SELECTION') {
+        ctx.beginPath();
+        ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#e74c3c'; ctx.fill(); ctx.lineWidth = 2; ctx.strokeStyle = '#111'; ctx.stroke();
+        
+        ctx.beginPath();
+        ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
+        ctx.strokeStyle = '#e74c3c'; ctx.stroke();
+    }
+
     ctx.restore();
 }
 
@@ -709,6 +769,33 @@ function gameLoop(currentTime) {
 
     if (Date.now() - lastServerTickTime > 1500) {
         isServerLagging = true;
+    }
+
+    // --- EKRAN WYBORU SPAWNU (SPACE ROOM) ---
+    if (gameState === 'SPAWN_SELECTION') {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#2c3e50';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.fillStyle = '#ecf0f1';
+        ctx.font = "bold 36px 'Permanent Marker', Arial";
+        ctx.textAlign = 'center';
+        ctx.fillText("SPACE ROOM - WYBÓR LĄDOWANIA", canvas.width / 2, 80);
+        ctx.font = "bold 20px Arial";
+        ctx.fillText("Kliknij na mapę, aby wybrać miejsce zrzutu.", canvas.width / 2, 120);
+
+        let mapSize = 400;
+        let mapX = canvas.width / 2 - mapSize / 2;
+        let mapY = canvas.height / 2 - mapSize / 2;
+        drawRadarMap(ctx, mapX, mapY, mapSize, true);
+
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = "bold 48px 'Permanent Marker', Arial";
+        ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
+
+        requestAnimationFrame(gameLoop);
+        return;
     }
 
     let allEntities = Object.values(otherPlayers).concat(bots);
@@ -1002,7 +1089,6 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // --- ZMIANA: PRZESUNIĘTO MIDASA NA PRAWĄ STRONĘ ---
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save();
             let tutorialWidth = 380;
@@ -1068,6 +1154,18 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
+            // --- NOWOŚĆ: TIMER 15 MINUT W PRAWYM GÓRNYM ROGU (Poniżej Rankingu) ---
+            let timePlayedMs = Date.now() - gameStartTime;
+            let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
+            let mins = Math.floor(timeLeftMs / 60000);
+            let secs = Math.floor((timeLeftMs % 60000) / 1000);
+            ctx.fillStyle = timeLeftMs < 60000 ? '#e74c3c' : '#111'; 
+            ctx.font = "bold 20px 'Permanent Marker', Arial";
+            ctx.textAlign = 'right';
+            ctx.fillText(`⏳ CZAS: ${mins}:${secs < 10 ? '0' : ''}${secs}`, canvas.width - 20, 180);
+            // Logi uciekają niżej, żeby zrobić miejsce na zegar
+            let logStartY = 210; 
+
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
             let smallRadarX = 20;
@@ -1075,7 +1173,6 @@ function gameLoop(currentTime) {
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
-            // --- ZMIANA: MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
@@ -1111,7 +1208,7 @@ function gameLoop(currentTime) {
                 for (let i = 0; i < killLogs.length; i++) {
                     let log = killLogs[i];
                     ctx.fillStyle = `rgba(231, 76, 60, ${log.time / 50})`; 
-                    ctx.fillText("⚔️ " + log.text, canvas.width - 20, 170 + (i * 22));
+                    ctx.fillText("⚔️ " + log.text, canvas.width - 20, logStartY + (i * 22));
                     log.time--;
                 }
                 ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
