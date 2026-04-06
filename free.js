@@ -7,7 +7,6 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
-let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -233,7 +232,6 @@ window.onkeydown = (e) => {
             if (btnInventory) btnInventory.click();
         }
 
-        // NOWOŚĆ: Wyświetlanie mapy taktycznej
         if (e.code === 'KeyM') isMapOpen = true;
 
         if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
@@ -535,8 +533,11 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
     
-    // Nadpisujemy strefy pobranymi zamkami z serwera (teraz 4 zamki będą widoczne!)
-    if (data.castles) safeZones = data.castles;
+    // NAPRAWA BŁĘDU: Pobieramy zamki, ładujemy je, ale nie redeklarujemy stałej `safeZones` (jeśli by była)
+    if (data.castles) {
+        safeZones.length = 0;
+        data.castles.forEach(c => safeZones.push(c));
+    }
     
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
@@ -1173,6 +1174,7 @@ function gameLoop(currentTime) {
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
+            // --- ZMIANA: MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
