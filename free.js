@@ -7,6 +7,7 @@ const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
+let safeZones = []; // Będzie pobierane z serwera!
 let currentEvent = null;   
 let eventTimeLeft = 0;     
 let controlType = 'WASD', gameState = 'MENU', myId = null;
@@ -533,7 +534,7 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0; 
     
-    // NAPRAWA BŁĘDU: Pobieramy zamki, ładujemy je, ale nie redeklarujemy stałej `safeZones` (jeśli by była)
+    // Nadpisujemy strefy pobranymi zamkami z serwera (teraz 4 zamki będą widoczne!)
     if (data.castles) {
         safeZones.length = 0;
         data.castles.forEach(c => safeZones.push(c));
@@ -784,7 +785,8 @@ function gameLoop(currentTime) {
         ctx.textAlign = 'center';
         ctx.fillText("SPACE ROOM - WYBÓR LĄDOWANIA", canvas.width / 2, 80);
         ctx.font = "bold 20px Arial";
-        ctx.fillText("Kliknij na mapę, aby wybrać miejsce zrzutu.", canvas.width / 2, 120);
+        // ZMIANA: Zaktualizowany opis
+        ctx.fillText("Wybierz miejsce, gdzie chcesz trafić na mapie.", canvas.width / 2, 120);
 
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
@@ -1155,17 +1157,51 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- NOWOŚĆ: TIMER 15 MINUT W PRAWYM GÓRNYM ROGU (Poniżej Rankingu) ---
+            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
             let secs = Math.floor((timeLeftMs % 60000) / 1000);
-            ctx.fillStyle = timeLeftMs < 60000 ? '#e74c3c' : '#111'; 
-            ctx.font = "bold 20px 'Permanent Marker', Arial";
-            ctx.textAlign = 'right';
-            ctx.fillText(`⏳ CZAS: ${mins}:${secs < 10 ? '0' : ''}${secs}`, canvas.width - 20, 180);
-            // Logi uciekają niżej, żeby zrobić miejsce na zegar
-            let logStartY = 210; 
+            let timeString = `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
+
+            let timerW = 160;
+            let timerH = 46;
+            let timerX = canvas.width - timerW - 20;
+            let timerY = 160;
+
+            ctx.save();
+            // Białe tło
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(timerX, timerY, timerW, timerH);
+            // Czarna gruba ramka
+            ctx.strokeStyle = '#111111';
+            ctx.lineWidth = 4;
+            ctx.strokeRect(timerX, timerY, timerW, timerH);
+
+            // Ikonki botów w rogach (czarne kuleczki)
+            ctx.fillStyle = '#111111';
+            ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
+            // Oczy botów
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
+
+            // Cyfrowy czarny tekst
+            ctx.fillStyle = '#111111';
+            ctx.font = "bold 28px monospace";
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            
+            // Ostatnia minuta - niech cyfry migają, ale zostają czarno-białe/szare
+            if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
+                ctx.fillStyle = '#777777'; 
+            }
+            
+            ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
+            ctx.restore();
+
+            let logStartY = timerY + timerH + 20; // 226 - przesunięcie logów 
 
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
