@@ -2,8 +2,7 @@
 // FREE.JS - Logika trybu "Free"
 // ==========================================
 
-window.socket = io('https://mywebgame-xtreme-destiny.onrender.com');
-const socket = window.socket;
+const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
@@ -134,7 +133,7 @@ window.addEventListener('mousedown', (e) => {
     if (gameState === 'SPAWN_SELECTION') {
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2;
+        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
         
         if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
             let mapScale = WORLD_SIZE / mapSize;
@@ -777,29 +776,43 @@ function gameLoop(currentTime) {
         isServerLagging = true;
     }
 
-    // --- EKRAN WYBORU SPAWNU (SPACE ROOM) ---
+    // --- EKRAN WYBORU SPAWNU (SPACE ROOM / LOBBY) ---
     if (gameState === 'SPAWN_SELECTION') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
+        // ZMIANA: Tło zeszytowe w kratkę dla Lobby
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.strokeStyle = '#e0e0e0';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let i = 0; i < canvas.width; i += 40) { ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); }
+        for (let i = 0; i < canvas.height; i += 40) { ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); }
+        ctx.stroke();
 
         ctx.fillStyle = '#111111';
-        ctx.font = "bold 36px 'Permanent Marker', Arial";
+        ctx.font = "bold 40px 'Permanent Marker', Arial";
         ctx.textAlign = 'center';
-        ctx.fillText("SPACE ROOM - WYBÓR LĄDOWANIA", canvas.width / 2, 80);
-        ctx.font = "bold 20px Arial";
-        ctx.fillText("Wybierz miejsce, gdzie chcesz trafić na mapie.", canvas.width / 2, 120);
+        ctx.fillText("🚀 LOBBY / SPACE ROOM", canvas.width / 2, 60);
+        
+        ctx.font = "bold 18px Arial";
+        ctx.fillStyle = '#555';
+        ctx.fillText("Serwer synchronizuje dane... Wybierz taktyczny punkt zrzutu:", canvas.width / 2, 95);
 
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2;
+        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
         drawRadarMap(ctx, mapX, mapY, mapSize, true);
 
-        ctx.fillStyle = '#111111';
-        ctx.font = "bold 48px 'Permanent Marker', Arial";
+        ctx.fillStyle = '#e74c3c';
+        ctx.font = "bold 50px 'Permanent Marker', Arial";
         ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
+
+        const tempName = document.getElementById('playerName') ? document.getElementById('playerName').value || "Gracz" : "Gracz";
+        ctx.fillStyle = '#111';
+        ctx.font = "bold 16px Arial";
+        ctx.fillText(`Status: W gotowości | Oczekujący gracz: ${tempName}`, canvas.width / 2, mapY + mapSize + 90);
 
         requestAnimationFrame(gameLoop);
         return;
@@ -1171,33 +1184,30 @@ function gameLoop(currentTime) {
             let timerW = 160;
             let timerH = 46;
             let timerX = canvas.width / 2 - timerW / 2;
-            let timerY = 95;
+            
+            // Dynamiczne wyliczanie Y
+            let timerY = (currentEvent === null) ? 60 : 95;
 
             ctx.save();
-            // Białe tło
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(timerX, timerY, timerW, timerH);
-            // Czarna gruba ramka
             ctx.strokeStyle = '#111111';
             ctx.lineWidth = 4;
             ctx.strokeRect(timerX, timerY, timerW, timerH);
 
-            // Ikonki botów w rogach (czarne kuleczki)
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
-            // Oczy botów
+            
             ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
 
-            // Cyfrowy czarny tekst
             ctx.fillStyle = '#111111';
             ctx.font = "bold 28px monospace";
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // Ostatnia minuta - niech cyfry migają na szaro
             if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
                 ctx.fillStyle = '#777777'; 
             }
@@ -1205,7 +1215,7 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = 170; 
+            let logStartY = 170; // Przywrócono pierwotną pozycję logów zabójstw
 
             // --- MAPA I RADAR ---
             let smallRadarSize = 120;
@@ -1214,7 +1224,6 @@ function gameLoop(currentTime) {
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
-            // --- ZMIANA: MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
