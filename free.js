@@ -523,19 +523,23 @@ socket.on('gameOver', (data) => {
 /**
  * ODBIÓR DANYCH Z SERWERA
  */
+/**
+ * ODBIÓR DANYCH Z SERWERA
+ */
 socket.on('serverTick', (data) => {
     lastServerTickTime = Date.now(); 
     isServerLagging = false;
 
     if (!data) return; 
 
-    foods = Array.isArray(data.foods) ? data.foods : []; 
-    bots = Array.isArray(data.bots) ? data.bots : []; 
-    projectiles = Array.isArray(data.projectiles) ? data.projectiles : [];
-    loots = Array.isArray(data.loots) ? data.loots : [];              
+    // --- ZMIANA: Konwersja optymalnych słowników z serwera na tablice dla silnika ---
+    foods = data.foods ? Object.values(data.foods) : []; 
+    bots = data.bots ? Object.values(data.bots) : []; 
+    projectiles = data.projectiles ? Object.values(data.projectiles) : [];
+    loots = data.loots ? Object.values(data.loots) : [];              
     
     currentEvent = data.activeEvent || null;        
-    eventTimeLeft = data.eventTimeLeft || 0; 
+    eventTimeLeft = data.eventTimeLeft || 0;
     
     if (data.castles) {
         safeZones.length = 0;
