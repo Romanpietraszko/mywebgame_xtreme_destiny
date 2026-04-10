@@ -1,27 +1,20 @@
 // ==========================================
-// SERVER.JS - Backend i Symulacja Świata
+// SERVER.JS - Backend i Symulacja Świata (Zoptymalizowany V3 - PRO)
 // ==========================================
 
 const express = require('express');
 const app = express();
 const http = require('http').createServer(app);
-// --- TUTAJ JEST MAGIA ---
-// Odblokowujemy serwer na ruch z zewnętrznych portali (CORS)
 const io = require('socket.io')(http, {
-    cors: {
-        origin: "*", // Wpuszcza graczy z CrazyGames i każdego innego portalu
-        methods: ["GET", "POST"]
-    }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
-// ------------------------
 app.use(express.static(__dirname));
 
 // ==========================================
-// NOWOŚĆ: INTEGRACJA LOKALNEGO AI (QWEN)
+// INTEGRACJA LOKALNEGO AI (QWEN)
 // ==========================================
 async function getAIWellbeingMessage(mass) {
     try {
-        // Zabezpieczenie przed "zawieszeniem" serwera (timeout 1.5s)
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 1500);
 
@@ -40,8 +33,6 @@ async function getAIWellbeingMessage(mass) {
         const data = await response.json();
         return data.response.trim();
     } catch (error) {
-        // Jeśli Qwen jest wyłączony lub działa za wolno - cichy fallback
-        // console.log("[AI ERROR] Używam fallbacku dla śmierci.");
         const fallbacks = [
             `Koniec misji z wynikiem ${mass}. Zrób sobie przerwę na łyk wody i przewietrz głowę.`,
             `Niestety, zostałeś pożarty. Masa: ${mass}. Pamiętaj, gra to nie życie. Wróć, jak odpoczniesz.`,
@@ -54,23 +45,23 @@ async function getAIWellbeingMessage(mass) {
 // --- KONFIGURACJA ŚWIATA ---
 const WORLD_SIZE = 4000;
 const MAX_FOODS = 200;
-const MAX_BOTS = 80; // ZWIĘKSZONA LICZBA BOTÓW (PRAWDZIWA WOJNA!)
-const MAX_LOOTS = 15; // Ilość skrzynek na mapie
+const MAX_BOTS = 80; 
+const MAX_LOOTS = 15; 
 
+// OPTYMALIZACJA V1: Przejście na słowniki dla szybkiego usunięcia z pamięci
 const players = {};
-let foods = [];
-let bots = [];
-let loots = []; // Tablica skrzynek
-let projectiles = []; // Miecze rzucane na E
+let foods = {};
+let bots = {};
+let loots = {}; 
+let projectiles = {}; 
 let entityIdCounter = 0;
 let botNameCounter = 0;
 
-// --- NOWOŚĆ: ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
+// --- ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
 let bushes = [];
 let meteorZones = [];
-let botDifficultyMultiplier = 1.0; // Mnożnik trudności AI (Trening)
+let botDifficultyMultiplier = 1.0; 
 
-// Generowanie przeszkód (krzaków) na starcie serwera
 for (let i = 0; i < 35; i++) {
     bushes.push({
         x: Math.random() * WORLD_SIZE,
@@ -82,12 +73,11 @@ for (let i = 0; i < 35; i++) {
 // --- ZMIENNE EVENTOWE I DRUŻYNOWE ---
 let activeEvent = null; 
 let eventTimer = 0;      
-let eventTickCounter = 0; // Pomocniczy zegar do zadawania obrażeń od deszczu
+let eventTickCounter = 0; 
 let currentKingId = null; 
 
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
 
-// --- ZAMKI (BAZY DRUŻYNOWE) ---
 let castles = [
     { id: 'N', team: 'N', x: 2000, y: 300, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: 'N' },
     { id: 'S', team: 'S', x: 2000, y: 3700, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: 'S' },
@@ -114,11 +104,9 @@ const weaponStats = {
     'explosive_kunai': { dmg: 75, life: 85, speed: 38, cost: 30, piercing: true }
 };
 
-// --- AKTUALIZACJA: ASYNCHRONICZNE ZABIJANIE Z QWENEM ---
 async function killPlayer(pId) {
     const p = players[pId];
     if (p) {
-        // Detronizacja
         if (pId === currentKingId) {
             io.emit('killEvent', { text: `☠️ Król ${p.name} obalony!`, time: 200 });
             currentKingId = null; 
@@ -127,178 +115,116 @@ async function killPlayer(pId) {
 
         console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! Odpytuję AI...`);
         const finalMass = Math.floor(p.score || 0);
-        
-        // Zabezpieczamy gracza na serwerze przed dalszym ruchem, zanim usuniemy go z pamięci
         p.isSafe = true; 
-        
-        // Odpytanie modelu (działa w tle)
         const deathMessage = await getAIWellbeingMessage(finalMass);
-
-        // Wysyłamy do klienta pełny ekran śmierci wraz z wiadomością
         io.to(p.id).emit('gameOver', { finalScore: finalMass, message: deathMessage });
-        
         console.log(`[GAME OVER] Wysłałem wiadomość: "${deathMessage}"`);
         delete players[pId];
     }
 }
 
 function spawnFood() {
-    return { id: ++entityIdCounter, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
+    let id = ++entityIdCounter;
+    foods[id] = { id: id, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
 }
 
 function spawnLoot() {
+    let id = ++entityIdCounter;
     const types = ['mass', 'skill', 'weapon'];
-    return {
-        id: ++entityIdCounter,
+    loots[id] = {
+        id: id,
         x: Math.random() * WORLD_SIZE,
         y: Math.random() * WORLD_SIZE,
         type: types[Math.floor(Math.random() * types.length)]
     };
 }
 
-// ==========================================
-// INTELIGENTNE SPAWNOWANIE BOTÓW I MINIBOSSÓW
-// ==========================================
 function spawnBot() {
     botNameCounter++;
-    
-    let botScore = 1 + Math.random() * 10; // Start z 1-10 masy (zamiast 0)
+    let botScore = 1 + Math.random() * 10;
     let botName = `Bot AI #${botNameCounter}`;
     let botColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
     
-    // Szansa na wygenerowanie MINIBOSSA (Weterana) - od razu niebezpieczny
     const randBoss = Math.random();
-    if (randBoss < 0.01) { // 1% szansy na super bota
+    if (randBoss < 0.01) { 
         botScore = 150 + Math.random() * 50; 
         botName = `Czarny Tytan AI`;
-        botColor = '#111'; // Czarny kruk
-    } else if (randBoss < 0.05) { // Kolejne 4% szans na silnego bota
+        botColor = '#111'; 
+    } else if (randBoss < 0.05) { 
         botScore = 50 + Math.random() * 30;
         botName = `Wędrowny Rycerz AI`;
-        botColor = '#34495e'; // Stalowy
+        botColor = '#34495e'; 
     }
 
-    return {
-        id: `bot_${++entityIdCounter}`,
+    let id = `bot_${++entityIdCounter}`;
+    bots[id] = {
+        id: id,
         x: Math.random() * WORLD_SIZE,
         y: Math.random() * WORLD_SIZE,
-        score: botScore, 
-        color: botColor,
-        name: botName,
-        angle: Math.random() * Math.PI * 2,
-        speed: 2.5,
-        ownerId: null, 
-        team: null, 
-        angleOffset: 0, 
-        distOffset: 0,  
-        targetX: 0,     
-        targetY: 0,
-        inventory: { bow: 0, knife: 0, shuriken: 0 },
-        activeWeapon: 'sword',
-        lastShootTime: 0 // Do kontrolowania agresji strzelania
+        score: botScore, color: botColor, name: botName,
+        angle: Math.random() * Math.PI * 2, speed: 2.5,
+        ownerId: null, team: null, angleOffset: 0, distOffset: 0,  
+        targetX: 0, targetY: 0,
+        inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
+        lastShootTime: 0
     };
 }
 
-for (let i = 0; i < MAX_FOODS; i++) foods.push(spawnFood());
-for (let i = 0; i < MAX_BOTS; i++) bots.push(spawnBot());
-for (let i = 0; i < MAX_LOOTS; i++) loots.push(spawnLoot());
+for (let i = 0; i < MAX_FOODS; i++) spawnFood();
+for (let i = 0; i < MAX_BOTS; i++) spawnBot();
+for (let i = 0; i < MAX_LOOTS; i++) spawnLoot();
 
 io.on('connection', (socket) => {
     console.log(`\n===========================================`);
     console.log(`[SOCKET INFO] Nowe połączenie. ID: ${socket.id}`);
     console.log(`===========================================\n`);
 
-    // --- DOŁĄCZANIE (TRYB FREE) ---
     socket.on('joinGame', (data) => {
         const skinType = data.skin || 'standard';
-        let baseSpeed = 5;
-        let massGainMult = 1.0; 
+        let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
+        let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
         
-        if (skinType === 'arystokrata') {
-            baseSpeed = 4.8;     
-            massGainMult = 1.15; 
-        } else if (skinType === 'ninja') {
-            baseSpeed = 5.5;      
-        }
-
         players[socket.id] = {
-            id: socket.id,
-            x: 2000,
-            y: 2000,
-            score: 0, 
-            baseSpeed: baseSpeed, 
-            massMultiplier: massGainMult, 
-            level: 1,
-            skillPoints: 0,
-            skills: { speed: 0, strength: 0, weapon: 0 },
+            id: socket.id, x: 2000, y: 2000, score: 0, baseSpeed: baseSpeed, massMultiplier: massGainMult, 
+            level: 1, skillPoints: 0, skills: { speed: 0, strength: 0, weapon: 0 },
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
-            lastWinterUse: 0,   
-            lastDashUse: 0, 
-            isMoving: false, 
-            idleTime: 0,     
-            color: data.color || '#000',
-            name: data.name || 'Gracz',
-            skin: skinType, 
-            isSafe: false,
-            isShielding: false,
-            armorHits: 0,
-            inventory: { bow: 0, knife: 0, shuriken: 0 },
-            activeWeapon: 'sword',
-            isRecruiting: false, 
-            formation: 0,        
-            moveAngle: 0,        
-            team: null,
-            isTutorialActive: true,
-            tutorialFlags: { m15: false, m50: false, m100: false },
-            tutorialText: ""
+            lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,     
+            color: data.color || '#000', name: data.name || 'Gracz', skin: skinType, 
+            isSafe: false, isShielding: false, armorHits: 0,
+            inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
+            isRecruiting: false, formation: 0, moveAngle: 0, team: null,
+            isTutorialActive: true, tutorialFlags: { m15: false, m50: false, m100: false }, tutorialText: ""
         };
-        socket.emit('init', { id: socket.id });
+        // Wysyłamy statyczne dane tylko raz (razem z krzakami)
+        socket.emit('init', { id: socket.id, castles: castles, bushes: bushes });
 
-        console.log(`\n>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>`);
         console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł jako ${skinType.toUpperCase()}!`);
-        console.log(`<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<\n`);
-
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
     });
 
-    // --- DOŁĄCZANIE (TRYB TEAMS) ---
     socket.on('joinTeamGame', (data) => {
         const skinType = data.skin || 'standard';
-        let baseSpeed = 5;
-        let massGainMult = 1.0; 
-        
-        if (skinType === 'arystokrata') {
-            baseSpeed = 4.8;     
-            massGainMult = 1.15; 
-        } else if (skinType === 'ninja') {
-            baseSpeed = 5.5;      
-        }
+        let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
+        let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
 
         const teams = ['N', 'S', 'E', 'W'];
         let teamCounts = { N: 0, S: 0, E: 0, W: 0 };
         Object.values(players).forEach(p => { if (p.team) teamCounts[p.team]++; });
-        
         let chosenTeam = teams.reduce((a, b) => teamCounts[a] <= teamCounts[b] ? a : b);
 
         players[socket.id] = {
-            id: socket.id,
-            x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
-            baseSpeed: baseSpeed,               // FIX: Ustawianie predkosci w Teams
-            massMultiplier: massGainMult,       // FIX: Prawidłowe nadanie mnożnika
-            skills: { speed: 0, strength: 0, weapon: 0 }, 
-            paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
+            id: socket.id, x: 2000, y: 2000, score: 0, level: 1, skillPoints: 0,
+            baseSpeed: baseSpeed, massMultiplier: massGainMult, 
+            skills: { speed: 0, strength: 0, weapon: 0 }, paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,   
-            color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz',
-            skin: skinType, 
+            color: TEAM_COLORS[chosenTeam], name: data.name || 'Żołnierz', skin: skinType, 
             isSafe: false, isShielding: false, armorHits: 0,
             inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
             isRecruiting: false, formation: 0, moveAngle: 0,
-            team: chosenTeam, gameMode: data.mode,
-            isTutorialActive: true,             // FIX: Midas aktywny w Teams
-            tutorialFlags: { m15: false, m50: false, m100: false },
-            tutorialText: ""
+            team: chosenTeam, gameMode: data.mode, isTutorialActive: true, 
+            tutorialFlags: { m15: false, m50: false, m100: false }, tutorialText: ""
         };
         
         let base = castles.find(c => c.id === chosenTeam);
@@ -307,26 +233,21 @@ io.on('connection', (socket) => {
             players[socket.id].y = base.y + (Math.random() * 100 - 50);
         }
 
-        socket.emit('initTeam', { id: socket.id, team: chosenTeam, color: TEAM_COLORS[chosenTeam] });
+        socket.emit('initTeam', { id: socket.id, team: chosenTeam, color: TEAM_COLORS[chosenTeam], castles: castles, bushes: bushes });
         
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
-        
         console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
     });
 
-    // --- NOWOŚĆ: Zmiana Trudności Botów (Odbiór z Klienta) ---
     socket.on('setBotDifficulty', (levelIndex) => {
-        if (levelIndex === 0) botDifficultyMultiplier = 0.6; // Łatwy
-        else if (levelIndex === 1) botDifficultyMultiplier = 1.0; // Normalny
-        else if (levelIndex === 2) botDifficultyMultiplier = 1.5; // Trudny
-        
-        console.log(`[TRENING] Trudność botów zmieniona! Mnożnik: x${botDifficultyMultiplier}`);
+        if (levelIndex === 0) botDifficultyMultiplier = 0.6;
+        else if (levelIndex === 1) botDifficultyMultiplier = 1.0; 
+        else if (levelIndex === 2) botDifficultyMultiplier = 1.5; 
         io.emit('killEvent', { text: `⚙️ Zmiana trudności AI: ${levelIndex === 0 ? 'ŁATWY' : levelIndex === 1 ? 'NORMALNY' : 'TRUDNY'}`, time: 150 });
     });
 
-    // --- NOWOŚĆ: Przełączanie formacji z panelu klienta ---
     socket.on('setFormation', (formationIndex) => {
         const p = players[socket.id];
         if (p) {
@@ -336,37 +257,27 @@ io.on('connection', (socket) => {
         }
     });
 
-    // --- RUCH (TRYB FREE) ---
     socket.on('playerMovement', (data) => {
         const p = players[socket.id];
         if (p) {
             p.isMoving = (data.x !== p.x || data.y !== p.y);
             if (p.isMoving) p.idleTime = 0; 
-
-            if (p.isMoving) {
-                p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
-            }
-            p.x = data.x;
-            p.y = data.y;
-            p.isSafe = data.isSafe;
-            p.isShielding = data.isShielding; 
+            if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
+            p.x = data.x; p.y = data.y; p.isSafe = data.isSafe; p.isShielding = data.isShielding; 
 
             let newLevel = Math.floor(p.score / 20) + 1;
             if (newLevel > p.level) {
-                p.level = newLevel;
-                p.skillPoints++;
+                p.level = newLevel; p.skillPoints++;
                 socket.emit('levelUp', { level: p.level, points: p.skillPoints });
             }
         }
     });
 
-    // --- RUCH (TRYB TEAMS) ---
     socket.on('playerMovementTeam', (data) => {
         const p = players[socket.id];
         if (p) {
             p.isMoving = (data.x !== p.x || data.y !== p.y);
             if (p.isMoving) p.idleTime = 0;
-
             if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
             p.x = data.x; p.y = data.y; p.isShielding = data.isShielding; 
             let newLevel = Math.floor(p.score / 20) + 1;
@@ -378,22 +289,16 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         const now = Date.now();
         if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
-            p.lastDashUse = now;
-            let dashDist = 150;
-            p.x += dir.x * dashDist;
-            p.y += dir.y * dashDist;
-            p.x = Math.max(0, Math.min(WORLD_SIZE, p.x));
-            p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
+            p.lastDashUse = now; let dashDist = 150;
+            p.x += dir.x * dashDist; p.y += dir.y * dashDist;
+            p.x = Math.max(0, Math.min(WORLD_SIZE, p.x)); p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
             io.emit('killEvent', { text: `💨 Zryw!`, time: 100 });
         }
     });
 
     socket.on('toggleRecruit', () => {
         const p = players[socket.id];
-        if (p) {
-            p.isRecruiting = !p.isRecruiting;
-            socket.emit('recruitToggled', p.isRecruiting);
-        }
+        if (p) { p.isRecruiting = !p.isRecruiting; socket.emit('recruitToggled', p.isRecruiting); }
     });
 
     socket.on('switchFormation', () => {
@@ -407,14 +312,10 @@ io.on('connection', (socket) => {
 
     socket.on('setBotOffset', (data) => {
         const p = players[socket.id];
-        let b = bots.find(bot => bot.id === data.botId);
+        let b = bots[data.botId];
         if (p && b && b.ownerId === p.id) {
-            b.angleOffset = data.angleOffset;
-            b.distOffset = data.distOffset;
-            if (p.formation !== 3) {
-                p.formation = 3; 
-                socket.emit('formationSwitched', "WŁASNA (PPM)");
-            }
+            b.angleOffset = data.angleOffset; b.distOffset = data.distOffset;
+            if (p.formation !== 3) { p.formation = 3; socket.emit('formationSwitched', "WŁASNA (PPM)"); }
         }
     });
 
@@ -423,12 +324,8 @@ io.on('connection', (socket) => {
         if (p && p.skillPoints > 0) {
             if (skillName === 'strength' && p.score < 100) return; 
             if (skillName === 'weapon' && p.score < 15) return;   
-
-            let maxLevel = 20;
-
-            if (p.skills[skillName] !== undefined && p.skills[skillName] < maxLevel) {
-                p.skills[skillName]++;
-                p.skillPoints--;
+            if (p.skills[skillName] !== undefined && p.skills[skillName] < 20) {
+                p.skills[skillName]++; p.skillPoints--;
                 socket.emit('skillUpdated', { skills: p.skills, points: p.skillPoints, paths: p.paths });
             }
         }
@@ -445,10 +342,8 @@ io.on('connection', (socket) => {
     socket.on('claimGachaReward', (data) => {
         const p = players[socket.id];
         if (!p) return;
-
         if (data.type === 'weapon') {
-            p.inventory[data.item] = 1;
-            p.activeWeapon = data.item;
+            p.inventory[data.item] = 1; p.activeWeapon = data.item;
             io.emit('killEvent', { text: `🔥 ${p.name} wylosował z Gacha potężną broń: ${data.itemName}!` });
         } else if (data.type === 'skin_fragment') {
             io.emit('killEvent', { text: `🌟 ${p.name} zdobył z Gacha fragment: ${data.itemName}!` });
@@ -458,31 +353,21 @@ io.on('connection', (socket) => {
     socket.on('buyShopItem', (item) => {
         const p = players[socket.id];
         if (!p || !p.isSafe) return;
-
         const shopPrices = {
             'bow': 100, 'golden_bow': 250, 'diamond_bow': 500, 'crossbow': 1000, 'shotgun': 2000,
             'knife': 50, 'golden_knife': 150, 'diamond_knife': 350, 'hunting_knife': 700, 'cleaver': 1200,
             'shuriken': 20, 'golden_shuriken': 80, 'diamond_shuriken': 200, 'chakram': 500, 'explosive_kunai': 1000
         };
-
         let price = shopPrices[item];
-        
-        if (p.skin === 'arystokrata') {
-            price = Math.floor(price * 0.95);
-        }
+        if (p.skin === 'arystokrata') price = Math.floor(price * 0.95);
 
         if (price && p.score >= price) {
-            p.score -= price;              
-            p.inventory[item] = 1;        
-            p.activeWeapon = item;        
+            p.score -= price; p.inventory[item] = 1; p.activeWeapon = item;              
             socket.emit('shopSuccess', { item: item });
             
-            bots.forEach(b => {
-                if (b.ownerId === p.id) {
-                    b.inventory[item] = 1;
-                    b.activeWeapon = item;
-                }
-            });
+            for (let bId in bots) {
+                if (bots[bId].ownerId === p.id) { bots[bId].inventory[item] = 1; bots[bId].activeWeapon = item; }
+            }
         } else {
             socket.emit('shopError', { message: "Za mało punktów masy!" });
         }
@@ -496,26 +381,15 @@ io.on('connection', (socket) => {
             const types = ['shotgun', 'crossbow', 'diamond_bow', 'golden_bow', 'bow', 'cleaver', 'hunting_knife', 'diamond_knife', 'golden_knife', 'knife', 'explosive_kunai', 'chakram', 'diamond_shuriken', 'golden_shuriken', 'shuriken'];
             for(let t of types) if(p.inventory[t]) { p.activeWeapon = t; break; }
         }
-        
-        bots.forEach(b => {
-            if (b.ownerId === p.id) b.activeWeapon = p.activeWeapon;
-        });
+        for (let bId in bots) { if (bots[bId].ownerId === p.id) bots[bId].activeWeapon = p.activeWeapon; }
     });
 
-    // --- NOWOŚĆ: WYPOSAŻANIE BRONI Z PLECACA (DRAG & DROP / KLIKNIĘCIE) ---
     socket.on('equipFromInventory', (data) => {
         const p = players[socket.id];
         if (!p || !data.weaponId) return;
-        
-        // Upewniamy się, że gracz na pewno zdobył tę broń
         if (p.inventory[data.weaponId] > 0) {
             p.activeWeapon = data.weaponId;
-            console.log(`[EKWIPUNEK] ${p.name} wyciągnął z plecaka: ${data.weaponId}`);
-            
-            // Boty kopiują broń gracza
-            bots.forEach(b => {
-                if (b.ownerId === p.id) b.activeWeapon = p.activeWeapon;
-            });
+            for (let bId in bots) { if (bots[bId].ownerId === p.id) bots[bId].activeWeapon = p.activeWeapon; }
         }
     });
 
@@ -534,13 +408,14 @@ io.on('connection', (socket) => {
                 p.score -= stats.cost;
                 let finalDmg = type === 'sword' ? stats.dmg + (p.skills.weapon * 1) : stats.dmg;
                 let isPierce = type === 'sword' ? (p.paths.weapon === 'piercing') : stats.piercing;
-
-                projectiles.push({
-                    id: ++entityIdCounter, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
+                
+                let pid = ++entityIdCounter;
+                projectiles[pid] = {
+                    id: pid, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
                     x: data.x, y: data.y, dx: data.dx, dy: data.dy,
                     life: stats.life, speed: stats.speed, isBotSword: false,
                     scoreAtThrow: p.score, isPiercing: isPierce, damage: finalDmg, isWinter: false, projType: type 
-                });
+                };
             }
         }
     });
@@ -551,61 +426,71 @@ io.on('connection', (socket) => {
         if (p && p.paths.weapon === 'winter' && now - p.lastWinterUse >= 15000) {
             p.lastWinterUse = now;
             let winterDmg = 15 + (p.skills.weapon * 2);
-
-            projectiles.push({
-                id: ++entityIdCounter, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
+            let pid = ++entityIdCounter;
+            projectiles[pid] = {
+                id: pid, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
                 x: p.x, y: p.y - 1000, dx: 0, dy: 1.5, life: 150, speed: 18,
                 isBotSword: false, scoreAtThrow: Math.max(700, p.score), isPiercing: true, isWinter: true, damage: winterDmg, projType: 'winter'
-            });
+            };
         }
     });
 
     socket.on('disconnect', () => {
         const p = players[socket.id];
-        console.log(`\n-------------------------------------------`);
-        if (p) console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer.`);
-        delete players[socket.id];
-        console.log(`-------------------------------------------\n`);
+        if (p) {
+            console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer.`);
+            delete players[socket.id];
+        }
     });
 });
+
+// ==========================================
+// OPTYMALIZACJA V2: SIATKA PRZESTRZENNA (Spatial Hash Grid)
+// ==========================================
+const CELL_SIZE = 400; 
+
+function getNearbyEntities(x, y, grid) {
+    let cx = Math.floor(x / CELL_SIZE);
+    let cy = Math.floor(y / CELL_SIZE);
+    let nearby = { players: [], bots: [], foods: [], loots: [] };
+    
+    for (let dx = -1; dx <= 1; dx++) {
+        for (let dy = -1; dy <= 1; dy++) {
+            let cell = grid[`${cx + dx},${cy + dy}`];
+            if (cell) {
+                nearby.players.push(...cell.players);
+                nearby.bots.push(...cell.bots);
+                nearby.foods.push(...cell.foods);
+                nearby.loots.push(...cell.loots);
+            }
+        }
+    }
+    return nearby;
+}
 
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
     eventTickCounter++;
 
-    // Kary za ucieczkę z mapy
-    const pKeysList = Object.keys(players);
-    for (let i = pKeysList.length - 1; i >= 0; i--) {
-        let pId = pKeysList[i];
+    for (let pId in players) {
         let p = players[pId];
-        // Ochrona dla graczy z flagą isSafe = true (np. w trakcie śmierci)
         if (!p.isSafe && (p.x < -10 || p.x > WORLD_SIZE + 10 || p.y < -10 || p.y > WORLD_SIZE + 10)) {
             io.emit('killEvent', { text: `${p.name} zginął poza mapą!` }); 
             killPlayer(pId);
         }
     }
 
-    // --- LOGIKA ZAMKÓW I OBLĘŻEŃ (TRYB TEAMS) ---
+    // --- LOGIKA ZAMKÓW I OBLĘŻEŃ ---
     Object.values(players).forEach(p => { if (p.team && !p.isSafe) p.isSafe = false; }); 
 
     castles.forEach(c => {
-        let defenders = 0;
-        let attackers = 0;
-        let attackingTeam = null;
-
+        let defenders = 0, attackers = 0, attackingTeam = null;
         Object.values(players).forEach(p => {
             if (!p.team) return; 
-            
-            let dist = Math.hypot(p.x - c.x, p.y - c.y);
-            if (dist < c.radius) {
-                if (p.team === c.owner) {
-                    defenders++;
-                    p.isSafe = true; // Bezpieczny
-                } else {
-                    attackers++;
-                    attackingTeam = p.team;
-                    
-                    // PARZENIE INTRUZÓW!
+            if (Math.hypot(p.x - c.x, p.y - c.y) < c.radius) {
+                if (p.team === c.owner) { defenders++; p.isSafe = true; } 
+                else {
+                    attackers++; attackingTeam = p.team;
                     if (eventTickCounter % 30 === 0 && !p.isSafe) {
                         let burnDamage = Math.max(2, Math.floor(p.score * 0.05)); 
                         p.score -= burnDamage;
@@ -615,14 +500,11 @@ setInterval(() => {
             }
         });
 
-        // Proces przejmowania (1 sekunda)
         if (eventTickCounter % 30 === 0) {
             if (attackers > defenders && c.owner !== attackingTeam) {
-                c.captureProgress += 3.4; // 100% / 3.4 = ~30 sekund
+                c.captureProgress += 3.4;
                 if (c.captureProgress >= 100) {
-                    c.owner = attackingTeam;
-                    c.color = TEAM_COLORS[attackingTeam];
-                    c.captureProgress = 0;
+                    c.owner = attackingTeam; c.color = TEAM_COLORS[attackingTeam]; c.captureProgress = 0;
                     io.emit('killEvent', { text: `🚩 Zamek ${c.id} zdobyty przez drużynę ${attackingTeam}!` });
                 }
             } else if (c.captureProgress > 0) {
@@ -631,186 +513,109 @@ setInterval(() => {
         }
     });
 
-    // --- SYSTEM EVENTÓW (Król, Deszcz, Śnieżyca lub Meteoryty) ---
+    // --- SYSTEM EVENTÓW ---
     eventTimer++;
-    // Odpalaj event co ok. 90 sekund (30 klatek * 90s = 2700)
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
         let rand = Math.random();
         
-        // Losujemy typ eventu (25% szans na każdy)
         if (rand < 0.25 && playersArray.length > 0) {
-            // EVENT: Polowanie na Króla
             playersArray.sort((a, b) => b.score - a.score);
             let topPlayer = playersArray[0];
-
             if (topPlayer && topPlayer.score >= 50) { 
-                currentKingId = topPlayer.id;
-                activeEvent = 'KING_HUNT';
+                currentKingId = topPlayer.id; activeEvent = 'KING_HUNT';
                 io.emit('killEvent', { text: `👑 EVENT! ${topPlayer.name} ZDOBYŁ KORONĘ! WSZYSCY NA NIEGO!`, time: 300 });
-
                 setTimeout(() => {
                     if (activeEvent === 'KING_HUNT' && players[currentKingId]) {
                         players[currentKingId].score += 500; 
                         io.emit('killEvent', { text: `🛡️ Król ${players[currentKingId].name} przetrwał rzeź! +500 pkt!`, time: 200 });
                     }
-                    activeEvent = null;
-                    currentKingId = null;
-                    eventTimer = 0;
-                }, 30000); // 30 sekund
-            } else {
-                eventTimer = 0; 
-            }
+                    activeEvent = null; currentKingId = null; eventTimer = 0;
+                }, 30000);
+            } else eventTimer = 0; 
         } else if (rand < 0.5) {
-            // EVENT: Kwaśny Deszcz
             activeEvent = 'TOXIC_RAIN';
             io.emit('killEvent', { text: `🌧️ KWAŚNY DESZCZ! Uciekaj do bezpiecznej strefy (Zamku)!`, time: 300 });
-            
-            Object.values(players).forEach(p => {
-                if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'toxic_rain') });
-            });
-
-            setTimeout(() => {
-                activeEvent = null;
-                eventTimer = 0;
-                io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 });
-            }, 25000); // 25 sekund deszczu
+            Object.values(players).forEach(p => { if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'toxic_rain') }); });
+            setTimeout(() => { activeEvent = null; eventTimer = 0; io.emit('killEvent', { text: `⛅ Przejaśnia się. Deszcz ustąpił.`, time: 200 }); }, 25000);
         } else if (rand < 0.75) {
-            // EVENT: Zamięć Śnieżna
             activeEvent = 'BLIZZARD';
             io.emit('killEvent', { text: `❄️ ZAMIĘĆ ŚNIEŻNA! Temperatura spada, wszyscy zwalniają!`, time: 300 });
-
-            Object.values(players).forEach(p => {
-                if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'blizzard') });
-            });
-
-            setTimeout(() => {
-                activeEvent = null;
-                eventTimer = 0;
-                io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 });
-            }, 20000); // 20 sekund śniegu
+            Object.values(players).forEach(p => { if (p.isTutorialActive) io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'blizzard') }); });
+            setTimeout(() => { activeEvent = null; eventTimer = 0; io.emit('killEvent', { text: `☀️ Śnieżyca ustała. Wracamy do normy.`, time: 200 }); }, 20000);
         } else {
-            // --- EVENT DESZCZU METEORYTÓW ---
             activeEvent = 'METEOR_SHOWER';
             io.emit('killEvent', { text: `☄️ UWAGA! Zbliża się deszcz meteorytów! Omijajcie czerwone strefy!`, time: 300 });
-            
-            // Generujemy 10 stref uderzeń
-            for(let m = 0; m < 10; m++) {
-                meteorZones.push({
-                    x: Math.random() * WORLD_SIZE,
-                    y: Math.random() * WORLD_SIZE,
-                    radius: 150 + Math.random() * 100,
-                    timer: 90 // 3 sekundy do uderzenia (30 ticków/sek * 3)
-                });
-            }
-
-            setTimeout(() => {
-                activeEvent = null; 
-                eventTimer = 0;
-                io.emit('killEvent', { text: `💨 Zagrożenie minęło. Meteoryty spadły.`, time: 200 });
-            }, 15000); 
+            for(let m = 0; m < 10; m++) meteorZones.push({ x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE, radius: 150 + Math.random() * 100, timer: 90 });
+            setTimeout(() => { activeEvent = null; eventTimer = 0; io.emit('killEvent', { text: `💨 Zagrożenie minęło. Meteoryty spadły.`, time: 200 }); }, 15000); 
         }
     }
 
-    // --- LOGIKA OBRAŻEŃ OD METEORYTÓW ---
     for (let i = meteorZones.length - 1; i >= 0; i--) {
         let m = meteorZones[i];
         m.timer--;
         if (m.timer <= 0) {
-            // BOOM! Uderzenie w strefę!
             Object.values(players).forEach(p => {
                 if (!p.isSafe && Math.hypot(p.x - m.x, p.y - m.y) < m.radius) {
-                    p.score = Math.max(1, p.score - 100); // 100 pkt obrażeń obszarowych!
+                    p.score = Math.max(1, p.score - 100); 
                     io.emit('damageText', { x: p.x, y: p.y - 30, val: 100, color: '#e74c3c' });
-                    
-                    // NOWOŚĆ: Powiadamianie klientów o grubym trafieniu, żeby wrysowali "X" na minimapę taktyczną
                     io.emit('deathMarker', { x: p.x, y: p.y });
-                    
                     if(p.score <= 1) killPlayer(p.id);
                 }
             });
-            bots.forEach(b => {
-                if (Math.hypot(b.x - m.x, b.y - m.y) < m.radius) {
-                    b.score = Math.max(1, b.score - 100);
-                    io.emit('damageText', { x: b.x, y: b.y - 30, val: 100, color: '#e74c3c' });
+            for (let bId in bots) {
+                if (Math.hypot(bots[bId].x - m.x, bots[bId].y - m.y) < m.radius) {
+                    bots[bId].score = Math.max(1, bots[bId].score - 100);
+                    io.emit('damageText', { x: bots[bId].x, y: bots[bId].y - 30, val: 100, color: '#e74c3c' });
                 }
-            });
-            // Usuwamy strefę po uderzeniu
+            }
             meteorZones.splice(i, 1);
         }
     }
 
-    // Obrażenia od deszczu (Co około 1 sekundę = 30 ticków)
     if (activeEvent === 'TOXIC_RAIN' && eventTickCounter % 30 === 0) {
-        Object.values(players).forEach(p => {
-            if (!p.isSafe && p.score > 5) {
-                let dmg = p.paths.strength === 'titan' ? 1 : 2;
-                p.score -= dmg;
-            }
-        });
-        bots.forEach(b => {
-            if (!b.isSafe && b.score > 5) b.score -= 1;
-        });
+        Object.values(players).forEach(p => { if (!p.isSafe && p.score > 5) { p.score -= (p.paths.strength === 'titan' ? 1 : 2); } });
+        for (let bId in bots) { if (!bots[bId].isSafe && bots[bId].score > 5) bots[bId].score -= 1; }
     }
 
-    // REGENERACJA TYTANA (Gdy stoi w miejscu)
-    if (eventTickCounter % 30 === 0) { // Co 1 sekundę
+    if (eventTickCounter % 30 === 0) { 
         Object.values(players).forEach(p => {
             if (p.paths.strength === 'titan') {
                 if (!p.isMoving) p.idleTime++;
-                if (p.idleTime >= 3) { // Jeśli stoi 3 sekundy
-                    p.score += 2;      // Leczy +2 co sekundę
-                }
+                if (p.idleTime >= 3) p.score += 2; 
             }
         });
-        
-        // --- NOWOŚĆ: PASYWNY WZROST DZIKICH BOTÓW Z MNOŻNIKIEM TRUDNOŚCI ---
-        bots.forEach(b => {
-            if (!b.ownerId) { 
-                let growthChance = (b.score < 30 ? 0.4 : 0.1) * botDifficultyMultiplier;
-                if (Math.random() < growthChance) {
-                    b.score += 1;
-                }
+        for (let bId in bots) {
+            if (!bots[bId].ownerId) { 
+                let growthChance = (bots[bId].score < 30 ? 0.4 : 0.1) * botDifficultyMultiplier;
+                if (Math.random() < growthChance) bots[bId].score += 1;
             }
-        });
+        }
     }
 
-    // --- SPRAWDZANIE PROGRESU DLA TUTORIALA ---
     Object.values(players).forEach(p => {
         if (!p.isTutorialActive || !p.tutorialFlags) return;
-
-        if (p.score >= 15 && !p.tutorialFlags.m15) {
-            p.tutorialFlags.m15 = true;
-            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass15') });
-        }
-        else if (p.score >= 50 && !p.tutorialFlags.m50) {
-            p.tutorialFlags.m50 = true;
-            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass50') });
-        }
-        else if (p.score >= 100 && !p.tutorialFlags.m100) {
-            p.tutorialFlags.m100 = true;
-            io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass100') });
-        }
+        if (p.score >= 15 && !p.tutorialFlags.m15) { p.tutorialFlags.m15 = true; io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass15') }); }
+        else if (p.score >= 50 && !p.tutorialFlags.m50) { p.tutorialFlags.m50 = true; io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass50') }); }
+        else if (p.score >= 100 && !p.tutorialFlags.m100) { p.tutorialFlags.m100 = true; io.to(p.id).emit('tutorialTick', { text: getTutorialMessage(p.name, 'mass100') }); }
     });
 
     let armies = {};
-    for(let b of bots) {
+    for (let bId in bots) {
+        let b = bots[bId];
         if (b.ownerId) {
             if (!armies[b.ownerId]) armies[b.ownerId] = [];
             armies[b.ownerId].push(b);
         }
     }
 
-    // 1. Logika Ruchu Botów i Formacji
-    for (let i = bots.length - 1; i >= 0; i--) {
-        let b = bots[i];
-        
+    // --- 1. RUCH BOTÓW ---
+    for (let bId in bots) {
+        let b = bots[bId];
         let owner = b.ownerId ? players[b.ownerId] : null;
 
-        // --- NOWOŚĆ: SKALOWANIE PRĘDKOŚCI BOTA NA BAZIE TRUDNOŚCI ---
         let botSpeedFromOwner = owner ? owner.baseSpeed : (2.5 * botDifficultyMultiplier); 
         let baseBotSpeed = botSpeedFromOwner + ((owner ? owner.skills.speed : 0) * 0.4);
-        
         let isLightweight = owner && owner.paths.speed === 'lightweight';
         let currentBotSpeed = (activeEvent === 'BLIZZARD' && !isLightweight) ? baseBotSpeed * 0.4 : baseBotSpeed;
         
@@ -818,371 +623,297 @@ setInterval(() => {
             if (owner && armies[b.ownerId]) {
                 let myIndex = armies[b.ownerId].indexOf(b);
                 let total = armies[b.ownerId].length;
-                let targetX = owner.x;
-                let targetY = owner.y;
+                let targetX = owner.x; let targetY = owner.y;
 
                 if (owner.formation === 0) { 
                     let angleStep = (Math.PI * 2) / total;
                     let currentAngle = (Date.now() / 1500) + (myIndex * angleStep);
                     let radius = 70 + (total * 2); 
-                    targetX = owner.x + Math.cos(currentAngle) * radius;
-                    targetY = owner.y + Math.sin(currentAngle) * radius;
-                } 
-                else if (owner.formation === 1) { 
-                    let row = Math.floor(myIndex / 2) + 1;
-                    let side = myIndex % 2 === 0 ? 1 : -1;
+                    targetX = owner.x + Math.cos(currentAngle) * radius; targetY = owner.y + Math.sin(currentAngle) * radius;
+                } else if (owner.formation === 1) { 
+                    let row = Math.floor(myIndex / 2) + 1; let side = myIndex % 2 === 0 ? 1 : -1;
                     if (myIndex === 0) { row = 1; side = 0; } 
-                    let spacingX = 45;
-                    let spacingY = 35;
-                    targetX = owner.x - Math.cos(owner.moveAngle) * (row * spacingX) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
-                    targetY = owner.y - Math.sin(owner.moveAngle) * (row * spacingX) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * spacingY);
-                } 
-                else if (owner.formation === 2) { 
-                    let spacing = 45;
-                    let offset = (myIndex - (total - 1) / 2) * spacing;
+                    targetX = owner.x - Math.cos(owner.moveAngle) * (row * 45) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * 35);
+                    targetY = owner.y - Math.sin(owner.moveAngle) * (row * 45) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * 35);
+                } else if (owner.formation === 2) { 
+                    let offset = (myIndex - (total - 1) / 2) * 45;
                     targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
                     targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
-                }
-                else if (owner.formation === 3) {
+                } else if (owner.formation === 3) {
                     targetX = owner.x + Math.cos(owner.moveAngle + b.angleOffset) * b.distOffset;
                     targetY = owner.y + Math.sin(owner.moveAngle + b.angleOffset) * b.distOffset;
                 }
 
-                b.targetX = targetX;
-                b.targetY = targetY;
-
+                b.targetX = targetX; b.targetY = targetY;
                 let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
                 if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
                     let speedMult = distToTarget > 120 ? 1.8 : (distToTarget > 40 ? 1.3 : 0.8);
-                    b.x += Math.cos(b.angle) * (currentBotSpeed * speedMult);
-                    b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
+                    b.x += Math.cos(b.angle) * (currentBotSpeed * speedMult); b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
                 }
-                
-                if (Math.random() < 0.05) { 
-                    let type = b.activeWeapon;
-                    let stats = weaponStats[type];
-                    
-                    if (stats && b.score >= stats.cost + 5) { 
-                        let target = null;
-                        let minBotDist = 400; 
-                        
-                        Object.values(players).forEach(p2 => {
-                            if (p2.id !== owner.id && (!owner.team || owner.team !== p2.team)) {
-                                let d = Math.hypot(b.x - p2.x, b.y - p2.y);
-                                if (d < minBotDist) { minBotDist = d; target = p2; }
-                            }
-                        });
-                        
-                        if (!target) {
-                            bots.forEach(b2 => {
-                                if (b2.id !== b.id && b2.ownerId !== owner.id && (!owner.team || owner.team !== b2.team)) {
-                                    let d = Math.hypot(b.x - b2.x, b.y - b2.y);
-                                    if (d < minBotDist) { minBotDist = d; target = b2; }
-                                }
-                            });
-                        }
-
-                        if (target) {
-                            b.score -= stats.cost;
-                            let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
-
-                            let botPierce = type === 'sword' ? (owner.paths.weapon === 'piercing') : stats.piercing;
-                            let botFinalDmg = type === 'sword' ? stats.dmg + ((owner.skills.weapon || 0) * 1) : stats.dmg;
-
-                            projectiles.push({
-                                id: ++entityIdCounter, ownerId: owner.id, ownerTeam: owner.team || null, teamInitial: owner.team || null,
-                                x: b.x, y: b.y, dx: Math.cos(aimAngle), dy: Math.sin(aimAngle),
-                                life: stats.life, speed: stats.speed, isBotSword: true,
-                                scoreAtThrow: b.score, isPiercing: botPierce, damage: botFinalDmg, isWinter: false, projType: type
-                            });
-                        }
-                    }
-                }
-
             } else if (!owner) {
-                b.ownerId = null;
-                b.team = null;
-                b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
-                botNameCounter++;
-                b.name = `Bot AI #${botNameCounter}`;
-                b.targetX = 0;
-                b.targetY = 0;
-                b.inventory = { bow: 0, knife: 0, shuriken: 0 };
-                b.activeWeapon = 'sword';
+                b.ownerId = null; b.team = null; b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                botNameCounter++; b.name = `Bot AI #${botNameCounter}`; b.inventory = { bow: 0, knife: 0, shuriken: 0 }; b.activeWeapon = 'sword';
             }
         } else {
             let isHuntingKing = false;
-            
             if (activeEvent === 'KING_HUNT' && currentKingId && players[currentKingId]) {
                 let king = players[currentKingId];
                 if (!king.isSafe) {
-                    isHuntingKing = true;
-                    b.angle = Math.atan2(king.y - b.y, king.x - b.x);
-                    b.x += Math.cos(b.angle) * (currentBotSpeed * 1.5);
-                    b.y += Math.sin(b.angle) * (currentBotSpeed * 1.5);
+                    isHuntingKing = true; b.angle = Math.atan2(king.y - b.y, king.x - b.x);
+                    b.x += Math.cos(b.angle) * (currentBotSpeed * 1.5); b.y += Math.sin(b.angle) * (currentBotSpeed * 1.5);
                     b.color = '#c0392b'; 
                 }
             }
-
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
-                b.x += Math.cos(b.angle) * currentBotSpeed;
-                b.y += Math.sin(b.angle) * currentBotSpeed;
+                b.x += Math.cos(b.angle) * currentBotSpeed; b.y += Math.sin(b.angle) * currentBotSpeed;
                 if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
-
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
-            
-            // --- NOWOŚĆ: CZĘSTOTLIWOŚĆ STRZELANIA ZALEŻNA OD TRUDNOŚCI ---
-            let shootChance = 0.03 * botDifficultyMultiplier;
-            if (b.score >= 15 && Math.random() < shootChance) {
-                let type = b.activeWeapon;
-                let stats = weaponStats[type];
+        }
+    }
+
+    // --- BUDOWA SIATKI (GRIDU) NA TĄ KLATKĘ ---
+    let grid = {};
+    function addToGrid(entity, type) {
+        let key = `${Math.floor(entity.x / CELL_SIZE)},${Math.floor(entity.y / CELL_SIZE)}`;
+        if (!grid[key]) grid[key] = { players: [], bots: [], foods: [], loots: [] };
+        grid[key][type].push(entity);
+    }
+    Object.values(players).forEach(p => addToGrid(p, 'players'));
+    Object.values(bots).forEach(b => addToGrid(b, 'bots'));
+    Object.values(foods).forEach(f => addToGrid(f, 'foods'));
+    Object.values(loots).forEach(l => addToGrid(l, 'loots'));
+
+    // --- 2. KOLIZJE BOTÓW Z WYKORZYSTANIEM SIATKI ---
+    for (let bId in bots) {
+        let b = bots[bId];
+        if (!b) continue;
+        let owner = b.ownerId ? players[b.ownerId] : null;
+        let nearby = getNearbyEntities(b.x, b.y, grid);
+
+        // Strzelanie
+        let shootChance = 0.03 * botDifficultyMultiplier;
+        if (b.score >= 15 && Math.random() < shootChance) {
+            let stats = weaponStats[b.activeWeapon];
+            let now = Date.now();
+            if (stats && b.score >= stats.cost + 5 && now - b.lastShootTime > 2000) {
+                let target = null; let minBotDist = 400; 
                 
-                let now = Date.now();
-                if (stats && b.score >= stats.cost + 5 && now - b.lastShootTime > 2000) {
-                    b.lastShootTime = now;
-                    b.score -= stats.cost;
-                    
-                    projectiles.push({
-                        id: ++entityIdCounter, ownerId: b.ownerId || b.id, ownerTeam: null, teamInitial: null,
-                        x: b.x, y: b.y, dx: Math.cos(b.angle), dy: Math.sin(b.angle),
-                        life: stats.life, speed: stats.speed, isBotSword: true,
-                        scoreAtThrow: b.score, isPiercing: stats.piercing, damage: stats.dmg, isWinter: false, projType: type
+                nearby.players.forEach(p2 => {
+                    if (p2.id !== (owner ? owner.id : null) && (!b.team || b.team !== p2.team)) {
+                        let d = Math.hypot(b.x - p2.x, b.y - p2.y);
+                        if (d < minBotDist) { minBotDist = d; target = p2; }
+                    }
+                });
+                if (!target) {
+                    nearby.bots.forEach(b2 => {
+                        if (b2.id !== b.id && b2.ownerId !== (owner ? owner.id : null) && (!b.team || b.team !== b2.team)) {
+                            let d = Math.hypot(b.x - b2.x, b.y - b2.y);
+                            if (d < minBotDist) { minBotDist = d; target = b2; }
+                        }
                     });
                 }
+                if (target) {
+                    b.lastShootTime = now; b.score -= stats.cost;
+                    let aimAngle = Math.atan2(target.y - b.y, target.x - b.x);
+                    let botPierce = b.activeWeapon === 'sword' ? (owner && owner.paths.weapon === 'piercing') : stats.piercing;
+                    let botFinalDmg = b.activeWeapon === 'sword' ? stats.dmg + ((owner ? owner.skills.weapon : 0) * 1) : stats.dmg;
+                    let pid = ++entityIdCounter;
+                    projectiles[pid] = {
+                        id: pid, ownerId: owner ? owner.id : b.id, ownerTeam: b.team || null, teamInitial: b.team || null,
+                        x: b.x, y: b.y, dx: Math.cos(aimAngle), dy: Math.sin(aimAngle),
+                        life: stats.life, speed: stats.speed, isBotSword: true,
+                        scoreAtThrow: b.score, isPiercing: botPierce, damage: botFinalDmg, isWinter: false, projType: b.activeWeapon
+                    };
+                }
             }
         }
 
-        foods.forEach((f, fi) => {
-            if (Math.hypot(b.x - f.x, b.y - f.y) < 25) {
-                b.score += 1;
-                foods[fi] = spawnFood();
+        // Bot je jedzenie
+        nearby.foods.forEach(f => {
+            if (foods[f.id] && Math.hypot(b.x - f.x, b.y - f.y) < 25) {
+                b.score += 1; delete foods[f.id]; spawnFood();
             }
         });
-        
-        if (b.ownerId && b.score > 15) {
-            let p = players[b.ownerId];
-            if (p) {
-                let transfer = Math.floor(b.score - 15);
-                b.score -= transfer;
-                p.score += transfer;
-            }
-        }
-    }
 
-    // 2. Bot zjada Bota 
-    for (let i = 0; i < bots.length; i++) {
-        for (let j = i + 1; j < bots.length; j++) {
-            let b1 = bots[i];
-            let b2 = bots[j];
-            if (b1.ownerId && b1.ownerId === b2.ownerId) continue;
-            
-            if (b1.ownerId && b2.ownerId) {
-                let p1 = players[b1.ownerId]; let p2 = players[b2.ownerId];
-                if (p1 && p2 && p1.team && p2.team && p1.team === p2.team) continue;
-            }
+        // Bot zjada Bota
+        nearby.bots.forEach(b2 => {
+            if (!bots[b.id] || !bots[b2.id] || b.id === b2.id) return;
+            if (b.ownerId && b.ownerId === b2.ownerId) return;
+            if (b.team && b2.team && b.team === b2.team) return;
 
-            let dist = Math.hypot(b1.x - b2.x, b1.y - b2.y);
-            let r1 = 25 * (1 + Math.pow(Math.max(0, b1.score - 1), 0.45) * 0.15);
+            let dist = Math.hypot(b.x - b2.x, b.y - b2.y);
+            let r1 = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
             let r2 = 25 * (1 + Math.pow(Math.max(0, b2.score - 1), 0.45) * 0.15);
 
-            if (dist < r1 && b1.score > b2.score * 1.15) {
-                io.emit('killEvent', { text: `${b1.name} pożarł ${b2.name}` }); 
-                b1.score += Math.floor(b2.score * 0.5);
-                
-                io.emit('deathMarker', { x: b2.x, y: b2.y }); // Zgon dodajemy na mapę
-                
-                bots[j] = spawnBot(); 
-            } else if (dist < r2 && b2.score > b1.score * 1.15) {
-                io.emit('killEvent', { text: `${b2.name} pożarł ${b1.name}` }); 
-                b2.score += Math.floor(b1.score * 0.5);
-                
-                io.emit('deathMarker', { x: b1.x, y: b1.y }); // Zgon dodajemy na mapę
-                
-                bots[i] = spawnBot(); 
+            if (dist < r1 && b.score > b2.score * 1.15) {
+                io.emit('killEvent', { text: `${b.name} pożarł ${b2.name}` }); 
+                b.score += Math.floor(b2.score * 0.5);
+                io.emit('deathMarker', { x: b2.x, y: b2.y }); 
+                delete bots[b2.id]; spawnBot(); 
+            } else if (dist < r2 && b2.score > b.score * 1.15) {
+                io.emit('killEvent', { text: `${b2.name} pożarł ${b.name}` }); 
+                b2.score += Math.floor(b.score * 0.5);
+                io.emit('deathMarker', { x: b.x, y: b.y }); 
+                delete bots[b.id]; spawnBot(); 
             }
+        });
+
+        // Przelew masy do Gracza
+        if (bots[b.id] && b.ownerId && b.score > 15) {
+            let p = players[b.ownerId];
+            if (p) { let transfer = Math.floor(b.score - 15); b.score -= transfer; p.score += transfer; }
         }
     }
 
-    // 3. Kolizje Graczy (Jedzenie, Boty)
+    // --- 3. KOLIZJE GRACZY Z WYKORZYSTANIEM SIATKI ---
     Object.values(players).forEach(p => {
         if (!players[p.id]) return; 
-
         let pRadius = 25 * (1 + Math.pow(Math.max(0, p.score - 1), 0.45) * 0.15);
+        let nearby = getNearbyEntities(p.x, p.y, grid);
 
-        foods.forEach((f, fi) => {
-            if (Math.hypot(p.x - f.x, p.y - f.y) < pRadius) {
-                let massGain = 1 * p.massMultiplier;
-                if (p.skin === 'standard') massGain = 1.02; 
-                
-                p.score += massGain;
-                foods[fi] = spawnFood();
+        nearby.foods.forEach(f => {
+            if (foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < pRadius) {
+                p.score += (p.skin === 'standard' ? 1.02 : 1 * p.massMultiplier);
+                delete foods[f.id]; spawnFood();
             }
         });
 
-        loots.forEach((l, li) => {
-            if (Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
+        nearby.loots.forEach(l => {
+            if (loots[l.id] && Math.hypot(p.x - l.x, p.y - l.y) < pRadius + 15) {
                 if (l.type === 'mass') {
-                    let baseLoot = 30; 
-                    let lootMass = baseLoot * p.massMultiplier;
-                    if (p.skin === 'standard') lootMass = baseLoot * 1.02; 
-                    
-                    p.score += lootMass;
-                    io.emit('killEvent', { text: `🎁 ${p.name} znalazł złoże Masy (+${Math.floor(lootMass)})!` }); 
+                    let lootMass = 30 * (p.skin === 'standard' ? 1.02 : p.massMultiplier);
+                    p.score += lootMass; io.emit('killEvent', { text: `🎁 ${p.name} znalazł złoże Masy (+${Math.floor(lootMass)})!` }); 
                 } else if (l.type === 'skill') {
-                    p.skillPoints++;
-                    io.to(p.id).emit('levelUp', { level: p.level, points: p.skillPoints });
-                    io.emit('killEvent', { text: `📘 ${p.name} odnalazł Księgę Wiedzy!` }); 
+                    p.skillPoints++; io.to(p.id).emit('levelUp', { level: p.level, points: p.skillPoints }); io.emit('killEvent', { text: `📘 ${p.name} odnalazł Księgę Wiedzy!` }); 
                 } else if (l.type === 'weapon') {
-                    p.inventory['knife'] = 1;
-                    p.activeWeapon = 'knife';
-                    io.emit('killEvent', { text: `🗡️ ${p.name} znalazł Nóż w skrzynce!` }); 
+                    p.inventory['knife'] = 1; p.activeWeapon = 'knife'; io.emit('killEvent', { text: `🗡️ ${p.name} znalazł Nóż w skrzynce!` }); 
                 }
-                loots[li] = spawnLoot(); 
+                delete loots[l.id]; spawnLoot(); 
             }
         });
 
-        bots.forEach((b, bi) => {
+        nearby.bots.forEach(b => {
+            if (!bots[b.id] || !players[p.id] || p.isSafe) return;
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
             let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
 
-            if (!p.isSafe) {
-                if (b.ownerId !== p.id) {
-                    let ownerPlayer = players[b.ownerId];
-                    if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
+            if (b.ownerId !== p.id) {
+                let ownerPlayer = players[b.ownerId];
+                if (p.team && ownerPlayer && ownerPlayer.team === p.team) return;
 
-                    if (activeEvent === 'KING_HUNT' && p.id === currentKingId && b.ownerId !== p.id) {
-                        if (dist < pRadius) {
-                            p.score = Math.max(10, p.score - 15); 
-                            io.emit('damageText', { x: p.x, y: p.y - 30, val: 15, color: '#f1c40f' });
-                            bots[bi] = spawnBot(); 
-                            return; 
-                        }
-                    }
-
-                    if (dist < pRadius && p.score > b.score * 1.15) {
-                        if (p.isRecruiting) {
-                            io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
-                            b.ownerId = p.id;
-                            b.team = p.team; 
-                            b.score = 5; 
-                            b.color = p.color; 
-                            b.name = `Wojownik`; 
-                            
-                            b.activeWeapon = p.activeWeapon;
-                            if (p.activeWeapon !== 'sword') b.inventory[p.activeWeapon] = 1;
-
-                            let dx = b.x - p.x;
-                            let dy = b.y - p.y;
-                            b.distOffset = Math.hypot(dx, dy);
-                            b.angleOffset = Math.atan2(dy, dx) - p.moveAngle;
-
-                        } else {
-                            io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
-                            p.score += Math.floor(b.score * 0.5);
-                            io.emit('deathMarker', { x: b.x, y: b.y }); // Oznaczenie na mapie
-                            bots[bi] = spawnBot(); 
-                        }
-                        io.to(p.id).emit('botEaten', { newScore: p.score });
-                    }
-                    else if (dist < bRadius && b.score > p.score * 1.15) {
-                        io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
-                        b.score += Math.floor(p.score * 0.5);
-                        io.emit('deathMarker', { x: p.x, y: p.y }); // Zgon gracza trafia na mapę
-                        killPlayer(p.id); 
+                if (activeEvent === 'KING_HUNT' && p.id === currentKingId && b.ownerId !== p.id) {
+                    if (dist < pRadius) {
+                        p.score = Math.max(10, p.score - 15); 
+                        io.emit('damageText', { x: p.x, y: p.y - 30, val: 15, color: '#f1c40f' });
+                        delete bots[b.id]; spawnBot(); return; 
                     }
                 }
+
+                if (dist < pRadius && p.score > b.score * 1.15) {
+                    if (p.isRecruiting) {
+                        io.emit('killEvent', { text: `${p.name} zwerbował wojownika!` }); 
+                        b.ownerId = p.id; b.team = p.team; b.score = 5; b.color = p.color; b.name = `Wojownik`; 
+                        b.activeWeapon = p.activeWeapon;
+                        if (p.activeWeapon !== 'sword') b.inventory[p.activeWeapon] = 1;
+                        b.distOffset = Math.hypot(b.x - p.x, b.y - p.y); b.angleOffset = Math.atan2(b.y - p.y, b.x - p.x) - p.moveAngle;
+                    } else {
+                        io.emit('killEvent', { text: `${p.name} pożarł ${b.name}` }); 
+                        p.score += Math.floor(b.score * 0.5);
+                        io.emit('deathMarker', { x: b.x, y: b.y });
+                        delete bots[b.id]; spawnBot(); 
+                    }
+                    io.to(p.id).emit('botEaten', { newScore: p.score });
+                }
+                else if (dist < bRadius && b.score > p.score * 1.15) {
+                    io.emit('killEvent', { text: `${b.name} pożarł ${p.name}` }); 
+                    b.score += Math.floor(p.score * 0.5);
+                    io.emit('deathMarker', { x: p.x, y: p.y }); 
+                    killPlayer(p.id); 
+                }
+            }
+        });
+
+        nearby.players.forEach(p2 => {
+            if (!players[p.id] || !players[p2.id] || p.id === p2.id) return;
+            if (p.isSafe || p2.isSafe) return; 
+            if (p.team && p2.team && p.team === p2.team) return;
+
+            let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+            let r1 = 25 * (1 + Math.pow(Math.max(0, p.score - 1), 0.45) * 0.15);
+            let r2 = 25 * (1 + Math.pow(Math.max(0, p2.score - 1), 0.45) * 0.15);
+
+            if (dist < r1 && p.score > p2.score * 1.15) {
+                io.emit('killEvent', { text: `${p.name} wyeliminował ${p2.name}!` }); 
+                p.score += Math.floor(p2.score * 0.5); io.emit('deathMarker', { x: p2.x, y: p2.y }); killPlayer(p2.id); 
+            } else if (dist < r2 && p2.score > p.score * 1.15) {
+                io.emit('killEvent', { text: `${p2.name} wyeliminował ${p.name}!` }); 
+                p2.score += Math.floor(p.score * 0.5); io.emit('deathMarker', { x: p.x, y: p.y }); killPlayer(p.id); 
             }
         });
     });
 
-    // Gracz zjada Gracza (PvP)
-    const pKeys = Object.keys(players);
-    for (let i = 0; i < pKeys.length; i++) {
-        for (let j = i + 1; j < pKeys.length; j++) {
-            let p1 = players[pKeys[i]];
-            let p2 = players[pKeys[j]];
-            if (!p1 || !p2 || p1.isSafe || p2.isSafe) continue; 
-            
-            if (p1.team && p2.team && p1.team === p2.team) continue;
+    // --- 4. FIZYKA MIECZY Z WYKORZYSTANIEM SIATKI ---
+    for (let pId in projectiles) {
+        let proj = projectiles[pId];
+        proj.x += proj.dx * proj.speed;
+        proj.y += proj.dy * proj.speed;
+        proj.life--;
 
-            let dist = Math.hypot(p1.x - p2.x, p1.y - p2.y);
-            let r1 = 25 * (1 + Math.pow(Math.max(0, p1.score - 1), 0.45) * 0.15);
-            let r2 = 25 * (1 + Math.pow(Math.max(0, p2.score - 1), 0.45) * 0.15);
+        let nearby = getNearbyEntities(proj.x, proj.y, grid);
 
-            if (dist < r1 && p1.score > p2.score * 1.15) {
-                io.emit('killEvent', { text: `${p1.name} wyeliminował ${p2.name}!` }); 
-                p1.score += Math.floor(p2.score * 0.5);
-                io.emit('deathMarker', { x: p2.x, y: p2.y }); // Zgon gracza trafia na mapę
-                killPlayer(p2.id); 
-            } else if (dist < r2 && p2.score > p1.score * 1.15) {
-                io.emit('killEvent', { text: `${p2.name} wyeliminował ${p1.name}!` }); 
-                p2.score += Math.floor(p1.score * 0.5);
-                io.emit('deathMarker', { x: p1.x, y: p1.y }); // Zgon gracza trafia na mapę
-                killPlayer(p1.id); 
-            }
-        }
-    }
+        nearby.bots.forEach(b => {
+            if (!bots[b.id] || !projectiles[pId]) return;
+            let hitRange = proj.isWinter ? 60 : 30; 
+            if (proj.ownerId !== b.id && proj.ownerId !== b.ownerId && Math.hypot(proj.x - b.x, proj.y - b.y) < hitRange) {
+                if (b.ownerId && players[b.ownerId] && proj.ownerTeam === players[b.ownerId].team) return;
+                if (proj.ownerTeam && !b.team) return;
 
-    // 4. Fizyka Mieczy
-    for (let i = projectiles.length - 1; i >= 0; i--) {
-        let p = projectiles[i];
-        p.x += p.dx * p.speed;
-        p.y += p.dy * p.speed;
-        p.life--;
-
-        bots.forEach((b) => {
-            let hitRange = p.isWinter ? 60 : 30; 
-            if (p.ownerId !== b.id && p.ownerId !== b.ownerId && Math.hypot(p.x - b.x, p.y - b.y) < hitRange) {
-                if (b.ownerId && players[b.ownerId] && p.ownerTeam === players[b.ownerId].team) return;
-                if (p.ownerTeam && !b.team) return;
-
-                b.score = Math.max(1, b.score - p.damage);
-                io.emit('damageText', { x: b.x, y: b.y - 20, val: p.damage, color: '#fff' });
-
-                if (!p.isPiercing) p.life = 0; 
+                b.score = Math.max(1, b.score - proj.damage);
+                io.emit('damageText', { x: b.x, y: b.y - 20, val: proj.damage, color: '#fff' });
+                if (!proj.isPiercing) proj.life = 0; 
             }
         });
 
-        Object.values(players).forEach(pl => {
-            let hitRange = p.isWinter ? 60 : 30;
-            if (p.ownerId !== pl.id && Math.hypot(p.x - pl.x, p.y - pl.y) < hitRange) {
-                if (p.ownerTeam && p.ownerTeam === pl.team) return;
+        nearby.players.forEach(pl => {
+            if (!players[pl.id] || !projectiles[pId]) return;
+            let hitRange = proj.isWinter ? 60 : 30;
+            if (proj.ownerId !== pl.id && Math.hypot(proj.x - pl.x, proj.y - pl.y) < hitRange) {
+                if (proj.ownerTeam && proj.ownerTeam === pl.team) return;
 
-                if (pl.isShielding && !p.isWinter) {
-                    if (!p.isPiercing) p.life = 0; 
+                if (pl.isShielding && !proj.isWinter) {
+                    if (!proj.isPiercing) proj.life = 0; 
                 } else {
-                    let damage = p.damage;
-                    if (pl.score >= 800) { damage -= 4; if (pl.armorHits < 3 && !p.isWinter) { damage = 0; pl.armorHits++; } } 
+                    let damage = proj.damage;
+                    if (pl.score >= 800) { damage -= 4; if (pl.armorHits < 3 && !proj.isWinter) { damage = 0; pl.armorHits++; } } 
                     else if (pl.score >= 400) { damage -= 3; } 
                     else if (pl.score >= 100) { damage -= 2; }
 
                     let strengthReduction = Math.floor((pl.skills.strength || 0) / 10);
                     damage -= strengthReduction;
                     damage = Math.max(1, damage); 
-                    if (p.isWinter) damage = p.damage;
+                    if (proj.isWinter) damage = proj.damage;
 
                     pl.score = Math.max(1, pl.score - Math.floor(damage));
-                    
                     io.emit('damageText', { x: pl.x, y: pl.y - 30, val: Math.floor(damage), color: '#ff4757' });
                     
                     if (pl.paths.strength === 'thorns') {
-                        let attacker = players[p.ownerId];
+                        let attacker = players[proj.ownerId];
                         if (attacker) {
                             let reflectDmg = Math.max(1, Math.floor(damage * 0.25));
                             attacker.score = Math.max(1, attacker.score - reflectDmg);
                             io.emit('damageText', { x: attacker.x, y: attacker.y - 30, val: reflectDmg, color: '#e67e22' });
                         }
                     }
-
-                    if (!p.isPiercing) p.life = 0;
+                    if (!proj.isPiercing) proj.life = 0;
                 }
             }
         });
-        if (p.life <= 0) projectiles.splice(i, 1);
+
+        if (proj.life <= 0) delete projectiles[pId];
     }
 
     Object.values(players).forEach(p => {
@@ -1196,15 +927,15 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
-    // --- WYSYŁANIE ŚRODOWISKA (KRZAKI, METEORY) ---
+    // Wysyłamy do klientów dane o obiektach jako słowniki (bez statycznych krzaków).
     io.emit('serverTick', { 
         players, bots, foods, projectiles, loots, 
-        activeEvent, eventTimeLeft, castles, bushes, meteorZones 
+        activeEvent, eventTimeLeft, castles, meteorZones 
     });
 }, 33);
 
 // ==========================================
-// MIDAS - WIRTUALNY PRZEWODNIK (ZAPROGRAMOWANY)
+// MIDAS - WIRTUALNY PRZEWODNIK 
 // ==========================================
 function getTutorialMessage(playerName, eventType) {
     const messages = {
@@ -1224,7 +955,7 @@ function getTutorialMessage(playerName, eventType) {
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`=========================================`);
-    console.log(` SERWER Xtreme Destiny (XD) DZIAŁA `);
+    console.log(` SERWER Xtreme Destiny DZIAŁA W TRYBIE PRO `);
     console.log(` Port nasłuchiwania: ${PORT} `);
     console.log(`=========================================`);
 });
