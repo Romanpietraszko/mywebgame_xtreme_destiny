@@ -2,7 +2,7 @@
 // TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
 // ==========================================
 
-const socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 
 // --- ZMIENNE STANU ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
