@@ -2,7 +2,7 @@
 // FREE.JS - Logika trybu "Free"
 // ==========================================
 
-window.socket = io('https://mywebgame-xtreme-destiny.onrender.com');
+window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 const socket = window.socket;
 
 // --- ZMIENNE STANU I KONFIGURACJI ---
