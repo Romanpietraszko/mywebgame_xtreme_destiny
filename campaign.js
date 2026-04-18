@@ -38,23 +38,38 @@ const imgKowal = new Image();
 imgKowal.src = 'xtreme-destiny-kowal.png';
 
 // Współrzędne Kluczowych Miejsc
-const NPC_ZWIADOWCA = { x: 1850, y: 3800 };
-const NPC_KOWAL = { x: 2150, y: 3800 };
-const DOOR_POS = { x: 2000, y: 300 };
+const NPC_ZWIADOWCA = { x: 1700, y: 3880 };
+const NPC_KOWAL = { x: 2300, y: 3880 };
+const DOOR_POS = { x: 2000, y: 0 };
 
-// Opowieść Midasa (Rozszerzona o 11 etapów i {NAME})
+// Opowieść Midasa (Pełne 3 Akty, 21 misji)
 const campaignDialogues = {
-    1: "Witaj, {NAME}. Twój cel to Tron, ale na razie jesteś nikim. Idź na północ i zbierz 15 masy z zielonych kulek.",
-    2: "Dobrze, {NAME}. Teraz sprawdźmy rzut mieczem (LPM) na Szlamach. Wbij 50 masy.",
-    3: "Dobrze sobie radzisz. Podejdź do Kowala po prawej stronie, ma dla ciebie zlecenie.",
-    4: "KOWAL: 'Potrzebuję surowców! Wbij 100 masy w lesie, a pomyślimy o sprzęcie.'",
-    5: "MIDAS: 'Zuch z ciebie. Podejdź do Zwiadowcy po lewej, ma wieści.'",
-    6: "ZWIADOWCA: 'Na północy są Wrota. Wbij 150 masy, by przetrwać drogę.'",
-    7: "MIDAS: 'Musisz być potężny, {NAME}. Zanurz się w las i zdobądź 200 masy.'",
-    8: "KOWAL: 'Zróbmy interes! Podejdź do mnie po Ognisty Klucz.'",
-    9: "KOWAL: 'Klucz gotowy! Teraz osiągnij 250 masy, by mieć siłę go unieść.'",
-    10: "MIDAS: 'Jesteś gotów, {NAME}. Idź na daleką Północ i wejdź w świecące Wrota!'",
-    11: "👑 KONIEC AKTU 1! 👑 Osiągnąłeś swój cel, {NAME}! (Więcej wkrótce...)"
+    // AKT 1: Ruiny
+    1: "MIDAS: Witaj, {NAME}. Twój cel to Tron. Idź na północ i zbierz 10 masy z zielonych kulek.",
+    2: "MIDAS: Dobrze, {NAME}. Teraz przetestuj rzut mieczem (LPM) na Szlamach. Wbij 25 masy.",
+    3: "MIDAS: Dobrze sobie radzisz. Podejdź do Kowala po prawej stronie.",
+    4: "KOWAL: Potrzebuję surowców! Wbij 40 masy w lesie, by udowodnić swoją siłę.",
+    5: "MIDAS: Zuch z ciebie. Podejdź do Zwiadowcy po lewej.",
+    6: "ZWIADOWCA: Na północy jest Jaskinia. Wbij 60 masy, by przetrwać drogę.",
+    7: "MIDAS: Musisz być potężny. Zanurz się w las i zdobądź 80 masy.",
+    8: "KOWAL: Zróbmy interes! Podejdź do mnie po Ognisty Klucz.",
+    9: "KOWAL: Klucz gotowy! Osiągnij 100 masy, by mieć siłę go unieść.",
+    10: "MIDAS: Jesteś gotów, {NAME}. Wejdź w świecącą Jaskinię na północy!",
+
+    // AKT 2: Dolina Cieni
+    11: "MIDAS: Przetrwałeś Jaskinię! Witaj w nowym etapie. Zdobądź 130 masy.",
+    12: "ZWIADOWCA: Szlamy tutaj są potężniejsze. Wbij 160 masy, by zyskać szacunek.",
+    13: "KOWAL: Twoja broń tępieje. Przynieś mi surowce! (Osiągnij 190 masy)",
+    14: "MIDAS: Czuję, że rośniesz w siłę, {NAME}. Pokaż na co cię stać i wbij 220 masy.",
+    15: "ZWIADOWCA: Droga do Tronu jest zamknięta. Wbij 250 masy i znów wejdź do Jaskini!",
+
+    // AKT 3: Pustkowia Królów
+    16: "MIDAS: To już Pustkowia Królów. Tutaj nikt nie wybacza błędów. Zdobądź 280 masy.",
+    17: "KOWAL: Wykuję ci pancerz godny władcy. Zbierz 310 masy!",
+    18: "ZWIADOWCA: Uważaj, czuję niebezpieczeństwo. Osiągnij 350 masy, by przeżyć.",
+    19: "MIDAS: To ostatnia prosta do Tronu, {NAME}! Wbij 380 masy!",
+    20: "MIDAS: Ostateczna próba! Osiągnij 400 masy i udowodnij, że jesteś Królem Serwera!",
+    21: "MIDAS: 👑 KAMPANIA UKOŃCZONA! 👑 Jesteś prawdziwym Królem, {NAME}!"
 };
 
 // Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
@@ -211,12 +226,24 @@ function advanceQuest(newQuestNum) {
 }
 
 function checkQuestProgress() {
-    if (currentQuest === 1 && player.score >= 15) advanceQuest(2);
-    else if (currentQuest === 2 && player.score >= 50) advanceQuest(3);
-    else if (currentQuest === 4 && player.score >= 100) advanceQuest(5);
-    else if (currentQuest === 6 && player.score >= 150) advanceQuest(7);
-    else if (currentQuest === 7 && player.score >= 200) advanceQuest(8);
-    else if (currentQuest === 9 && player.score >= 250) advanceQuest(10);
+    // AKT 1
+    if (currentQuest === 1 && player.score >= 10) advanceQuest(2);
+    else if (currentQuest === 2 && player.score >= 25) advanceQuest(3);
+    else if (currentQuest === 4 && player.score >= 40) advanceQuest(5);
+    else if (currentQuest === 6 && player.score >= 60) advanceQuest(7);
+    else if (currentQuest === 7 && player.score >= 80) advanceQuest(8);
+    else if (currentQuest === 9 && player.score >= 100) advanceQuest(10);
+    // AKT 2
+    else if (currentQuest === 11 && player.score >= 130) advanceQuest(12);
+    else if (currentQuest === 12 && player.score >= 160) advanceQuest(13);
+    else if (currentQuest === 13 && player.score >= 190) advanceQuest(14);
+    else if (currentQuest === 14 && player.score >= 220) advanceQuest(15);
+    // AKT 3
+    else if (currentQuest === 16 && player.score >= 280) advanceQuest(17);
+    else if (currentQuest === 17 && player.score >= 310) advanceQuest(18);
+    else if (currentQuest === 18 && player.score >= 350) advanceQuest(19);
+    else if (currentQuest === 19 && player.score >= 380) advanceQuest(20);
+    else if (currentQuest === 20 && player.score >= 400) advanceQuest(21);
 }
 
 // --- LOKALNA LOGIKA FIZYKI (Zastępuje serwer) ---
@@ -271,12 +298,13 @@ function updateLocalPhysics() {
     if (distScout < 80) {
         if (currentQuest === 5) advanceQuest(6);
     }
-    if (distGate < 90 && currentQuest === 10) {
-        advanceQuest(11);
+    if (distGate < 120) {
+        if (currentQuest === 10) advanceQuest(11);
+        if (currentQuest === 15) advanceQuest(16);
     }
 
-    // Bezpieczna strefa (Baza)
-    player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius) || currentQuest === 11;
+    // Bezpieczna strefa (Baza i koniec gry)
+    player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius) || currentQuest === 21;
     let playerRadius = 25 * (1 + Math.pow(Math.max(0, player.score - 1), 0.45) * 0.15);
 
     // Jedzenie Kulek
@@ -318,7 +346,7 @@ function updateLocalPhysics() {
                 player.score = Math.floor(player.score * 0.8); // Traci 20%
                 player.x = 2000; player.y = 3800; // Powrót do bazy
                 killLogs.push({ text: `Zginąłeś! Tracisz masę i wracasz do bazy.`, time: 200 });
-                player.tutorialText = "Bolało? Mówiłem, żebyś uważał. Idź jeszcze raz, tylko tym razem unikaj tych wielkich.";
+                player.tutorialText = "MIDAS: Bolało? Mówiłem, żebyś uważał. Idź jeszcze raz, tylko tym razem unikaj tych wielkich.";
             }
         }
     });
@@ -386,11 +414,9 @@ function gameLoop(currentTime) {
 
     ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
     
-    // --- WROTA (Północ) ---
-    ctx.fillStyle = '#222'; ctx.fillRect(DOOR_POS.x - 70, DOOR_POS.y - 120, 140, 120);
-    ctx.fillStyle = currentQuest >= 10 ? '#3498db' : '#111'; 
-    ctx.fillRect(DOOR_POS.x - 60, DOOR_POS.y - 110, 120, 110);
-    if(currentQuest >= 10 && Math.random() > 0.5) spawnParticle(DOOR_POS.x + (Math.random()*100-50), DOOR_POS.y - 50, 'rgba(52, 152, 219, 0.8)', 'fire');
+    // --- WROTA (Północ) - NOWA JASKINIA ---
+    let isGateGlowing = (currentQuest === 10 || currentQuest === 15);
+    drawCaveEntrance(DOOR_POS.x, DOOR_POS.y, isGateGlowing);
 
     // --- BAZA WYPADOWA KAMPANII ---
     
@@ -409,12 +435,6 @@ function gameLoop(currentTime) {
         ctx.font = 'bold 14px Arial'; 
         ctx.textAlign = 'center';
         ctx.fillText("Zwiadowca", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 50);
-
-        if (player && Math.hypot(player.x - NPC_ZWIADOWCA.x, player.y - NPC_ZWIADOWCA.y) < 120) {
-            ctx.fillStyle = '#fff';
-            ctx.font = '12px Arial';
-            ctx.fillText(currentQuest === 6 ? "[ Słuchaj uważnie moich rad... ]" : "[ Szsz... zaraz znajdę tę ścieżkę... ]", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 70);
-        }
     }
 
     // Kowal w obozie (Po prawej stronie) z otoczeniem
@@ -429,12 +449,6 @@ function gameLoop(currentTime) {
         ctx.font = 'bold 14px Arial'; 
         ctx.textAlign = 'center';
         ctx.fillText("Kowal", NPC_KOWAL.x, NPC_KOWAL.y - 50);
-
-        if (player && Math.hypot(player.x - NPC_KOWAL.x, player.y - NPC_KOWAL.y) < 120) {
-            ctx.fillStyle = '#fff';
-            ctx.font = '12px Arial';
-            ctx.fillText("[ Przynieś mi złom, a wykuję ci potęgę! ]", NPC_KOWAL.x, NPC_KOWAL.y - 70);
-        }
     }
     
     // CZĄSTECZKI (Kurz pod postaciami)
@@ -471,27 +485,58 @@ function gameLoop(currentTime) {
     }
     ctx.restore(); 
 
-    // --- UI ---
+    // --- UI Z DYNAMICZNYM MÓWCĄ ---
     if (gameState === 'PLAYING' && player && player.isTutorialActive) {
         ctx.save();
         let tutorialX = 20; let tutorialY = canvas.height - 200; 
-        ctx.fillStyle = currentQuest === 11 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+        ctx.fillStyle = currentQuest === 21 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(255, 255, 255, 0.95)';
         ctx.fillRect(tutorialX, tutorialY, 380, 110);
         ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
-        if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
+        
+        let speakerName = "MIDAS";
+        let rawText = player.tutorialText || "";
+        let displayText = rawText;
+        
+        if (rawText.startsWith("KOWAL:")) {
+            speakerName = "KOWAL";
+            displayText = rawText.replace("KOWAL: ", "").trim();
+        } else if (rawText.startsWith("ZWIADOWCA:")) {
+            speakerName = "ZWIADOWCA";
+            displayText = rawText.replace("ZWIADOWCA: ", "").trim();
+        } else if (rawText.startsWith("MIDAS:")) {
+            speakerName = "MIDAS";
+            displayText = rawText.replace("MIDAS: ", "").trim();
+        }
+
+        if (speakerName === "MIDAS" && typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
+            ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
+        } else if (speakerName === "KOWAL" && imgKowal.complete) {
+            ctx.drawImage(imgKowal, tutorialX + 10, tutorialY + 15, 80, 80);
+        } else if (speakerName === "ZWIADOWCA" && imgZwiadowca.complete) {
+            ctx.drawImage(imgZwiadowca, tutorialX + 10, tutorialY + 15, 80, 80);
+        }
+
         ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
-        ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
+        ctx.fillText(speakerName + ":", tutorialX + 110, tutorialY + 25);
         ctx.fillStyle = '#000'; ctx.font = '13px Arial';
-        if (player.tutorialText) { window.wrapText(ctx, player.tutorialText, tutorialX + 110, tutorialY + 50, 250, 18); }
+        
+        if (displayText) { window.wrapText(ctx, displayText, tutorialX + 110, tutorialY + 50, 250, 18); }
+        
         ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial'; ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
         ctx.restore();
     }
 
-    // Proste UI Kampanii
+    // --- DYNAMICZNY TYTUŁ AKTU W PRAWYM ROGU ---
     ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 80);
-    ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; ctx.fillText("📜 AKT 1: DROGA NA TRON", canvas.width - 265, 30);
+    ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; 
+    
+    let actName = "📜 AKT 1: RUINY";
+    if (currentQuest > 10 && currentQuest <= 15) actName = "📜 AKT 2: DOLINA CIENI";
+    if (currentQuest > 15) actName = "📜 AKT 3: PUSTKOWIA KRÓLÓW";
+    
+    ctx.fillText(actName, canvas.width - 265, 30);
     ctx.fillStyle = '#fff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
-    ctx.fillText(`Etap Fabuły: ${currentQuest}/11`, canvas.width - 265, 75);
+    ctx.fillText(`Etap Fabuły: ${currentQuest}/21`, canvas.width - 265, 75);
 
     if (killLogs.length > 0) {
         ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
@@ -573,5 +618,36 @@ function drawBlacksmithArea(x, y) {
     ctx.fillStyle = '#e74c3c'; 
     ctx.beginPath(); ctx.moveTo(x - 45, y + 25); ctx.lineTo(x - 55, y + 5); ctx.lineTo(x - 40, y + 15); ctx.lineTo(x - 35, y); ctx.lineTo(x - 45, y + 25); ctx.fill();
     if (Math.random() > 0.5) spawnParticle(x - 45 + (Math.random()*10-5), y + 15, 'rgba(255, 100, 0, 0.8)', 'fire');
+    ctx.restore();
+}
+
+function drawCaveEntrance(x, y, isGlowing) {
+    ctx.save();
+    
+    // Zarys skał (jaskinia)
+    ctx.fillStyle = '#444';
+    ctx.beginPath();
+    ctx.arc(x, y + 50, 140, Math.PI, 0); 
+    ctx.lineTo(x + 140, y + 100);
+    ctx.lineTo(x - 140, y + 100);
+    ctx.fill();
+
+    // Wnętrze mroku (lub świecący portal)
+    ctx.fillStyle = isGlowing ? '#3498db' : '#050505';
+    ctx.beginPath();
+    ctx.arc(x, y + 50, 90, Math.PI, 0);
+    ctx.lineTo(x + 90, y + 100);
+    ctx.lineTo(x - 90, y + 100);
+    ctx.fill();
+
+    // Cząsteczki dla aktywnej jaskini
+    if(isGlowing && Math.random() > 0.5) {
+        spawnParticle(x + (Math.random() * 120 - 60), y + 50, 'rgba(52, 152, 219, 0.8)', 'fire');
+    }
+
+    // Drzewa strażnicze przy wejściu
+    drawDeadTree(x - 160, y + 90);
+    drawDeadTree(x + 160, y + 90);
+    
     ctx.restore();
 }
