@@ -38,8 +38,8 @@ const imgKowal = new Image();
 imgKowal.src = 'xtreme-destiny-kowal.png';
 
 // Współrzędne Kluczowych Miejsc
-const NPC_ZWIADOWCA = { x: 1700, y: 3880 };
-const NPC_KOWAL = { x: 2300, y: 3880 };
+const NPC_ZWIADOWCA = { x: 400, y: 3880 };
+const NPC_KOWAL = { x: 3600, y: 3880 };
 const DOOR_POS = { x: 2000, y: 0 };
 
 // Opowieść Midasa (Pełne 3 Akty, 21 misji)
