@@ -37,27 +37,40 @@ imgZwiadowca.src = 'zwiadowca.png';
 const imgKowal = new Image();
 imgKowal.src = 'xtreme-destiny-kowal.png';
 
-// Opowieść Midasa
+// Współrzędne Kluczowych Miejsc
+const NPC_ZWIADOWCA = { x: 1850, y: 3800 };
+const NPC_KOWAL = { x: 2150, y: 3800 };
+const DOOR_POS = { x: 2000, y: 300 };
+
+// Opowieść Midasa (Rozszerzona o 11 etapów i {NAME})
 const campaignDialogues = {
-    1: "Witaj w ruinach starego świata, Złomku. Twój cel to Tron, ale na razie jesteś nikim. Idź na północ od zamku, w stronę Szepczącego Lasu. Zbierz 15 masy z zielonych kulek i wróć do mnie.",
-    2: "No, no... Przeżyłeś. Teraz sprawdźmy, jak walczysz. Kliknij MYSZKĄ, by rzucić mieczem w te zielone, słabe Szlamy, które kręcą się w lesie. Zabij 3 z nich i przynieś mi ich masę (wbij 50 punktów).",
-    3: "Dobrze sobie radzisz. Słuchaj, zaraz rozpęta się tu prawdziwe piekło. Zapiszemy ten stan, na dzisiaj wystarczy. (Kolejne questy w produkcji!)"
+    1: "Witaj, {NAME}. Twój cel to Tron, ale na razie jesteś nikim. Idź na północ i zbierz 15 masy z zielonych kulek.",
+    2: "Dobrze, {NAME}. Teraz sprawdźmy rzut mieczem (LPM) na Szlamach. Wbij 50 masy.",
+    3: "Dobrze sobie radzisz. Podejdź do Kowala po prawej stronie, ma dla ciebie zlecenie.",
+    4: "KOWAL: 'Potrzebuję surowców! Wbij 100 masy w lesie, a pomyślimy o sprzęcie.'",
+    5: "MIDAS: 'Zuch z ciebie. Podejdź do Zwiadowcy po lewej, ma wieści.'",
+    6: "ZWIADOWCA: 'Na północy są Wrota. Wbij 150 masy, by przetrwać drogę.'",
+    7: "MIDAS: 'Musisz być potężny, {NAME}. Zanurz się w las i zdobądź 200 masy.'",
+    8: "KOWAL: 'Zróbmy interes! Podejdź do mnie po Ognisty Klucz.'",
+    9: "KOWAL: 'Klucz gotowy! Teraz osiągnij 250 masy, by mieć siłę go unieść.'",
+    10: "MIDAS: 'Jesteś gotów, {NAME}. Idź na daleką Północ i wejdź w świecące Wrota!'",
+    11: "👑 KONIEC AKTU 1! 👑 Osiągnąłeś swój cel, {NAME}! (Więcej wkrótce...)"
 };
 
 // Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
 initMap(WORLD_SIZE, 'campaign_1');
 
-// --- SYSTEM CZĄSTECZEK (Krew, Kurz) ---
+// --- SYSTEM CZĄSTECZEK (Krew, Kurz, Ogień) ---
 function spawnParticle(x, y, color, type = 'blood') {
     const count = type === 'blood' ? 8 : 1;
     for (let i = 0; i < count; i++) {
         particles.push({
             x: x,
             y: y,
-            vx: (Math.random() - 0.5) * (type === 'blood' ? 6 : 2),
-            vy: (Math.random() - 0.5) * (type === 'blood' ? 6 : 2),
+            vx: (Math.random() - 0.5) * (type === 'blood' ? 6 : (type === 'fire' ? 1 : 2)),
+            vy: (Math.random() - 0.5) * (type === 'blood' ? 6 : (type === 'fire' ? -3 : 2)),
             life: 1.0,
-            size: type === 'blood' ? 2 + Math.random() * 4 : 3 + Math.random() * 5,
+            size: type === 'blood' ? 2 + Math.random() * 4 : (type === 'dust' ? 4 + Math.random() * 6 : 2 + Math.random() * 3),
             color: color,
             type: type
         });
@@ -69,7 +82,7 @@ function updateParticles() {
         let p = particles[i];
         p.x += p.vx;
         p.y += p.vy;
-        p.life -= (p.type === 'blood' ? 0.02 : 0.05);
+        p.life -= (p.type === 'blood' ? 0.02 : (p.type === 'fire' ? 0.04 : 0.05));
         if (p.life <= 0) particles.splice(i, 1);
     }
 }
@@ -177,7 +190,7 @@ window.startGame = (type) => {
         inventory: { bow: 0, knife: 0, shuriken: 0 }, 
         activeWeapon: 'sword',
         isTutorialActive: true,
-        tutorialText: campaignDialogues[currentQuest],
+        tutorialText: campaignDialogues[currentQuest].replace('{NAME}', name),
         skin: window.playerSkin || 'standard',
         baseSpeed: window.playerSkin === 'ninja' ? 5.5 : 5.0,
         massMultiplier: window.playerSkin === 'arystokrata' ? 1.15 : (window.playerSkin === 'standard' ? 1.02 : 1.0),
@@ -189,6 +202,22 @@ window.startGame = (type) => {
     lastFrameTime = performance.now();
     requestAnimationFrame(gameLoop);
 };
+
+// --- LOGIKA QUESTÓW FABULARNYCH ---
+function advanceQuest(newQuestNum) {
+    currentQuest = newQuestNum;
+    player.tutorialText = campaignDialogues[currentQuest].replace('{NAME}', player.name);
+    killLogs.push({ text: "⭐ MISJA ZAKTUALIZOWANA!", time: 200 });
+}
+
+function checkQuestProgress() {
+    if (currentQuest === 1 && player.score >= 15) advanceQuest(2);
+    else if (currentQuest === 2 && player.score >= 50) advanceQuest(3);
+    else if (currentQuest === 4 && player.score >= 100) advanceQuest(5);
+    else if (currentQuest === 6 && player.score >= 150) advanceQuest(7);
+    else if (currentQuest === 7 && player.score >= 200) advanceQuest(8);
+    else if (currentQuest === 9 && player.score >= 250) advanceQuest(10);
+}
 
 // --- LOKALNA LOGIKA FIZYKI (Zastępuje serwer) ---
 function updateLocalPhysics() {
@@ -222,16 +251,32 @@ function updateLocalPhysics() {
         player.x += Math.cos(moveAngle) * speed; 
         player.y += Math.sin(moveAngle) * speed;
         
-        // EFEKT KURZU POD STOPAMI GRACZA
-        if (Math.random() > 0.7) spawnParticle(player.x, player.y + 20, 'rgba(200,200,200,0.4)', 'dust');
+        // EFEKT KURZU POD STOPAMI GRACZA (Ciemniejszy, grubszy)
+        if (Math.random() > 0.6) spawnParticle(player.x, player.y + 20, 'rgba(50,50,50,0.8)', 'dust');
 
         // Granice mapy
         player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
         player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
     }
 
+    // SPRAWDZANIE INTERAKCJI Z NPC I OBIEKTAMI
+    let distSmith = Math.hypot(player.x - NPC_KOWAL.x, player.y - NPC_KOWAL.y);
+    let distScout = Math.hypot(player.x - NPC_ZWIADOWCA.x, player.y - NPC_ZWIADOWCA.y);
+    let distGate = Math.hypot(player.x - DOOR_POS.x, player.y - DOOR_POS.y);
+
+    if (distSmith < 80) {
+        if (currentQuest === 3) advanceQuest(4);
+        if (currentQuest === 8) advanceQuest(9);
+    }
+    if (distScout < 80) {
+        if (currentQuest === 5) advanceQuest(6);
+    }
+    if (distGate < 90 && currentQuest === 10) {
+        advanceQuest(11);
+    }
+
     // Bezpieczna strefa (Baza)
-    player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+    player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius) || currentQuest === 11;
     let playerRadius = 25 * (1 + Math.pow(Math.max(0, player.score - 1), 0.45) * 0.15);
 
     // Jedzenie Kulek
@@ -251,7 +296,7 @@ function updateLocalPhysics() {
         b.y += Math.sin(b.angle) * b.speed;
         
         // EFEKT KURZU POD STOPAMI BOTA
-        if (Math.random() > 0.9) spawnParticle(b.x, b.y + 20, 'rgba(150,255,150,0.2)', 'dust');
+        if (Math.random() > 0.9) spawnParticle(b.x, b.y + 20, 'rgba(100,100,100,0.5)', 'dust');
 
         // Zawracanie na granicach strefy lasu (żeby nie uciekły do bazy)
         if (b.x < 500 || b.x > 3500 || b.y > 2500 || b.y < 500) b.angle += Math.PI;
@@ -263,13 +308,13 @@ function updateLocalPhysics() {
         if (!player.isSafe) {
             if (dist < playerRadius && player.score > b.score * 1.15) {
                 player.score += Math.floor(b.score * 0.5);
-                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY ZJEDZENIU BOTA
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY ZJEDZENIU
                 killLogs.push({ text: `Zabiłeś ${b.name}!`, time: 150 });
                 bots[bi] = spawnLocalBot('slime');
                 checkQuestProgress();
             } else if (dist < bRadius && b.score > player.score * 1.15) {
                 // KARA ZA ŚMIERĆ W KAMPANII
-                spawnParticle(player.x, player.y, '#ff0000', 'blood'); // KREW PRZY ŚMIERCI GRACZA
+                spawnParticle(player.x, player.y, '#ff0000', 'blood'); // KREW PRZY ŚMIERCI
                 player.score = Math.floor(player.score * 0.8); // Traci 20%
                 player.x = 2000; player.y = 3800; // Powrót do bazy
                 killLogs.push({ text: `Zginąłeś! Tracisz masę i wracasz do bazy.`, time: 200 });
@@ -289,7 +334,7 @@ function updateLocalPhysics() {
         bots.forEach((b) => {
             if (p.ownerId !== b.id && Math.hypot(p.x - b.x, p.y - b.y) < 30) {
                 b.score = Math.max(1, b.score - p.damage);
-                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY TRAFIENIU MIECZEM
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY TRAFIENIU
                 damageTexts.push({ x: b.x, y: b.y, val: p.damage, color: '#fff', life: 1, vx: 0, vy: -2 });
                 if (!p.isPiercing) p.life = 0; 
             }
@@ -303,20 +348,6 @@ function updateLocalPhysics() {
 
     // Kamera podąża za graczem
     camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
-}
-
-// --- LOGIKA QUESTÓW FABULARNYCH ---
-function checkQuestProgress() {
-    if (currentQuest === 1 && player.score >= 15) {
-        currentQuest = 2;
-        player.tutorialText = campaignDialogues[currentQuest];
-        killLogs.push({ text: "⭐ ZADANIE WYKONANE! Odblokowano rzucanie Myszka (LPM).", time: 200 });
-    }
-    else if (currentQuest === 2 && player.score >= 50) {
-        currentQuest = 3;
-        player.tutorialText = campaignDialogues[currentQuest];
-        killLogs.push({ text: "⭐ ZADANIE WYKONANE! Akt 1 ukończony pomyślnie.", time: 200 });
-    }
 }
 
 // --- GŁÓWNA PĘTLA GRY ---
@@ -344,7 +375,7 @@ function gameLoop(currentTime) {
     ctx.translate(-vWidth / 2, -vHeight / 2);
     
     ctx.fillStyle = '#27ae60'; ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
-    drawForestMap(ctx, vCamera, vWidth, vHeight); // Przywrócono rysowanie mapy
+    drawForestMap(ctx, vCamera, vWidth, vHeight);
     ctx.restore();
 
     // 3. RYSOWANIE OBIEKTÓW
@@ -355,56 +386,58 @@ function gameLoop(currentTime) {
 
     ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
     
+    // --- WROTA (Północ) ---
+    ctx.fillStyle = '#222'; ctx.fillRect(DOOR_POS.x - 70, DOOR_POS.y - 120, 140, 120);
+    ctx.fillStyle = currentQuest >= 10 ? '#3498db' : '#111'; 
+    ctx.fillRect(DOOR_POS.x - 60, DOOR_POS.y - 110, 120, 110);
+    if(currentQuest >= 10 && Math.random() > 0.5) spawnParticle(DOOR_POS.x + (Math.random()*100-50), DOOR_POS.y - 50, 'rgba(52, 152, 219, 0.8)', 'fire');
+
     // --- BAZA WYPADOWA KAMPANII ---
     
-    // Chata Midasa (Środek bazy - PEŁNA WERSJA)
+    // Chata Midasa 
     drawHut(2000, 3800, 150); 
     
-    // Zwiadowca w obozie (Po lewej stronie)
-    let scoutX = 1850; 
-    let scoutY = 3800;
-    
+    // Zwiadowca w obozie (Po lewej stronie) z drzewem
+    drawDeadTree(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y);
     if (imgZwiadowca.complete) {
-        ctx.drawImage(imgZwiadowca, scoutX - 40, scoutY - 40, 80, 80);
+        ctx.drawImage(imgZwiadowca, NPC_ZWIADOWCA.x - 40, NPC_ZWIADOWCA.y - 40, 80, 80);
         
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(scoutX, scoutY + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
         
         ctx.fillStyle = '#7f8c8d'; 
         ctx.font = 'bold 14px Arial'; 
         ctx.textAlign = 'center';
-        ctx.fillText("Zwiadowca", scoutX, scoutY - 50);
+        ctx.fillText("Zwiadowca", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 50);
 
-        if (player && Math.hypot(player.x - scoutX, player.y - scoutY) < 120) {
+        if (player && Math.hypot(player.x - NPC_ZWIADOWCA.x, player.y - NPC_ZWIADOWCA.y) < 120) {
             ctx.fillStyle = '#fff';
             ctx.font = '12px Arial';
-            ctx.fillText("[ Szsz... nie mam jeszcze dla ciebie map... ]", scoutX, scoutY - 70);
+            ctx.fillText(currentQuest === 6 ? "[ Słuchaj uważnie moich rad... ]" : "[ Szsz... zaraz znajdę tę ścieżkę... ]", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 70);
         }
     }
 
-    // Kowal w obozie (Po prawej stronie)
-    let kowalX = 2150; 
-    let kowalY = 3800;
-    
+    // Kowal w obozie (Po prawej stronie) z otoczeniem
+    drawBlacksmithArea(NPC_KOWAL.x, NPC_KOWAL.y);
     if (imgKowal.complete) {
-        ctx.drawImage(imgKowal, kowalX - 40, kowalY - 40, 80, 80);
+        ctx.drawImage(imgKowal, NPC_KOWAL.x - 40, NPC_KOWAL.y - 40, 80, 80);
         
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(kowalX, kowalY + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(NPC_KOWAL.x, NPC_KOWAL.y + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
         
         ctx.fillStyle = '#e67e22'; 
         ctx.font = 'bold 14px Arial'; 
         ctx.textAlign = 'center';
-        ctx.fillText("Kowal", kowalX, kowalY - 50);
+        ctx.fillText("Kowal", NPC_KOWAL.x, NPC_KOWAL.y - 50);
 
-        if (player && Math.hypot(player.x - kowalX, player.y - kowalY) < 120) {
+        if (player && Math.hypot(player.x - NPC_KOWAL.x, player.y - NPC_KOWAL.y) < 120) {
             ctx.fillStyle = '#fff';
             ctx.font = '12px Arial';
-            ctx.fillText("[ Przynieś mi złom, a wykuję ci potęgę! ]", kowalX, kowalY - 70);
+            ctx.fillText("[ Przynieś mi złom, a wykuję ci potęgę! ]", NPC_KOWAL.x, NPC_KOWAL.y - 70);
         }
     }
     
-    // --- RYSOWANIE CZĄSTECZEK (Kurz pod postaciami, krew nad nimi) ---
+    // CZĄSTECZKI (Kurz pod postaciami)
     particles.forEach(p => {
         ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
@@ -442,7 +475,8 @@ function gameLoop(currentTime) {
     if (gameState === 'PLAYING' && player && player.isTutorialActive) {
         ctx.save();
         let tutorialX = 20; let tutorialY = canvas.height - 200; 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; ctx.fillRect(tutorialX, tutorialY, 380, 110);
+        ctx.fillStyle = currentQuest === 11 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+        ctx.fillRect(tutorialX, tutorialY, 380, 110);
         ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
         if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
         ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
@@ -457,7 +491,7 @@ function gameLoop(currentTime) {
     ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 80);
     ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; ctx.fillText("📜 AKT 1: DROGA NA TRON", canvas.width - 265, 30);
     ctx.fillStyle = '#fff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
-    ctx.fillText(`Zadanie: ${currentQuest}/3`, canvas.width - 265, 75);
+    ctx.fillText(`Etap Fabuły: ${currentQuest}/11`, canvas.width - 265, 75);
 
     if (killLogs.length > 0) {
         ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
@@ -471,7 +505,7 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) PEŁNA WERSJA ---
+// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) - MROCZNA ---
 function drawHut(x, y, size) {
     ctx.save();
     
@@ -481,12 +515,12 @@ function drawHut(x, y, size) {
     ctx.ellipse(x, y + size/2, size * 0.8, size * 0.25, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Główne ściany
-    ctx.fillStyle = '#5D4037'; 
+    // 2. Główne ściany (Szaro-Czarne)
+    ctx.fillStyle = '#333333'; 
     ctx.fillRect(x - size/2, y - size/2, size, size);
     
-    // 3. Zarys desek
-    ctx.strokeStyle = '#3E2723';
+    // 3. Zarys desek (Mroczny)
+    ctx.strokeStyle = '#1a1a1a';
     ctx.lineWidth = 3;
     ctx.strokeRect(x - size/2, y - size/2, size, size);
     ctx.beginPath();
@@ -495,7 +529,7 @@ function drawHut(x, y, size) {
     ctx.stroke();
 
     // 4. Dach
-    ctx.fillStyle = '#4E342E'; 
+    ctx.fillStyle = '#222222'; 
     ctx.beginPath();
     ctx.moveTo(x - size/2 - 20, y - size/2); 
     ctx.lineTo(x, y - size/2 - size * 0.6);  
@@ -505,7 +539,7 @@ function drawHut(x, y, size) {
     ctx.stroke();
 
     // 5. Drzwi
-    ctx.fillStyle = '#111111'; 
+    ctx.fillStyle = '#0a0a0a'; 
     let doorWidth = size * 0.35;
     let doorHeight = size * 0.55;
     ctx.fillRect(x - doorWidth/2, y + size/2 - doorHeight, doorWidth, doorHeight);
@@ -516,5 +550,28 @@ function drawHut(x, y, size) {
     ctx.arc(x, y - size/2 + 15, 6, 0, Math.PI*2);
     ctx.fill();
 
+    ctx.restore();
+}
+
+// --- DODATKOWE ELEMENTY OTOCZENIA ---
+function drawDeadTree(x, y) {
+    ctx.save();
+    ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.beginPath(); 
+    ctx.moveTo(x, y); ctx.lineTo(x, y - 80); 
+    ctx.lineTo(x - 30, y - 120); 
+    ctx.moveTo(x, y - 50); ctx.lineTo(x + 40, y - 100); 
+    ctx.stroke();
+    ctx.restore();
+}
+
+function drawBlacksmithArea(x, y) {
+    ctx.save();
+    ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(x + 40, y - 10, 30, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#444'; ctx.beginPath(); ctx.arc(x + 35, y - 5, 20, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(x - 45, y + 25, 25, 12, 0, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = '#e74c3c'; 
+    ctx.beginPath(); ctx.moveTo(x - 45, y + 25); ctx.lineTo(x - 55, y + 5); ctx.lineTo(x - 40, y + 15); ctx.lineTo(x - 35, y); ctx.lineTo(x - 45, y + 25); ctx.fill();
+    if (Math.random() > 0.5) spawnParticle(x - 45 + (Math.random()*10-5), y + 15, 'rgba(255, 100, 0, 0.8)', 'fire');
     ctx.restore();
 }
