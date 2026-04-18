@@ -1,5 +1,5 @@
 // ==========================================
-// MAP.JS - MOTYW: ARENA ZESZYTOWA (Z CHOINKAMI I ATRAMENTOWYMI KAŁUŻAMI)
+// MAP.JS - MOTYW: ARENA ZESZYTOWA
 // ==========================================
 
 // --- NOWOŚĆ: SYSTEM MOTYWÓW WIZUALNYCH ---
@@ -7,8 +7,15 @@ const MAP_THEMES = {
     'FREE': { bg: '#ffffff', road: 'rgba(17, 17, 17, 0.05)', border: '#e74c3c', spotColor: '#111111' },
     'PvP': { bg: '#f4f1ea', road: 'rgba(139, 69, 19, 0.1)', border: '#8b4513', spotColor: '#2c3e50' },
     'TRAINING': { bg: '#f4f1ea', road: 'rgba(139, 69, 19, 0.1)', border: '#8b4513', spotColor: '#2c3e50' },
+    
+    // AKT 1: Ruiny (Jasny, zarośnięty las)
     'campaign_1': { bg: '#e8f8f5', road: 'rgba(39, 174, 96, 0.1)', border: '#1abc9c', spotColor: '#111111' },
-    'campaign_2': { bg: '#fdedec', road: 'rgba(192, 57, 43, 0.1)', border: '#c0392b', spotColor: '#8b0000' }
+    
+    // AKT 2: Dolina Cieni (Chłodniejszy, blady szary, mroczne kontrasty)
+    'campaign_2': { bg: '#f0f4f8', road: 'rgba(17, 17, 17, 0.1)', border: '#0a0a0a', spotColor: '#111111' },
+    
+    // AKT 3: Pustkowia Królów (Zimny, brudny popiół, sterylna geometria)
+    'campaign_3': { bg: '#e6e9ed', road: 'rgba(0, 0, 0, 0.08)', border: '#050505', spotColor: '#111111' }
 };
 
 let activeTheme = MAP_THEMES['FREE'];
@@ -35,12 +42,21 @@ function initMap(worldSize, mapType = 'FREE') {
     if (mapType === 'campaign_1') {
         safeZones.push({ x: 2000, y: 3800, radius: 250 });
         mapData.roads.push({ x: worldSize / 2 - 120, y: 200, width: 240, height: worldSize - 200 });
-        numPonds = 15; numTrees = 450; numGrass = 600;
+        numPonds = 15; numTrees = 450; numGrass = 600; numSpots = 150;
     } 
     else if (mapType === 'campaign_2') {
-        safeZones.push({ x: worldSize / 2, y: worldSize - 300, radius: 300 }); 
-        mapData.roads.push({ x: 0, y: worldSize / 2 - 150, width: worldSize, height: 300 }); 
-        numPonds = 45; numTrees = 100; numSpots = 300; numGrass = 100;
+        safeZones.push({ x: worldSize / 2, y: worldSize / 2, radius: 300 }); 
+        mapData.roads.push({ x: 0, y: worldSize / 2 - 120, width: worldSize, height: 240 }); 
+        mapData.roads.push({ x: worldSize / 2 - 120, y: 0, width: 240, height: worldSize });
+        
+        numPonds = 35; numTrees = 200; numSpots = 250; numGrass = 300;
+    }
+    else if (mapType === 'campaign_3') {
+        safeZones.push({ x: 2000, y: 3800, radius: 150 }); 
+        safeZones.push({ x: 2000, y: 200, radius: 200 });  
+        mapData.roads.push({ x: worldSize / 2 - 60, y: 200, width: 120, height: worldSize - 400 });
+        
+        numPonds = 60; numTrees = 300; numSpots = 800; numGrass = 50; 
     }
     else {
         safeZones.push({ x: 1000, y: 1000, radius: 250 });
@@ -51,9 +67,12 @@ function initMap(worldSize, mapType = 'FREE') {
         numTrees = 350;
     }
 
-    // --- 1. GENEROWANIE TRAWY ---
+    // --- 1. GENEROWANIE DETALI (Trawa, Nagrobki lub Czaszki) ---
     for(let i = 0; i < numGrass; i++) {
-        mapData.grass.push({ x: Math.random() * worldSize, y: Math.random() * worldSize });
+        let type = 'grass';
+        if (mapType === 'campaign_2') type = 'grave';
+        if (mapType === 'campaign_3') type = 'skull';
+        mapData.grass.push({ x: Math.random() * worldSize, y: Math.random() * worldSize, type: type });
     }
 
     // --- 2. GENEROWANIE ŁAZÓW (KROPEK) ---
@@ -67,28 +86,18 @@ function initMap(worldSize, mapType = 'FREE') {
         {cx: 150, cy: worldSize - 150}, {cx: worldSize - 150, cy: worldSize - 150}
     ];
     corners.forEach(corner => {
-        // Łazy (plamy)
         let spotCount = 3 + Math.floor(Math.random() * 2); 
         for(let i = 0; i < spotCount; i++) {
-            mapData.spots.push({
-                x: corner.cx + (Math.random() * 200 - 100),
-                y: corner.cy + (Math.random() * 200 - 100),
-                radius: 8 + Math.random() * 12 
-            });
+            mapData.spots.push({ x: corner.cx + (Math.random() * 200 - 100), y: corner.cy + (Math.random() * 200 - 100), radius: 8 + Math.random() * 12 });
         }
-        // Po 5 głazów (sterty kamieni) w każdym rogu
         for(let i = 0; i < 5; i++) {
-            mapData.rocks.push({
-                x: corner.cx + (Math.random() * 180 - 90),
-                y: corner.cy + (Math.random() * 180 - 90),
-                radius: 15 + Math.random() * 20 
-            });
+            mapData.rocks.push({ x: corner.cx + (Math.random() * 180 - 90), y: corner.cy + (Math.random() * 180 - 90), radius: 15 + Math.random() * 20 });
         }
     });
 
-    // --- 4. GENEROWANIE KAŁUŻY ---
+    // --- 4. GENEROWANIE PUŁAPEK (Kałuże, Kratery lub Kolce) ---
     for (let i = 0; i < numPonds; i++) {
-        const r = 30 + Math.random() * 30; 
+        const r = 30 + Math.random() * 40; 
         let px, py, invalidPos;
         do {
             invalidPos = false; px = Math.random() * worldSize; py = Math.random() * worldSize;
@@ -96,10 +105,15 @@ function initMap(worldSize, mapType = 'FREE') {
             if (!invalidPos) { for(let zone of safeZones) { if (Math.hypot(px - zone.x, py - zone.y) < r + zone.radius + 15) { invalidPos = true; break; } } }
             if (!invalidPos) { for(let pond of mapData.ponds) { if (Math.hypot(px - pond.x, py - pond.y) < r + pond.radius + 10) { invalidPos = true; break; } } }
         } while(invalidPos);
-        mapData.ponds.push({ x: px, y: py, radius: r, numPoints: 24 + Math.floor(Math.random() * 12), randomOffsetLimit: 0.15 + Math.random() * 0.1 });
+        
+        let puddleType = 'puddle';
+        if (mapType === 'campaign_2') puddleType = 'crater';
+        if (mapType === 'campaign_3') puddleType = 'spikes';
+        
+        mapData.ponds.push({ x: px, y: py, radius: r, numPoints: 12 + Math.floor(Math.random() * 8), randomOffsetLimit: 0.15 + Math.random() * 0.1, type: puddleType });
     }
 
-    // --- 5. GENEROWANIE CHOINEK (I GŁAZÓW OBOK NICH) ---
+    // --- 5. GENEROWANIE PRZESZKÓD (Choinki, Martwe Drzewa lub Kolumny) ---
     for (let i = 0; i < numTrees; i++) {
         const r = 25 + Math.random() * 20; 
         let tx, ty, invalidPos;
@@ -109,14 +123,22 @@ function initMap(worldSize, mapType = 'FREE') {
                 if (tx > 1300 && tx < 2700 && ty > 1300 && ty < 2700) invalidPos = true;
                 if (Math.hypot(tx - 2000, ty - 3800) < 500) invalidPos = true; 
             }
+            if (mapType === 'campaign_2' || mapType === 'campaign_3') {
+                for(let zone of safeZones) { if (Math.hypot(tx - zone.x, ty - zone.y) < zone.radius + 50) { invalidPos = true; break; } }
+            }
             if (!invalidPos) { for(let road of mapData.roads) { if (tx > road.x - r && tx < road.x + road.width + r && ty > road.y - r && ty < road.y + road.height + r) { invalidPos = true; break; } } }
             if (!invalidPos) { for(let pond of mapData.ponds) { if (Math.hypot(tx - pond.x, ty - pond.y) < r + pond.radius + 5) { invalidPos = true; break; } } }
         } while(invalidPos);
         
-        mapData.trees.push({ x: tx, y: ty, radius: r });
+        let objectType = 'choinka';
+        if (mapType === 'campaign_2') objectType = 'dead_tree';
+        if (mapType === 'campaign_3') objectType = 'column';
+        
+        mapData.trees.push({ x: tx, y: ty, radius: r, type: objectType });
 
-        // 30% szans na wygenerowanie głazu obok drzewka
-        if (Math.random() < 0.30) {
+        // Kamienie obok drzew/kolumn
+        let rockChance = mapType === 'campaign_3' ? 0.8 : 0.3;
+        if (Math.random() < rockChance) {
             mapData.rocks.push({
                 x: tx + (Math.random() > 0.5 ? 1 : -1) * (r + 10 + Math.random() * 20),
                 y: ty + (Math.random() > 0.5 ? 1 : -1) * (r + 10 + Math.random() * 20),
@@ -126,7 +148,7 @@ function initMap(worldSize, mapType = 'FREE') {
     }
 }
 
-// --- RYSOWANIE KĘPKI TRAWY ---
+// --- FUNKCJE RYSOWANIA DETALI ---
 function drawNotebookGrass(ctx, x, y) {
     ctx.save(); ctx.translate(x, y);
     ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
@@ -135,6 +157,39 @@ function drawNotebookGrass(ctx, x, y) {
     ctx.moveTo(2, 6); ctx.lineTo(1, -12); // Środkowe (wyższe) źdźbło
     ctx.moveTo(4, 5); ctx.lineTo(8, -6);  // Prawe źdźbło
     ctx.stroke();
+    ctx.restore();
+}
+
+function drawGraveyardDetail(ctx, x, y) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (Math.random() > 0.5) {
+        ctx.fillStyle = '#ddd'; 
+        ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(-6, -4); ctx.arc(0, -4, 6, Math.PI, 0); ctx.lineTo(6, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 2); ctx.moveTo(-3, -2); ctx.lineTo(3, -2); ctx.stroke(); // Krzyż
+    } else {
+        ctx.beginPath(); ctx.moveTo(-8, 8); ctx.lineTo(6, -6); ctx.stroke(); // Ostrze
+        ctx.beginPath(); ctx.moveTo(1, -7); ctx.lineTo(9, -1); ctx.stroke(); // Jelec
+        ctx.beginPath(); ctx.arc(8, -8, 2, 0, Math.PI*2); ctx.stroke(); // Głowica
+    }
+    ctx.restore();
+}
+
+function drawWastelandDetail(ctx, x, y) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    if (Math.random() > 0.5) {
+        // Czaszka
+        ctx.beginPath(); ctx.arc(0, -2, 5, 0, Math.PI*2); ctx.stroke(); // Góra czaszki
+        ctx.beginPath(); ctx.moveTo(-3, 3); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.lineTo(3, 3); ctx.stroke(); // Szczęka
+        ctx.fillStyle = '#111111';
+        ctx.beginPath(); ctx.arc(-2, -2, 1.5, 0, Math.PI*2); ctx.fill(); // Lewe oko
+        ctx.beginPath(); ctx.arc(2, -2, 1.5, 0, Math.PI*2); ctx.fill(); // Prawe oko
+    } else {
+        // Złamana korona
+        ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-4, 4); ctx.lineTo(4, 4); ctx.lineTo(6, -4);
+        ctx.lineTo(2, 0); ctx.lineTo(0, -6); ctx.lineTo(-2, 0); ctx.closePath(); ctx.stroke();
+    }
     ctx.restore();
 }
 
@@ -164,7 +219,7 @@ function drawNotebookRock(ctx, x, y, radius) {
     ctx.restore();
 }
 
-// --- RYSOWANIE NASZKICOWANEJ KAŁUŻY / PLAMY ATRAMENTU ---
+// --- FUNKCJE RYSOWANIA PUŁAPEK ---
 function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
     ctx.save();
     ctx.translate(x, y);
@@ -196,12 +251,69 @@ function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
     ctx.restore();
 }
 
-// --- RYSOWANIE GEOMETRYCZNEGO DRZEWA (TUSZ NA PAPIERZE) ---
+function drawDeepCrater(ctx, x, y, radius) {
+    ctx.save(); ctx.translate(x, y);
+    
+    // Zewnętrzna krawędź
+    ctx.fillStyle = '#cccccc'; ctx.strokeStyle = '#111111'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for(let i=0; i<12; i++) {
+        let a = (i/12) * Math.PI * 2;
+        let r = radius + (Math.random() * 15 - 5);
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+
+    // Pęknięcia
+    ctx.lineWidth = 2;
+    for(let i=0; i<4; i++) {
+        let a = Math.random() * Math.PI * 2;
+        ctx.beginPath(); ctx.moveTo(Math.cos(a)*(radius-5), Math.sin(a)*(radius-5));
+        ctx.lineTo(Math.cos(a)*(radius+20), Math.sin(a)*(radius+20)); ctx.stroke();
+    }
+
+    // Wewnętrzna "otchłań"
+    ctx.fillStyle = '#111111';
+    ctx.beginPath();
+    for(let i=0; i<10; i++) {
+        let a = (i/10) * Math.PI * 2;
+        let r = radius * 0.6 + (Math.random() * 10 - 5);
+        ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+    }
+    ctx.closePath(); ctx.fill();
+
+    ctx.restore();
+}
+
+function drawSpikesField(ctx, x, y, radius) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
+    
+    let numSpikes = 5 + Math.floor(Math.random() * 3);
+    for(let i=0; i<numSpikes; i++) {
+        let a = (i/numSpikes) * Math.PI * 2;
+        let dist = radius * 0.5;
+        ctx.save();
+        ctx.translate(Math.cos(a)*dist, Math.sin(a)*dist);
+        ctx.rotate(a + Math.PI/2); 
+        
+        ctx.fillStyle = '#e0e5ec'; 
+        ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(0, -25); ctx.lineTo(8, 10); ctx.closePath();
+        ctx.fill(); ctx.stroke();
+        
+        ctx.fillStyle = '#111111'; 
+        ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(8, 10); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill();
+        ctx.restore();
+    }
+    ctx.restore();
+}
+
+// --- FUNKCJE RYSOWANIA PRZESZKÓD ---
 function drawNotebookTree(ctx, x, y, radius) {
     ctx.save();
     ctx.translate(x, y);
     
-    ctx.fillStyle = '#111111'; // Zostawiamy głęboką czerń dla kontrastu drzew
+    ctx.fillStyle = '#111111'; 
     ctx.strokeStyle = '#111111';
     ctx.lineJoin = 'miter'; 
     ctx.lineWidth = 1;
@@ -213,6 +325,51 @@ function drawNotebookTree(ctx, x, y, radius) {
     ctx.moveTo(0, -radius * 0.6); ctx.lineTo(radius * 0.7, 0); ctx.lineTo(-radius * 0.7, 0);
     ctx.moveTo(0, -radius * 1.2); ctx.lineTo(radius * 0.5, -radius * 0.4); ctx.lineTo(-radius * 0.5, -radius * 0.4);
     ctx.fill();
+    ctx.restore();
+}
+
+function drawSpookyTree(ctx, x, y, radius) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.strokeStyle = '#111111'; ctx.lineWidth = 8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    
+    ctx.beginPath(); ctx.moveTo(0, radius); ctx.lineTo(0, -radius * 0.3); ctx.stroke();
+    
+    ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-radius * 0.6, -radius * 0.5); ctx.lineTo(-radius * 0.9, -radius * 0.1); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, -radius * 0.1); ctx.lineTo(radius * 0.5, -radius * 0.6); ctx.lineTo(radius * 0.8, -radius * 0.2); ctx.stroke();
+    
+    ctx.fillStyle = '#111111';
+    ctx.beginPath(); ctx.ellipse(0, radius * 0.4, radius * 0.15, radius * 0.3, 0, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+}
+
+function drawBrokenColumn(ctx, x, y, radius) {
+    ctx.save(); ctx.translate(x, y);
+    ctx.fillStyle = activeTheme.bg; ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    
+    // Baza
+    ctx.beginPath(); ctx.ellipse(0, radius*0.8, radius, radius*0.3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    
+    // Trzon
+    ctx.beginPath(); 
+    ctx.moveTo(-radius*0.8, radius*0.8);
+    ctx.lineTo(-radius*0.8, -radius*0.5);
+    ctx.lineTo(-radius*0.3, -radius*0.9); 
+    ctx.lineTo(0, -radius*0.4);
+    ctx.lineTo(radius*0.5, -radius*0.8);
+    ctx.lineTo(radius*0.8, radius*0.8);
+    ctx.fill(); ctx.stroke();
+
+    // Żłobienia
+    ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(-radius*0.4, radius*0.8); ctx.lineTo(-radius*0.4, -radius*0.6); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, radius*0.8); ctx.lineTo(0, -radius*0.4); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(radius*0.4, radius*0.8); ctx.lineTo(radius*0.4, -radius*0.7); ctx.stroke();
+
+    // Pęknięcie
+    ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(-radius*0.2, 0); ctx.lineTo(radius*0.2, radius*0.3); ctx.lineTo(radius*0.1, radius*0.6); ctx.stroke();
+
     ctx.restore();
 }
 
@@ -239,11 +396,24 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         ctx.setLineDash([15, 10]);
         ctx.strokeRect(road.x, road.y, road.width, road.height);
         ctx.setLineDash([]);
+        
+        // Pęknięcia na drodze dla Aktu 2 i 3
+        if (typeof gameState !== 'undefined' && currentQuest > 10) {
+            ctx.lineWidth = 1.5;
+            ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
+            for(let i=road.y + 100; i<road.y + road.height; i+=150) {
+                ctx.beginPath(); ctx.moveTo(road.x + 10, i); ctx.lineTo(road.x + road.width - 10, i + (Math.random()*40-20)); ctx.stroke();
+            }
+        }
     }
 
-    // 4. TRAWA
+    // 4. DETALE (Trawa, Nagrobki, Czaszki)
     let visibleGrass = mapData.grass.filter(g => !(g.x + 10 < camera.x || g.x - 10 > camera.x + canvasWidth || g.y + 10 < camera.y || g.y - 10 > camera.y + canvasHeight));
-    for(let g of visibleGrass) drawNotebookGrass(ctx, g.x, g.y);
+    for(let g of visibleGrass) {
+        if (g.type === 'grave') drawGraveyardDetail(ctx, g.x, g.y);
+        else if (g.type === 'skull') drawWastelandDetail(ctx, g.x, g.y);
+        else drawNotebookGrass(ctx, g.x, g.y);
+    }
 
     // 5. ŁAZY (KROPKI ATRAMENTU)
     ctx.fillStyle = activeTheme.spotColor;
@@ -252,55 +422,57 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill();
     }
 
-    // 6. ATRAMENTOWE KAŁUŻE
+    // 6. PUŁAPKI
     let visiblePonds = mapData.ponds.filter(pond => {
         return !(pond.x + pond.radius * 2 < camera.x || pond.x - pond.radius * 2 > camera.x + canvasWidth ||
                  pond.y + pond.radius * 2 < camera.y || pond.y - pond.radius * 2 > camera.y + canvasHeight);
     });
     for(let pond of visiblePonds) {
-        drawNotebookPuddle(ctx, pond.x, pond.y, pond.radius, pond.numPoints, pond.randomOffsetLimit);
+        if (pond.type === 'crater') drawDeepCrater(ctx, pond.x, pond.y, pond.radius);
+        else if (pond.type === 'spikes') drawSpikesField(ctx, pond.x, pond.y, pond.radius);
+        else drawNotebookPuddle(ctx, pond.x, pond.y, pond.radius, pond.numPoints, pond.randomOffsetLimit);
     }
 
-    // 7. GŁAZY (Rysowane przed drzewami)
+    // 7. GŁAZY
     let visibleRocks = mapData.rocks.filter(r => !(r.x + r.radius < camera.x || r.x - r.radius > camera.x + canvasWidth || r.y + r.radius < camera.y || r.y - r.radius > camera.y + canvasHeight));
     visibleRocks.sort((a, b) => a.y - b.y); 
     for(let r of visibleRocks) drawNotebookRock(ctx, r.x, r.y, r.radius);
 
-    // 8. DRZEWA ZESZYTOWE
+    // 8. PRZESZKODY (Drzewa/Kolumny)
     let visibleTrees = mapData.trees.filter(tree => {
         return !(tree.x + tree.radius * 2 < camera.x || tree.x - tree.radius * 2 > camera.x + canvasWidth ||
                  tree.y + tree.radius * 2 < camera.y || tree.y - tree.radius * 2 > camera.y + canvasHeight);
     });
     visibleTrees.sort((a, b) => a.y - b.y); 
     for(let tree of visibleTrees) {
-        drawNotebookTree(ctx, tree.x, tree.y, tree.radius);
+        if (tree.type === 'dead_tree') drawSpookyTree(ctx, tree.x, tree.y, tree.radius);
+        else if (tree.type === 'column') drawBrokenColumn(ctx, tree.x, tree.y, tree.radius);
+        else drawNotebookTree(ctx, tree.x, tree.y, tree.radius);
     }
 
     // 9. LOGIKA I RYSOWANIE PTAKÓW NA NIEBIE
     let now = Date.now();
-    if (now - mapData.lastBirdSpawn > 30000) { // Klucz co 30 sekund
+    if (now - mapData.lastBirdSpawn > 30000) { 
         mapData.lastBirdSpawn = now;
         let flock = [];
-        for(let i=0; i<7; i++) flock.push({ offsetX: -Math.abs(i - 3) * 25, offsetY: (i - 3) * 25 }); // V-Shape
+        for(let i=0; i<7; i++) flock.push({ offsetX: -Math.abs(i - 3) * 25, offsetY: (i - 3) * 25 }); 
         mapData.birds.push({ x: -200, y: Math.random() * 3000 + 500, speed: 2 + Math.random(), flock: flock });
     }
 
     ctx.strokeStyle = activeTheme.spotColor; ctx.lineWidth = 2; ctx.lineJoin = 'miter';
     for (let i = mapData.birds.length - 1; i >= 0; i--) {
         let b = mapData.birds[i];
-        b.x += b.speed; b.y -= b.speed * 0.3; // Lot w górę w prawo
+        b.x += b.speed; b.y -= b.speed * 0.3; 
         b.flock.forEach(f => {
             let bx = b.x + f.offsetX; let by = b.y + f.offsetY;
-            // Rysowanie ptaka typu "naszkicowane V"
             ctx.beginPath(); ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx, by); ctx.lineTo(bx - 6, by + 6); ctx.stroke();
         });
         if (b.x > 4500 || b.y < -200) mapData.birds.splice(i, 1); 
     }
 
-    ctx.restore(); // KAMERA SIĘ ZATRZYMUJE TUTAJ
+    ctx.restore(); 
 
     // --- 10. EFEKTY POGODOWE BEZPOŚREDNIO NA EKRANIE (HUD) ---
-    // Rysowane po restore(), co oznacza, że zawsze zostają w kadrze, jak brud na szybie
     let eventName = typeof currentEvent !== 'undefined' ? currentEvent : null;
     
     if (eventName === 'TOXIC_RAIN') {
@@ -314,7 +486,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
             let rx = (Math.sin(i * 123) * 10000 - now * 0.5) % canvasWidth;
             let ry = (Math.cos(i * 321) * 10000 + now * 1.5) % canvasHeight;
             if (rx < 0) rx += canvasWidth; if (ry < 0) ry += canvasHeight;
-            ctx.moveTo(rx, ry); ctx.lineTo(rx - 8, ry + 25); // Deszcz pada w dół i w lewo
+            ctx.moveTo(rx, ry); ctx.lineTo(rx - 8, ry + 25); 
         }
         ctx.stroke();
 
@@ -324,7 +496,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
         for(let i = 0; i < 200; i++) {
-            let sx = (Math.cos(i * 987) * 10000 + now * 2.0) % canvasWidth; // Szybki poziomy wiatr
+            let sx = (Math.cos(i * 987) * 10000 + now * 2.0) % canvasWidth; 
             let sy = (Math.sin(i * 654) * 10000 + now * 0.3) % canvasHeight;
             if (sx < 0) sx += canvasWidth; if (sy < 0) sy += canvasHeight;
             ctx.beginPath(); ctx.arc(sx, sy, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
@@ -342,12 +514,12 @@ function drawCastle(x, y, radius) {
     ctx.translate(x, y);
 
     // 1. CZARNA FOSA (Pofalowany atrament)
-    ctx.fillStyle = activeTheme.spotColor; // Czerń lub kolor plam z motywu
+    ctx.fillStyle = activeTheme.spotColor; 
     ctx.beginPath();
     let moatRadius = radius + 40;
     for (let i = 0; i < 32; i++) {
         let angle = (i / 32) * Math.PI * 2;
-        let offset = Math.sin(angle * 8 + x) * 8; // Lekko pofalowane brzegi fosy
+        let offset = Math.sin(angle * 8 + x) * 8; 
         let px = Math.cos(angle) * (moatRadius + offset);
         let py = Math.sin(angle) * (moatRadius + offset);
         if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
@@ -358,7 +530,7 @@ function drawCastle(x, y, radius) {
     // 2. WYSPA ZAMKOWA (Wnętrze fosy)
     ctx.beginPath();
     ctx.arc(0, 0, radius + 15, 0, Math.PI * 2);
-    ctx.fillStyle = activeTheme.bg; // Kolor papieru (czyści środek)
+    ctx.fillStyle = activeTheme.bg; 
     ctx.fill();
 
     // 3. MUR ZAMKOWY
@@ -377,13 +549,11 @@ function drawCastle(x, y, radius) {
 
         ctx.save();
         ctx.translate(tx, ty);
-        ctx.rotate(angle); // Kwadraty obrócone zgodnie z obwodem muru
+        ctx.rotate(angle); 
 
-        // Czarna ramka wieży
         ctx.fillStyle = '#111111';
         ctx.fillRect(-12, -12, 24, 24);
         
-        // Środek wieży (żeby wyglądała na naszkicowaną z pustym środkiem)
         ctx.fillStyle = activeTheme.bg;
         ctx.fillRect(-7, -7, 14, 14);
         
