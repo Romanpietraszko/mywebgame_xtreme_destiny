@@ -20,7 +20,7 @@ let paths = { speed: 'none', strength: 'none', weapon: 'none' };
 window.weaponPath = 'none'; 
 
 let damageTexts = [];
-let particles = [];
+let particles = []; // NOWE: System cząsteczek
 let killLogs = [];
 
 let lastFrameTime = performance.now();
@@ -29,6 +29,13 @@ const frameDuration = 1000 / 60; // 60 FPS
 // --- ZMIENNE KAMPANII (RPG) ---
 let currentQuest = 1;
 let questProgress = 0;
+
+// Grafiki NPC
+const imgZwiadowca = new Image();
+imgZwiadowca.src = 'zwiadowca.png';
+
+const imgKowal = new Image();
+imgKowal.src = 'xtreme-destiny-kowal.png';
 
 // Opowieść Midasa
 const campaignDialogues = {
@@ -39,6 +46,33 @@ const campaignDialogues = {
 
 // Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
 initMap(WORLD_SIZE, 'campaign_1');
+
+// --- SYSTEM CZĄSTECZEK (Krew, Kurz) ---
+function spawnParticle(x, y, color, type = 'blood') {
+    const count = type === 'blood' ? 8 : 1;
+    for (let i = 0; i < count; i++) {
+        particles.push({
+            x: x,
+            y: y,
+            vx: (Math.random() - 0.5) * (type === 'blood' ? 6 : 2),
+            vy: (Math.random() - 0.5) * (type === 'blood' ? 6 : 2),
+            life: 1.0,
+            size: type === 'blood' ? 2 + Math.random() * 4 : 3 + Math.random() * 5,
+            color: color,
+            type: type
+        });
+    }
+}
+
+function updateParticles() {
+    for (let i = particles.length - 1; i >= 0; i--) {
+        let p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.life -= (p.type === 'blood' ? 0.02 : 0.05);
+        if (p.life <= 0) particles.splice(i, 1);
+    }
+}
 
 // Lokalny symulator serwera (Tworzy kropki i wrogów na komputerze gracza)
 function spawnLocalFood() {
@@ -131,7 +165,7 @@ window.startGame = (type) => {
     document.getElementById('ui-layer').style.display = 'none';
     const name = document.getElementById('playerName').value || "Bohater";
 
-    // Punkt odrodzenia Kampanii: Zrujnowany Zamek (Południe mapy)
+    // Punkt odrodzenia Kampanii: Baza wypadowa (Południe mapy)
     let spawnX = 2000;
     let spawnY = 3800; 
 
@@ -188,12 +222,15 @@ function updateLocalPhysics() {
         player.x += Math.cos(moveAngle) * speed; 
         player.y += Math.sin(moveAngle) * speed;
         
+        // EFEKT KURZU POD STOPAMI GRACZA
+        if (Math.random() > 0.7) spawnParticle(player.x, player.y + 20, 'rgba(200,200,200,0.4)', 'dust');
+
         // Granice mapy
         player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
         player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
     }
 
-    // Bezpieczna strefa (Zamek)
+    // Bezpieczna strefa (Baza)
     player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
     let playerRadius = 25 * (1 + Math.pow(Math.max(0, player.score - 1), 0.45) * 0.15);
 
@@ -213,7 +250,10 @@ function updateLocalPhysics() {
         b.x += Math.cos(b.angle) * b.speed;
         b.y += Math.sin(b.angle) * b.speed;
         
-        // Zawracanie na granicach strefy lasu (żeby nie uciekły do zamku)
+        // EFEKT KURZU POD STOPAMI BOTA
+        if (Math.random() > 0.9) spawnParticle(b.x, b.y + 20, 'rgba(150,255,150,0.2)', 'dust');
+
+        // Zawracanie na granicach strefy lasu (żeby nie uciekły do bazy)
         if (b.x < 500 || b.x > 3500 || b.y > 2500 || b.y < 500) b.angle += Math.PI;
 
         let dist = Math.hypot(player.x - b.x, player.y - b.y);
@@ -223,11 +263,13 @@ function updateLocalPhysics() {
         if (!player.isSafe) {
             if (dist < playerRadius && player.score > b.score * 1.15) {
                 player.score += Math.floor(b.score * 0.5);
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY ZJEDZENIU BOTA
                 killLogs.push({ text: `Zabiłeś ${b.name}!`, time: 150 });
                 bots[bi] = spawnLocalBot('slime');
                 checkQuestProgress();
             } else if (dist < bRadius && b.score > player.score * 1.15) {
                 // KARA ZA ŚMIERĆ W KAMPANII
+                spawnParticle(player.x, player.y, '#ff0000', 'blood'); // KREW PRZY ŚMIERCI GRACZA
                 player.score = Math.floor(player.score * 0.8); // Traci 20%
                 player.x = 2000; player.y = 3800; // Powrót do bazy
                 killLogs.push({ text: `Zginąłeś! Tracisz masę i wracasz do bazy.`, time: 200 });
@@ -247,6 +289,7 @@ function updateLocalPhysics() {
         bots.forEach((b) => {
             if (p.ownerId !== b.id && Math.hypot(p.x - b.x, p.y - b.y) < 30) {
                 b.score = Math.max(1, b.score - p.damage);
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY TRAFIENIU MIECZEM
                 damageTexts.push({ x: b.x, y: b.y, val: p.damage, color: '#fff', life: 1, vx: 0, vy: -2 });
                 if (!p.isPiercing) p.life = 0; 
             }
@@ -255,6 +298,9 @@ function updateLocalPhysics() {
         if (p.life <= 0) projectiles.splice(i, 1);
     }
     
+    // Aktualizacja systemu cząsteczek
+    updateParticles();
+
     // Kamera podąża za graczem
     camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
 }
@@ -298,7 +344,7 @@ function gameLoop(currentTime) {
     ctx.translate(-vWidth / 2, -vHeight / 2);
     
     ctx.fillStyle = '#27ae60'; ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
-    drawForestMap(ctx, vCamera, vWidth, vHeight);
+    drawForestMap(ctx, vCamera, vWidth, vHeight); // Przywrócono rysowanie mapy
     ctx.restore();
 
     // 3. RYSOWANIE OBIEKTÓW
@@ -309,9 +355,65 @@ function gameLoop(currentTime) {
 
     ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
     
-    // Zamek Midasa (Południe)
-    drawCastle(2000, 3800, 250); 
+    // --- BAZA WYPADOWA KAMPANII ---
     
+    // Chata Midasa (Środek bazy - PEŁNA WERSJA)
+    drawHut(2000, 3800, 150); 
+    
+    // Zwiadowca w obozie (Po lewej stronie)
+    let scoutX = 1850; 
+    let scoutY = 3800;
+    
+    if (imgZwiadowca.complete) {
+        ctx.drawImage(imgZwiadowca, scoutX - 40, scoutY - 40, 80, 80);
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(scoutX, scoutY + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.fillStyle = '#7f8c8d'; 
+        ctx.font = 'bold 14px Arial'; 
+        ctx.textAlign = 'center';
+        ctx.fillText("Zwiadowca", scoutX, scoutY - 50);
+
+        if (player && Math.hypot(player.x - scoutX, player.y - scoutY) < 120) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.fillText("[ Szsz... nie mam jeszcze dla ciebie map... ]", scoutX, scoutY - 70);
+        }
+    }
+
+    // Kowal w obozie (Po prawej stronie)
+    let kowalX = 2150; 
+    let kowalY = 3800;
+    
+    if (imgKowal.complete) {
+        ctx.drawImage(imgKowal, kowalX - 40, kowalY - 40, 80, 80);
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath(); ctx.ellipse(kowalX, kowalY + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        
+        ctx.fillStyle = '#e67e22'; 
+        ctx.font = 'bold 14px Arial'; 
+        ctx.textAlign = 'center';
+        ctx.fillText("Kowal", kowalX, kowalY - 50);
+
+        if (player && Math.hypot(player.x - kowalX, player.y - kowalY) < 120) {
+            ctx.fillStyle = '#fff';
+            ctx.font = '12px Arial';
+            ctx.fillText("[ Przynieś mi złom, a wykuję ci potęgę! ]", kowalX, kowalY - 70);
+        }
+    }
+    
+    // --- RYSOWANIE CZĄSTECZEK (Kurz pod postaciami, krew nad nimi) ---
+    particles.forEach(p => {
+        ctx.globalAlpha = p.life;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+    });
+    ctx.globalAlpha = 1.0;
+
     foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
     
     projectiles.forEach(p => {
@@ -367,4 +469,52 @@ function gameLoop(currentTime) {
     }
 
     requestAnimationFrame(gameLoop);
+}
+
+// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) PEŁNA WERSJA ---
+function drawHut(x, y, size) {
+    ctx.save();
+    
+    // 1. Cień pod chatą
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
+    ctx.beginPath();
+    ctx.ellipse(x, y + size/2, size * 0.8, size * 0.25, 0, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 2. Główne ściany
+    ctx.fillStyle = '#5D4037'; 
+    ctx.fillRect(x - size/2, y - size/2, size, size);
+    
+    // 3. Zarys desek
+    ctx.strokeStyle = '#3E2723';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(x - size/2, y - size/2, size, size);
+    ctx.beginPath();
+    ctx.moveTo(x - size/2, y); 
+    ctx.lineTo(x + size/2, y);
+    ctx.stroke();
+
+    // 4. Dach
+    ctx.fillStyle = '#4E342E'; 
+    ctx.beginPath();
+    ctx.moveTo(x - size/2 - 20, y - size/2); 
+    ctx.lineTo(x, y - size/2 - size * 0.6);  
+    ctx.lineTo(x + size/2 + 20, y - size/2); 
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // 5. Drzwi
+    ctx.fillStyle = '#111111'; 
+    let doorWidth = size * 0.35;
+    let doorHeight = size * 0.55;
+    ctx.fillRect(x - doorWidth/2, y + size/2 - doorHeight, doorWidth, doorHeight);
+    
+    // 6. Złoty detal Midasa
+    ctx.fillStyle = '#F1C40F';
+    ctx.beginPath();
+    ctx.arc(x, y - size/2 + 15, 6, 0, Math.PI*2);
+    ctx.fill();
+
+    ctx.restore();
 }
