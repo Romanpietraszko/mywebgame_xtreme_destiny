@@ -29,6 +29,7 @@ const frameDuration = 1000 / 60; // 60 FPS
 // --- ZMIENNE KAMPANII (RPG) ---
 let currentQuest = 1;
 let questProgress = 0;
+let currentMapType = 'campaign_1'; // Śledzenie aktualnej mapy
 
 // Grafiki NPC
 const imgZwiadowca = new Image();
@@ -57,11 +58,11 @@ const campaignDialogues = {
     10: "MIDAS: Jesteś gotów, {NAME}. Wejdź w świecącą Jaskinię na północy!",
 
     // AKT 2: Dolina Cieni
-    11: "MIDAS: Przetrwałeś Jaskinię! Witaj w nowym etapie. Zdobądź 130 masy.",
+    11: "MIDAS: Przetrwałeś Jaskinię! Witaj w Dolinie Cieni. Zdobądź 130 masy.",
     12: "ZWIADOWCA: Szlamy tutaj są potężniejsze. Wbij 160 masy, by zyskać szacunek.",
     13: "KOWAL: Twoja broń tępieje. Przynieś mi surowce! (Osiągnij 190 masy)",
     14: "MIDAS: Czuję, że rośniesz w siłę, {NAME}. Pokaż na co cię stać i wbij 220 masy.",
-    15: "ZWIADOWCA: Droga do Tronu jest zamknięta. Wbij 250 masy i znów wejdź do Jaskini!",
+    15: "ZWIADOWCA: Droga do Tronu znów zamknięta. Wbij 250 masy i wejdź do Jaskini!",
 
     // AKT 3: Pustkowia Królów
     16: "MIDAS: To już Pustkowia Królów. Tutaj nikt nie wybacza błędów. Zdobądź 280 masy.",
@@ -73,7 +74,7 @@ const campaignDialogues = {
 };
 
 // Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
-initMap(WORLD_SIZE, 'campaign_1');
+initMap(WORLD_SIZE, currentMapType);
 
 // --- SYSTEM CZĄSTECZEK (Krew, Kurz, Ogień) ---
 function spawnParticle(x, y, color, type = 'blood') {
@@ -116,7 +117,11 @@ function spawnLocalBot(type) {
         by = 500 + Math.random() * 1500;
         bColor = '#2ecc71'; // Zielone szlamy
         bName = 'Dzikie Szlamy';
-        bScore = 5 + Math.random() * 10;
+        
+        // Zwiększamy siłę botów wraz z Aktem
+        if (currentMapType === 'campaign_1') bScore = 5 + Math.random() * 10;
+        else if (currentMapType === 'campaign_2') bScore = 15 + Math.random() * 20;
+        else if (currentMapType === 'campaign_3') bScore = 30 + Math.random() * 40;
     } 
 
     return {
@@ -246,6 +251,28 @@ function checkQuestProgress() {
     else if (currentQuest === 20 && player.score >= 400) advanceQuest(21);
 }
 
+// --- FUNKCJA ZMIENIAJĄCA AKT (NOWOŚĆ) ---
+function transitionToNextAct(newMapType) {
+    currentMapType = newMapType;
+    
+    // Generowanie nowego świata
+    initMap(WORLD_SIZE, currentMapType);
+    
+    // Teleportacja gracza do bazy w nowym świecie (zawsze baza startowa to południe)
+    player.x = 2000;
+    player.y = 3800;
+    player.isSafe = true;
+    
+    // Reset kulek i botów na nowej mapie
+    foods.length = 0;
+    bots.length = 0;
+    projectiles.length = 0;
+    for (let i = 0; i < 150; i++) foods.push(spawnLocalFood());
+    for (let i = 0; i < 15; i++) bots.push(spawnLocalBot('slime'));
+    
+    killLogs.push({ text: "Wkraczasz do nowego regionu...", time: 300 });
+}
+
 // --- LOKALNA LOGIKA FIZYKI (Zastępuje serwer) ---
 function updateLocalPhysics() {
     if (!player) return;
@@ -298,9 +325,17 @@ function updateLocalPhysics() {
     if (distScout < 80) {
         if (currentQuest === 5) advanceQuest(6);
     }
+    
+    // WEJŚCIE DO JASKINI I ZMIANA MAPY (ZAKTUALIZOWANE)
     if (distGate < 120) {
-        if (currentQuest === 10) advanceQuest(11);
-        if (currentQuest === 15) advanceQuest(16);
+        if (currentQuest === 10) {
+            advanceQuest(11);
+            transitionToNextAct('campaign_2');
+        }
+        if (currentQuest === 15) {
+            advanceQuest(16);
+            transitionToNextAct('campaign_3');
+        }
     }
 
     // Bezpieczna strefa (Baza i koniec gry)
@@ -531,8 +566,8 @@ function gameLoop(currentTime) {
     ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; 
     
     let actName = "📜 AKT 1: RUINY";
-    if (currentQuest > 10 && currentQuest <= 15) actName = "📜 AKT 2: DOLINA CIENI";
-    if (currentQuest > 15) actName = "📜 AKT 3: PUSTKOWIA KRÓLÓW";
+    if (currentMapType === 'campaign_2') actName = "📜 AKT 2: DOLINA CIENI";
+    if (currentMapType === 'campaign_3') actName = "📜 AKT 3: PUSTKOWIA KRÓLÓW";
     
     ctx.fillText(actName, canvas.width - 265, 30);
     ctx.fillStyle = '#fff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
