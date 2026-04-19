@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA & UI
 // ==========================================
 
 window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
@@ -34,6 +34,9 @@ for (let i = 0; i < 150; i++) blizzardParticles.push({ x: Math.random() * 5000, 
 for (let i = 0; i < 200; i++) rainParticles.push({ x: Math.random() * 5000, y: Math.random() * 5000, vy: 15 + Math.random() * 10, length: 10 + Math.random() * 20 });
 
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
+const TEAM_EMOJIS = { 'N': '🥶 Północ', 'S': '😈 Południe', 'E': '👺 Wschód', 'W': '👹 Zachód' };
+
+let isDebugMode = false; // <-- SKRYPT DEBUGUJĄCY
 
 initMap(WORLD_SIZE); 
 
@@ -130,6 +133,9 @@ window.onkeydown = (e) => {
     keys[e.code] = true; 
     if (e.code === 'KeyH' && player) player.isTutorialActive = !player.isTutorialActive;
     if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
+    
+    // --- SKRYPT DEBUGUJĄCY F3 ---
+    if (e.code === 'F3') { e.preventDefault(); isDebugMode = !isDebugMode; }
     
     if (gameState === 'PLAYING') {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
@@ -250,7 +256,6 @@ socket.on('formationSwitched', (formName) => {
     }
 });
 
-// EFEKTY CZĄSTECZKOWE
 socket.on('damageText', (data) => {
     damageTexts.push({ x: data.x + (Math.random() * 20 - 10), y: data.y, val: data.val, color: data.color || '#ff4757', life: 1.0, vx: (Math.random() - 0.5) * 2, vy: -2 - Math.random() * 2 });
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
@@ -276,6 +281,14 @@ socket.on('gameOver', (data) => {
         gameOverDiv = document.createElement('div');
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; color: white;';
+        
+        // Mroczne tło Game Over z lasem
+        gameOverDiv.style.backgroundImage = "url('nocnylas.jpg')"; 
+        gameOverDiv.style.backgroundSize = "cover";
+        gameOverDiv.style.backgroundPosition = "center";
+        gameOverDiv.style.backgroundBlendMode = "multiply";
+        gameOverDiv.style.backgroundColor = "rgba(0,0,0,0.85)";
+
         document.body.appendChild(gameOverDiv);
     }
     gameOverDiv.style.display = 'flex';
@@ -288,13 +301,10 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('serverTick', (data) => {
-    // --- POPRAWKA BŁĘDU .forEach() ---
-    // Serwer wysyła obiekty (słowniki) dla optymalizacji sieci. Musimy je zamienić na tablice.
     if (data.foods) foods = Object.values(data.foods);
     bots = data.bots ? Object.values(data.bots) : []; 
     projectiles = data.projectiles ? Object.values(data.projectiles) : []; 
     loots = data.loots ? Object.values(data.loots) : [];             
-    // ---------------------------------
     
     currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
     castles = data.castles || []; bushes = data.bushes || []; meteorZones = data.meteorZones || [];
@@ -340,7 +350,7 @@ function checkEquipmentUpgrades() {
     lastCalculatedTier = total;
 }
 
-// --- LOGIKA UPDATE ---
+// --- LOGIKA UPDATE Z FIZYKĄ MURÓW ---
 function update() {
     if (gameState !== 'PLAYING') return;
 
@@ -369,18 +379,45 @@ function update() {
             if(isNaN(player.x)) player.x = 2000;
             if(isNaN(player.y)) player.y = 2000;
 
-            player.x += Math.cos(moveAngle) * speed; 
-            player.y += Math.sin(moveAngle) * speed;
-            player.isMoving = true;
+            let nextX = player.x + Math.cos(moveAngle) * speed; 
+            let nextY = player.y + Math.sin(moveAngle) * speed;
+
+            // --- LOKALNA FIZYKA MURÓW (Blokada wychodzenia przez ścianę) ---
+            let canMove = true;
+            if (typeof castles !== 'undefined') {
+                for (let z of castles) {
+                    let distNow = Math.hypot(player.x - z.x, player.y - z.y);
+                    let distNext = Math.hypot(nextX - z.x, nextY - z.y);
+                    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+                    let playerAngle = Math.atan2(nextY - z.y, nextX - z.x);
+
+                    let angleDiff = Math.abs(playerAngle - bridgeAngle);
+                    angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+                    let isCrossingWall = (distNow >= z.radius && distNext < z.radius) || 
+                                         (distNow <= z.radius && distNext > z.radius);
+                    let isOnWallLine = Math.abs(distNext - z.radius) < 10;
+
+                    // Jeśli dotykasz muru, a nie jesteś na moście
+                    if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+                        canMove = false;
+                        break;
+                    }
+                }
+            }
+
+            if (canMove) {
+                player.x = nextX; 
+                player.y = nextY;
+                player.isMoving = true;
+            } else {
+                player.isMoving = false;
+            }
         }
     } else {
         player.isMoving = false;
     }
     
-    // ==========================================
-    // LOKALNE ZARZĄDZANIE BAZĄ 
-    // Odłączamy się od zbugowanej flagi serwera i liczymy wszystko u siebie.
-    // ==========================================
     player.isSafe = castles.some(c => c.owner === player.team && Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
 
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
@@ -389,11 +426,11 @@ function update() {
         if (!isNaN(player.x) && !isNaN(player.y)) { 
             camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2; 
         }
-        // Używamy Eventu 'playerMovement', aby przeforsować na serwerze poprawną flagę z lokalnego isSafe!
         socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
     }
 }
 
+// --- RYSOWANIE BAZY FRAKCJI ---
 function drawStarBase(ctx, z) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -401,10 +438,28 @@ function drawStarBase(ctx, z) {
     ctx.shadowColor = z.color;
     ctx.shadowBlur = 40;
     
+    // Tło bazy
     ctx.beginPath(); ctx.arc(0, 0, z.radius, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(10, 17, 40, 0.7)'; ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = z.color; ctx.setLineDash([15, 10]); ctx.stroke();
     
+    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+    
+    // Mur bazy z przerwą na bramę
+    ctx.lineWidth = 4; ctx.strokeStyle = z.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, z.radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2);
+    ctx.stroke();
+
+    // Rysowanie świecącej bramy (mostu)
+    ctx.save();
+    ctx.rotate(bridgeAngle);
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.4)'; 
+    ctx.fillRect(z.radius - 15, -30, 30, 60);
+    ctx.strokeStyle = '#2ecc71';
+    ctx.strokeRect(z.radius - 15, -30, 30, 60);
+    ctx.restore();
+    
+    // Ozdoby i spinnery
     ctx.rotate(Date.now() / 1000); 
     ctx.beginPath();
     for (let i = 0; i < 8; i++) {
@@ -413,9 +468,11 @@ function drawStarBase(ctx, z) {
     ctx.closePath();
     ctx.fillStyle = z.color; ctx.fill();
 
+    // Wyświetlanie Nazwy i Emojki Frakcji na środku bazy
     ctx.rotate(-Date.now() / 1000); 
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`${z.team}`, 0, -5);
+    let dispName = TEAM_EMOJIS[z.team] || z.team;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(dispName, 0, -5);
 
     ctx.restore();
 }
@@ -513,11 +570,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // ==========================================
-        // RYSOWANIE GRACZY I BOTÓW
-        // ==========================================
         allEntities.forEach(e => {
-            // CAŁKOWITE UKRYCIE GRACZA I JEGO NICKU W SKLEPIE
             if (e.isSafe) return; 
             
             let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
@@ -594,6 +647,22 @@ function gameLoop(currentTime) {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
+        // --- SKRYPT DEBUGUJĄCY WYSWIETLANIE (F3) ---
+        if (isDebugMode && player) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 140);
+            ctx.fillStyle = '#2ecc71'; ctx.font = '13px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+            ctx.fillText(`=== DEBUG MODE (F3) ===`, 20, 210);
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillText(`X: ${player.x.toFixed(1)}  Y: ${player.y.toFixed(1)}`, 20, 235);
+            ctx.fillText(`Masa (Score): ${player.score}`, 20, 255);
+            ctx.fillText(`Speed: ${(5 + playerSkills.speed * 0.5).toFixed(2)}`, 20, 275);
+            ctx.fillText(`Skin: ${player.skin}`, 20, 295);
+            ctx.fillStyle = (Date.now() - lastServerTickTime) > 100 ? '#e74c3c' : '#2ecc71';
+            ctx.fillText(`Ping/Lag: ${Date.now() - lastServerTickTime} ms`, 20, 315);
+            ctx.restore();
+        }
+
         // --- RYSOWANIE UI ---
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save(); let tutorialX = 20; let tutorialY = canvas.height - 200; 
@@ -614,9 +683,10 @@ function gameLoop(currentTime) {
             });
 
             let displayMyScore = isNaN(player.score) ? 5 : Math.floor(player.score);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 40);
+            // ZMIANA Y: Obniżono tekst, aby nie nachodził na logo Uczelni!
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 100);
             if (player.isRecruiting !== undefined) {
-                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 60);
+                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 120);
             }
 
             if (killLogs.length > 0) {
