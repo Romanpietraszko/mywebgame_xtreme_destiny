@@ -288,7 +288,14 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('serverTick', (data) => {
-    foods = data.foods; bots = data.bots; projectiles = data.projectiles || []; loots = data.loots || [];             
+    // --- POPRAWKA BŁĘDU .forEach() ---
+    // Serwer wysyła obiekty (słowniki) dla optymalizacji sieci. Musimy je zamienić na tablice.
+    if (data.foods) foods = Object.values(data.foods);
+    bots = data.bots ? Object.values(data.bots) : []; 
+    projectiles = data.projectiles ? Object.values(data.projectiles) : []; 
+    loots = data.loots ? Object.values(data.loots) : [];             
+    // ---------------------------------
+    
     currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
     castles = data.castles || []; bushes = data.bushes || []; meteorZones = data.meteorZones || [];
     
@@ -306,9 +313,6 @@ socket.on('serverTick', (data) => {
         player.score = (typeof sSelf.score === 'number' && !isNaN(sSelf.score)) ? sSelf.score : 5;
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = sSelf.activeWeapon || 'sword';
-
-        // --- KLUCZ: Ufamy tylko LOKALNEJ fizyce jeśli chodzi o sklep i widzialność ---
-        // Usunięto player.isSafe = sSelf.isSafe, zapobiegając nadpisywaniu ze złego serwera!
 
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;

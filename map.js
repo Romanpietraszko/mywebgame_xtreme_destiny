@@ -219,25 +219,40 @@ class CampaignMap extends MapGenerator {
 // -------------------------------------------------------------------------
 // KLASA: TEAMS (Dla trybu teams.js - PvP i Trening drużynowy)
 // -------------------------------------------------------------------------
+// -------------------------------------------------------------------------
+// KLASA: TEAMS (Dla trybu teams.js - PvP i Trening drużynowy)
+// -------------------------------------------------------------------------
 class TeamsMap extends MapGenerator {
     generate(modeType) {
         this.clearData();
         activeTheme = MAP_THEMES[modeType] || MAP_THEMES['PvP'];
         
-        // ZAMKI DRUŻYNOWE
-        this.addSafeZone(1000, 1000, 250, 'castle', 'A');
-        this.addSafeZone(3000, 3000, 250, 'castle', 'B');
-        
-        this.addRoad(this.worldSize / 2 - 120, 0, 240, this.worldSize);
-        this.addRoad(0, this.worldSize / 2 - 120, this.worldSize, 240);
+        let center = this.worldSize / 2; // Środek mapy (2000, 2000)
 
+        // 1. CENTRALNA ARENA BOJOWA (Wielki plac bez drzew na epickie starcia)
+        this.addRoad(center - 400, center - 400, 800, 800);
+
+        // 2. CZTERY GŁÓWNE DROGI DO BAZ FRAKCJI (N, S, E, W)
+        this.addRoad(center - 150, 0, 300, center - 400); // Droga Północna
+        this.addRoad(center - 150, center + 400, 300, center - 400); // Droga Południowa
+        this.addRoad(0, center - 150, center - 400, 300); // Droga Zachodnia
+        this.addRoad(center + 400, center - 150, center - 400, 300); // Droga Wschodnia
+
+        // UWAGA: Nie używamy tutaj this.addSafeZone(), ponieważ teams.js ZAWSZE 
+        // synchronizuje autorytatywne pozycje 4 Zamków prosto z serwera!
+
+        // 3. GENEROWANIE ŚRODOWISKA (Więcej detali pobojowiska)
         this.populateWorld({
-            numGrass: 400, grassTypes: ['grass'],
-            numSpots: 100,
-            numPonds: 25, pondType: 'puddle',
-            numTrees: 350, treeType: 'choinka',
-            rockChance: 0.3,
-            isAct1: false, isAct2Or3: false
+            numGrass: 500, 
+            grassTypes: ['grass', 'sword', 'skull'], // Detale bitewne
+            numSpots: 150,
+            numPonds: 30, 
+            pondType: 'puddle', // Możemy to w przyszłości zmienić na 'crater'
+            numTrees: 450, 
+            treeType: 'choinka',
+            rockChance: 0.5, // Więcej głazów do chowania się przed ostrzałem łuczników
+            isAct1: false, 
+            isAct2Or3: false
         });
     }
 }
