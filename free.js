@@ -35,8 +35,8 @@ let lastSkillMenuState = '';
 
 let damageTexts = [];
 let particles = [];
-let deathMarkers = []; // NOWOŚĆ: Tablica na ślady śmierci na mapie taktycznej
-let isMapOpen = false; // NOWOŚĆ: Stan otwarcia dużej mapy
+let deathMarkers = []; 
+let isMapOpen = false; 
 
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
@@ -51,14 +51,12 @@ const GACHA_INTERVAL_MS = 60 * 1000;
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
 
-// --- NOWOŚĆ: SPACE ROOM I LIMIT CZASU ---
 let spawnCountdown = 10;
 let spawnCountdownTimer = null;
 let selectedSpawn = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
 let gameStartTime = 0;
-const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; // 15 minut
+const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; 
 
-// Zmienna do kontrolowania Drag & Drop
 let lastInventoryStateStr = '';
 
 window.addEventListener('contextmenu', e => e.preventDefault());
@@ -83,7 +81,6 @@ window.equipWeaponFromInventory = (weaponCode) => {
     if (inventoryUI) inventoryUI.style.display = 'none'; 
 };
 
-// --- NOWOŚĆ: Prawdziwy Drag & Drop na Canvasie ---
 canvas.addEventListener('dragover', (e) => {
     e.preventDefault(); 
 });
@@ -95,10 +92,6 @@ canvas.addEventListener('drop', (e) => {
         window.equipWeaponFromInventory(weaponCode);
     }
 });
-
-// ==========================================
-// OBSŁUGA STEROWANIA (Mysz i Klawiatura)
-// ==========================================
 
 window.addEventListener('mousemove', (e) => {
     if (gameState === 'PLAYING' && player && controlType !== 'TOUCH') {
@@ -133,11 +126,10 @@ window.addEventListener('mousedown', (e) => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // --- NOWOŚĆ: WYBÓR MIEJSCA SPAWNU W SPACE ROOMIE ---
     if (gameState === 'SPAWN_SELECTION') {
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2 + 20; // Lekkie przesunięcie mapy w dół
+        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
         
         if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
             let mapScale = WORLD_SIZE / mapSize;
@@ -265,12 +257,8 @@ window.onkeydown = (e) => {
 window.onkeyup = (e) => {
     keys[e.code] = false;
     if (e.code === 'KeyQ' && player) player.isShielding = false;
-    if (e.code === 'KeyM') isMapOpen = false; // Schowanie mapy
+    if (e.code === 'KeyM') isMapOpen = false; 
 };
-
-// ==========================================
-// SYSTEM EFEKTÓW WIZUALNYCH (Ptaki i Wiatr)
-// ==========================================
 
 function triggerStartBirds(x, y) {
     let birdCount = 80 + Math.floor(Math.random() * 40); 
@@ -328,12 +316,10 @@ function drawNotebookBird(ctx, b) {
     ctx.restore();
 }
 
-// --- LOGIKA MENU I STARTU (ZMIENIONA NA SPACE ROOM) ---
 window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
     
-    // Przechodzimy do wyboru spawnu
     gameState = 'SPAWN_SELECTION';
     spawnCountdown = 10;
     
@@ -384,7 +370,7 @@ function finalizeSpawn() {
     socket.emit('joinGame', { name, color, skin: player.skin, spawnX: selectedSpawn.x, spawnY: selectedSpawn.y });
     gameState = 'PLAYING';
     
-    gameStartTime = Date.now(); // Startujemy timer 15 min!
+    gameStartTime = Date.now(); 
     lastFrameTime = performance.now();
     lastServerTickTime = Date.now(); 
     nextGachaTime = Date.now() + GACHA_INTERVAL_MS; 
@@ -421,7 +407,6 @@ function showGameOverScreen(finalScore, reasonText) {
     if (shop) shop.style.display = 'none';
 }
 
-// --- KOMUNIKACJA Z SERWEREM ---
 socket.on('init', (data) => { 
     myId = data.id; 
     if (player) player.id = myId; 
@@ -520,16 +505,12 @@ socket.on('gameOver', (data) => {
     showGameOverScreen(scoreDisplay, "Zostałeś pożarty!");
 });
 
-/**
- * ODBIÓR DANYCH Z SERWERA
- */
 socket.on('serverTick', (data) => {
     lastServerTickTime = Date.now(); 
     isServerLagging = false;
 
     if (!data) return; 
 
-    // --- ŁATKA ANTY-LAG: Odtwarzanie jedzenia przy kompresji pakietów ---
     if (data.foods) {
         foods = Object.values(data.foods);
     }
@@ -541,7 +522,14 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0;
     
-    // safeZones zostały przeniesione i są rysowane przez klasy map.js.
+    // --- SYNCHRONIZACJA ZAMKÓW Z SERWERA ---
+    if (data.castles) {
+        let nonCastles = safeZones.filter(z => z.type !== 'castle');
+        let serverCastles = data.castles.map(c => { c.type = 'castle'; c.team = c.owner; return c; });
+        safeZones.length = 0;
+        safeZones.push(...nonCastles, ...serverCastles);
+    }
+    // ----------------------------------------
 
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
@@ -627,15 +615,13 @@ function update() {
         if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
 
         if (!isNaN(moveAngle) && !isNaN(speed)) {
-            // Zamiast od razu ruszać gracza, obliczamy jego przyszłą pozycję
             let nextX = player.x + Math.cos(moveAngle) * speed; 
             let nextY = player.y + Math.sin(moveAngle) * speed;
 
-            // --- FIZYKA MURÓW I MOSTU ---
             let canMove = true;
             if (typeof safeZones !== 'undefined') {
                 for (let z of safeZones) {
-                    if (z.type !== 'castle') continue; // Dotyczy tylko zamków z murami
+                    if (z.type !== 'castle') continue; 
 
                     let distNow = Math.hypot(player.x - z.x, player.y - z.y);
                     let distNext = Math.hypot(nextX - z.x, nextY - z.y);
@@ -645,15 +631,12 @@ function update() {
                     let angleDiff = Math.abs(playerAngle - bridgeAngle);
                     angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
 
-                    // Jeśli gracz próbuje przekroczyć linię muru (wejść lub wyjść)
                     let isCrossingWall = (distNow >= z.radius && distNext < z.radius) || 
                                          (distNow <= z.radius && distNext > z.radius);
-                    // Jeśli ociera się o mur
                     let isOnWallLine = Math.abs(distNext - z.radius) < 10;
 
-                    // Jeśli dotyka muru, ale NIE JEST na moście (tolerancja kąta mostu to 0.35 radiana)
                     if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
-                        canMove = false; // BUM! Uderzyłeś w mur.
+                        canMove = false; 
                         break;
                     }
                 }
@@ -764,11 +747,10 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         ctx.stroke();
     }
     
-    // Rysuj wybrany punkt na etapie SPAWN_SELECTION
     if (gameState === 'SPAWN_SELECTION') {
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#111111'; // Celownik na czarny
+        ctx.fillStyle = '#111111'; 
         ctx.fill(); 
         ctx.lineWidth = 2; 
         ctx.strokeStyle = '#111111'; 
@@ -776,16 +758,13 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#111111'; // Animacja celownika na czarno
+        ctx.strokeStyle = '#111111'; 
         ctx.stroke();
     }
 
     ctx.restore();
 }
 
-/**
- * GŁÓWNA PĘTLA GRY (GAME LOOP)
- */
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
 
@@ -800,12 +779,10 @@ function gameLoop(currentTime) {
         isServerLagging = true;
     }
 
-    // --- EKRAN WYBORU SPAWNU (SPACE ROOM / LOBBY) ---
     if (gameState === 'SPAWN_SELECTION') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // ZMIANA: Tło zeszytowe w kratkę dla Lobby
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(0, 0, canvas.width, canvas.height);
         ctx.strokeStyle = '#e0e0e0';
@@ -938,7 +915,6 @@ function gameLoop(currentTime) {
         });
         ctx.stroke();
 
-        // JEDZENIE - Piękny pomarańcz
         foods.forEach(f => {
             ctx.fillStyle = '#e67e22'; 
             ctx.beginPath(); 
@@ -1167,7 +1143,6 @@ function gameLoop(currentTime) {
 
         if (gameState !== 'GAMEOVER') {
             
-            // --- UI: RANKING ---
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
             
@@ -1181,7 +1156,6 @@ function gameLoop(currentTime) {
                 else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
-            // --- UI: LEWA GÓRA (Punkty) ---
             ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
             ctx.textAlign = 'left';
             let displayScoreP = isNaN(player.score) ? 5 : Math.floor(player.score);
@@ -1193,7 +1167,6 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
@@ -1204,34 +1177,28 @@ function gameLoop(currentTime) {
             let timerH = 46;
             let timerX = canvas.width / 2 - timerW / 2;
             
-            // Dynamiczne wyliczanie Y
-            let timerY = (currentEvent === null) ? 65 : 95;
+            // --- POPRAWA ZEGARA ---
+            let timerY = (currentEvent === null) ? 80 : 110;
 
             ctx.save();
-            // Białe tło
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(timerX, timerY, timerW, timerH);
-            // Czarna gruba ramka
             ctx.strokeStyle = '#111111';
             ctx.lineWidth = 4;
             ctx.strokeRect(timerX, timerY, timerW, timerH);
 
-            // Ikonki botów w rogach (czarne kuleczki)
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
-            // Oczy botów
             ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
 
-            // Cyfrowy czarny tekst
             ctx.fillStyle = '#111111';
             ctx.font = "bold 28px monospace";
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // Ostatnia minuta - niech cyfry migają na szaro
             if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
                 ctx.fillStyle = '#777777'; 
             }
@@ -1239,16 +1206,14 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = 170; // Logi zabójstw po prawej
+            let logStartY = 170; 
 
-            // --- MAPA I RADAR ---
             let smallRadarSize = 120;
             let smallRadarX = 20;
             let smallRadarY = 80; 
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
-            // --- MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
@@ -1256,7 +1221,6 @@ function gameLoop(currentTime) {
                 drawRadarMap(ctx, tacMapX, tacMapY, tacMapSize, true);
             }
 
-            // --- UI: ŚRODEK (Eventy) ---
             ctx.save();
             ctx.textAlign = 'center';
             if (currentEvent === null) {
@@ -1278,7 +1242,6 @@ function gameLoop(currentTime) {
             }
             ctx.restore();
 
-            // --- UI: PRAWA STRONA (Logi zabójstw) ---
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = "bold 14px 'Permanent Marker', Arial"; ctx.textAlign = 'right';
                 for (let i = 0; i < killLogs.length; i++) {
@@ -1305,7 +1268,6 @@ function gameLoop(currentTime) {
             }
 
             if (inventoryUI && inventoryUI.style.display !== 'none' && player.inventory) {
-                // ZMIANA: Zoptymalizowano rysowanie ekwipunku dla Drag & Drop
                 let slotsHTML = '';
                 Object.keys(player.inventory).forEach(key => {
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
@@ -1325,7 +1287,7 @@ function gameLoop(currentTime) {
                 
                 let invSlots = document.getElementById('inventory-slots');
                 if (invSlots && invSlots.innerHTML !== slotsHTML) {
-                    invSlots.innerHTML = slotsHTML; // Ograniczono wywołania do minimum
+                    invSlots.innerHTML = slotsHTML; 
                 }
             }
 
