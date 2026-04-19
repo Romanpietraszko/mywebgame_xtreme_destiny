@@ -1,5 +1,5 @@
 // ==========================================
-// SERVER.JS - Backend i Symulacja Świata (Zoptymalizowany V3 - PRO)
+// SERVER.JS - Backend i Symulacja Świata (Zoptymalizowany V4 - ULTRA PRO)
 // ==========================================
 
 const express = require('express');
@@ -48,7 +48,6 @@ const MAX_FOODS = 200;
 const MAX_BOTS = 80; 
 const MAX_LOOTS = 15; 
 
-// OPTYMALIZACJA V1: Przejście na słowniki dla szybkiego usunięcia z pamięci
 const players = {};
 let foods = {};
 let bots = {};
@@ -56,6 +55,10 @@ let loots = {};
 let projectiles = {}; 
 let entityIdCounter = 0;
 let botNameCounter = 0;
+
+// OPTYMALIZACJA SIECI (Zapobieganie lagom na telefonach)
+let dirtyFoods = true; // Flaga, czy trzeba wysłać paczkę z jedzeniem
+let tickCounter = 0; // Licznik taktów serwera
 
 // --- ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
 let bushes = [];
@@ -126,6 +129,7 @@ async function killPlayer(pId) {
 function spawnFood() {
     let id = ++entityIdCounter;
     foods[id] = { id: id, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
+    dirtyFoods = true; // Zaznacz, że układ jedzenia się zmienił
 }
 
 function spawnLoot() {
@@ -144,12 +148,15 @@ function spawnBot() {
     let botScore = 1 + Math.random() * 10;
     let botName = `Bot AI #${botNameCounter}`;
     let botColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+    let isBoss = false;
+    let spawnTime = Date.now();
     
     const randBoss = Math.random();
     if (randBoss < 0.01) { 
         botScore = 150 + Math.random() * 50; 
         botName = `Czarny Tytan AI`;
         botColor = '#111'; 
+        isBoss = true;
     } else if (randBoss < 0.05) { 
         botScore = 50 + Math.random() * 30;
         botName = `Wędrowny Rycerz AI`;
@@ -166,7 +173,9 @@ function spawnBot() {
         ownerId: null, team: null, angleOffset: 0, distOffset: 0,  
         targetX: 0, targetY: 0,
         inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
-        lastShootTime: 0
+        lastShootTime: 0,
+        isHyperboss: isBoss, // Znakowanie dla limitera
+        spawnTick: spawnTime
     };
 }
 
@@ -180,12 +189,18 @@ io.on('connection', (socket) => {
     console.log(`===========================================\n`);
 
     socket.on('joinGame', (data) => {
+        // Zabezpieczenie przed błędem payloadu
+        if (!data || typeof data !== 'object') return;
+
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
         let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
         
         players[socket.id] = {
-            id: socket.id, x: 2000, y: 2000, score: 0, baseSpeed: baseSpeed, massMultiplier: massGainMult, 
+            id: socket.id, 
+            x: typeof data.spawnX === 'number' ? data.spawnX : 2000, 
+            y: typeof data.spawnY === 'number' ? data.spawnY : 2000, 
+            score: 0, baseSpeed: baseSpeed, massMultiplier: massGainMult, 
             level: 1, skillPoints: 0, skills: { speed: 0, strength: 0, weapon: 0 },
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,     
@@ -205,6 +220,8 @@ io.on('connection', (socket) => {
     });
 
     socket.on('joinTeamGame', (data) => {
+        if (!data || typeof data !== 'object') return;
+
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
         let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
@@ -258,6 +275,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerMovement', (data) => {
+        if (!data) return;
         const p = players[socket.id];
         if (p) {
             p.isMoving = (data.x !== p.x || data.y !== p.y);
@@ -274,6 +292,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerMovementTeam', (data) => {
+        if (!data) return;
         const p = players[socket.id];
         if (p) {
             p.isMoving = (data.x !== p.x || data.y !== p.y);
@@ -286,6 +305,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('dash', (dir) => {
+        if (!dir || typeof dir.x !== 'number' || typeof dir.y !== 'number') return;
         const p = players[socket.id];
         const now = Date.now();
         if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
@@ -311,10 +331,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('setBotOffset', (data) => {
+        if (!data || !data.botId) return;
         const p = players[socket.id];
         let b = bots[data.botId];
         if (p && b && b.ownerId === p.id) {
-            b.angleOffset = data.angleOffset; b.distOffset = data.distOffset;
+            b.angleOffset = data.angleOffset || 0; b.distOffset = data.distOffset || 0;
             if (p.formation !== 3) { p.formation = 3; socket.emit('formationSwitched', "WŁASNA (PPM)"); }
         }
     });
@@ -332,6 +353,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('chooseSkillPath', (data) => {
+        if (!data || !data.category || !data.path) return;
         const p = players[socket.id];
         if (p && p.skills[data.category] >= 5 && p.paths[data.category] === 'none') {
             p.paths[data.category] = data.path;
@@ -340,6 +362,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('claimGachaReward', (data) => {
+        if (!data) return;
         const p = players[socket.id];
         if (!p) return;
         if (data.type === 'weapon') {
@@ -385,8 +408,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('equipFromInventory', (data) => {
+        if (!data || !data.weaponId) return;
         const p = players[socket.id];
-        if (!p || !data.weaponId) return;
+        if (!p) return;
         if (p.inventory[data.weaponId] > 0) {
             p.activeWeapon = data.weaponId;
             for (let bId in bots) { if (bots[bId].ownerId === p.id) bots[bId].activeWeapon = p.activeWeapon; }
@@ -394,6 +418,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('throwSword', (data) => {
+        if (!data || typeof data.x !== 'number' || typeof data.y !== 'number') return;
         const p = players[socket.id];
         if (!p) return;
         let type = p.activeWeapon;
@@ -471,6 +496,7 @@ function getNearbyEntities(x, y, grid) {
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
     eventTickCounter++;
+    tickCounter++;
 
     for (let pId in players) {
         let p = players[pId];
@@ -609,9 +635,22 @@ setInterval(() => {
         }
     }
 
-    // --- 1. RUCH BOTÓW ---
+    // --- 1. RUCH BOTÓW (I LIMITOWANIE HIPERBOSSA) ---
     for (let bId in bots) {
         let b = bots[bId];
+        
+        // ZABEZPIECZENIE: Hiperboss limit masy i czyszczenie
+        if (b.isHyperboss) {
+            if (b.score > 800) b.score = 800; // Hard cap na 800 masy
+            let timeAliveSec = (Date.now() - b.spawnTick) / 1000;
+            // Znika sam jeśli żyje dłużej niż 35 sekund (Nikt go nie zaatakował)
+            if (timeAliveSec > 35) {
+                delete bots[bId];
+                spawnBot();
+                continue;
+            }
+        }
+        
         let owner = b.ownerId ? players[b.ownerId] : null;
 
         let botSpeedFromOwner = owner ? owner.baseSpeed : (2.5 * botDifficultyMultiplier); 
@@ -668,7 +707,7 @@ setInterval(() => {
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
                 b.x += Math.cos(b.angle) * currentBotSpeed; b.y += Math.sin(b.angle) * currentBotSpeed;
-                if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                if (b.color === '#c0392b' && !b.isHyperboss) b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
             if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
             if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
@@ -678,6 +717,7 @@ setInterval(() => {
     // --- BUDOWA SIATKI (GRIDU) NA TĄ KLATKĘ ---
     let grid = {};
     function addToGrid(entity, type) {
+        if(!entity) return;
         let key = `${Math.floor(entity.x / CELL_SIZE)},${Math.floor(entity.y / CELL_SIZE)}`;
         if (!grid[key]) grid[key] = { players: [], bots: [], foods: [], loots: [] };
         grid[key][type].push(entity);
@@ -927,11 +967,21 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
-    // Wysyłamy do klientów dane o obiektach jako słowniki (bez statycznych krzaków).
-    io.emit('serverTick', { 
-        players, bots, foods, projectiles, loots, 
-        activeEvent, eventTimeLeft, castles, meteorZones 
-    });
+    // --- OPTYMALIZACJA PAYLOADU (ZAPOBIEGANIE LAGOM) ---
+    // Wysyłamy paczkę jedzenia tylko co 2 sekundy (co 60 taktów) LUB gdy coś się zjadło. 
+    // Na telefonach paczka z jedzeniem potrafiła dławić pętle renderującą
+    let payload = {
+        players, bots, projectiles, loots, 
+        activeEvent, eventTimeLeft, castles, meteorZones
+    };
+    
+    if (dirtyFoods || tickCounter % 60 === 0) {
+        payload.foods = foods;
+        dirtyFoods = false;
+    }
+
+    io.emit('serverTick', payload);
+
 }, 33);
 
 // ==========================================
@@ -955,7 +1005,7 @@ function getTutorialMessage(playerName, eventType) {
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`=========================================`);
-    console.log(` SERWER Xtreme Destiny DZIAŁA W TRYBIE PRO `);
+    console.log(` SERWER Xtreme Destiny DZIAŁA W TRYBIE ULTRA PRO `);
     console.log(` Port nasłuchiwania: ${PORT} `);
     console.log(`=========================================`);
 });

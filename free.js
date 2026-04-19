@@ -523,9 +523,6 @@ socket.on('gameOver', (data) => {
 /**
  * ODBIÓR DANYCH Z SERWERA
  */
-/**
- * ODBIÓR DANYCH Z SERWERA
- */
 socket.on('serverTick', (data) => {
     lastServerTickTime = Date.now(); 
     isServerLagging = false;
@@ -596,7 +593,7 @@ function update() {
 
     // KONTROLA LIMITU CZASU (15 MINUT)
     if (Date.now() - gameStartTime >= GAME_TIME_LIMIT_MS) {
-        socket.disconnect(); // Odlaczamy od serwera
+        socket.disconnect(); 
         showGameOverScreen(Math.floor(player.score), "CZAS MINĄŁ!");
         return;
     }
@@ -922,11 +919,7 @@ function gameLoop(currentTime) {
         });
         ctx.stroke();
 
-        safeZones.forEach(z => {
-            if(typeof drawCastle === 'function') {
-                drawCastle(ctx, z);
-            }
-        }); 
+        // USUNIĘTO PĘTLĘ RYSOWANIA ZAMKU Z FRONTU. MAP.JS ROBI TO SAM.
         
         foods.forEach(f => {
             ctx.fillStyle = '#000000'; 
