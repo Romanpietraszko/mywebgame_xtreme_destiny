@@ -5,6 +5,11 @@
 window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 const socket = window.socket;
 
+// --- ŁADOWANIE ZDJĘCIA DO LOBBY ---
+const lobbyBg = new Image();
+lobbyBg.src = 'tłolas.png';
+// ----------------------------------
+
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
@@ -383,6 +388,15 @@ function showGameOverScreen(finalScore, reasonText) {
     document.getElementById('step-1').style.display = 'none';
     document.getElementById('step-2').style.display = 'none';
 
+    // ZMIANA: Nocny las jako tło Game Over
+    const uiLayer = document.getElementById('ui-layer');
+    uiLayer.style.backgroundImage = "url('nocnylas.jpg')"; 
+    uiLayer.style.backgroundSize = "cover";
+    uiLayer.style.backgroundPosition = "center";
+    uiLayer.style.backgroundRepeat = "no-repeat";
+    uiLayer.style.backgroundBlendMode = "multiply";
+    uiLayer.style.backgroundColor = "rgba(0,0,0,0.85)";
+
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
         gameOverDiv = document.createElement('div');
@@ -522,14 +536,12 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0;
     
-    // --- SYNCHRONIZACJA ZAMKÓW Z SERWERA ---
     if (data.castles) {
         let nonCastles = safeZones.filter(z => z.type !== 'castle');
         let serverCastles = data.castles.map(c => { c.type = 'castle'; c.team = c.owner; return c; });
         safeZones.length = 0;
         safeZones.push(...nonCastles, ...serverCastles);
     }
-    // ----------------------------------------
 
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
@@ -670,6 +682,7 @@ function update() {
         }
     }
 }
+
 function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.save();
     
@@ -783,22 +796,28 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i < canvas.width; i += 40) { ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); }
-        for (let i = 0; i < canvas.height; i += 40) { ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); }
-        ctx.stroke();
+        if (lobbyBg.complete && lobbyBg.width > 0) {
+            let ratio = Math.max(canvas.width / lobbyBg.width, canvas.height / lobbyBg.height);
+            let newWidth = lobbyBg.width * ratio;
+            let newHeight = lobbyBg.height * ratio;
+            let offsetX = (canvas.width - newWidth) / 2;
+            let offsetY = (canvas.height - newHeight) / 2;
+            ctx.drawImage(lobbyBg, offsetX, offsetY, newWidth, newHeight);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
 
-        ctx.fillStyle = '#111111';
+        ctx.fillStyle = '#ffffff';
         ctx.font = "bold 40px 'Permanent Marker', Arial";
         ctx.textAlign = 'center';
         ctx.fillText("🚀 LOBBY / SPACE ROOM", canvas.width / 2, 60);
         
         ctx.font = "bold 18px Arial";
-        ctx.fillStyle = '#555';
+        ctx.fillStyle = '#cccccc';
         ctx.fillText("Serwer synchronizuje dane... Wybierz taktyczny punkt zrzutu:", canvas.width / 2, 95);
 
         let mapSize = 400;
@@ -811,7 +830,7 @@ function gameLoop(currentTime) {
         ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
 
         const tempName = document.getElementById('playerName') ? document.getElementById('playerName').value || "Gracz" : "Gracz";
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = '#ffffff';
         ctx.font = "bold 16px Arial";
         ctx.fillText(`Status: W gotowości | Oczekujący gracz: ${tempName}`, canvas.width / 2, mapY + mapSize + 90);
 
@@ -1177,7 +1196,6 @@ function gameLoop(currentTime) {
             let timerH = 46;
             let timerX = canvas.width / 2 - timerW / 2;
             
-            // --- POPRAWA ZEGARA ---
             let timerY = (currentEvent === null) ? 80 : 110;
 
             ctx.save();
