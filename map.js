@@ -766,7 +766,7 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
 }
 
 // =========================================================================
-// GŁÓWNA PĘTLA RYSOWANIA CAŁEGO ŚWIATA
+// GŁÓWNA PĘTLA RYSOWANIA CAŁEGO ŚWIATA (Poprawione Warstwy Z-Index)
 // =========================================================================
 
 function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
@@ -782,21 +782,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     ctx.lineWidth = 1; 
     ctx.strokeRect(-10, -10, 4020, 4020);
 
-    // --- BAZY I ZAMKI ---
-    for (let zone of safeZones) {
-        if (zone.x + zone.radius < camera.x || zone.x - zone.radius > camera.x + canvasWidth || 
-            zone.y + zone.radius < camera.y || zone.y - zone.radius > camera.y + canvasHeight) {
-            continue;
-        }
-            
-        if (zone.type === 'castle') {
-            drawCastle(ctx, zone.x, zone.y, zone.radius, zone.team);
-        } else {
-            drawSafeZone(ctx, zone.x, zone.y, zone.radius);
-        }
-    }
-
-    // --- DROGI ---
+    // --- 1. DROGI (Na samym spodzie) ---
     ctx.fillStyle = activeTheme.road; 
     ctx.strokeStyle = activeTheme.spotColor;
     ctx.lineWidth = 2;
@@ -819,7 +805,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // --- DETALE (Trawa, Nagrobki) ---
+    // --- 2. DETALE (Trawa, Nagrobki) ---
     let visibleGrass = mapData.grass.filter(g => !(g.x + 10 < camera.x || g.x - 10 > camera.x + canvasWidth || g.y + 10 < camera.y || g.y - 10 > camera.y + canvasHeight));
     for(let g of visibleGrass) {
         if (g.type === 'grave') {
@@ -835,7 +821,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // --- KROPKI ATRAMENTU ---
+    // --- 3. KROPKI ATRAMENTU ---
     ctx.fillStyle = activeTheme.spotColor;
     let visibleSpots = mapData.spots.filter(s => !(s.x + s.radius < camera.x || s.x - s.radius > camera.x + canvasWidth || s.y + s.radius < camera.y || s.y - s.radius > camera.y + canvasHeight));
     for(let s of visibleSpots) {
@@ -844,7 +830,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         ctx.fill();
     }
 
-    // --- PUŁAPKI ---
+    // --- 4. PUŁAPKI (Kałuże leżą na płasko na ziemi) ---
     let visiblePonds = mapData.ponds.filter(pond => {
         return !(pond.x + pond.radius * 2 < camera.x || pond.x - pond.radius * 2 > camera.x + canvasWidth ||
                  pond.y + pond.radius * 2 < camera.y || pond.y - pond.radius * 2 > camera.y + canvasHeight);
@@ -859,14 +845,28 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // --- GŁAZY ---
+    // --- 5. BAZY I ZAMKI (Przykrywają drogi i kałuże!) ---
+    for (let zone of safeZones) {
+        if (zone.x + zone.radius < camera.x || zone.x - zone.radius > camera.x + canvasWidth || 
+            zone.y + zone.radius < camera.y || zone.y - zone.radius > camera.y + canvasHeight) {
+            continue;
+        }
+            
+        if (zone.type === 'castle') {
+            drawCastle(ctx, zone.x, zone.y, zone.radius, zone.team);
+        } else {
+            drawSafeZone(ctx, zone.x, zone.y, zone.radius);
+        }
+    }
+
+    // --- 6. GŁAZY (Rzucają cień na wszystko poniżej) ---
     let visibleRocks = mapData.rocks.filter(r => !(r.x + r.radius < camera.x || r.x - r.radius > camera.x + canvasWidth || r.y + r.radius < camera.y || r.y - r.radius > camera.y + canvasHeight));
     visibleRocks.sort((a, b) => a.y - b.y); 
     for(let r of visibleRocks) {
         drawNotebookRock(ctx, r.x, r.y, r.radius);
     }
 
-    // --- PRZESZKODY (Drzewa/Kolumny) ---
+    // --- 7. PRZESZKODY (Drzewa/Kolumny na samym wierzchu) ---
     let visibleTrees = mapData.trees.filter(tree => {
         return !(tree.x + tree.radius * 2 < camera.x || tree.x - tree.radius * 2 > camera.x + canvasWidth ||
                  tree.y + tree.radius * 2 < camera.y || tree.y - tree.radius * 2 > camera.y + canvasHeight);
@@ -882,7 +882,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // --- PTAKI NA NIEBIE ---
+    // --- 8. PTAKI NA NIEBIE ---
     let now = Date.now();
     if (now - mapData.lastBirdSpawn > 30000) { 
         mapData.lastBirdSpawn = now;
@@ -920,7 +920,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
 
     ctx.restore(); 
 
-    // --- EFEKTY POGODOWE (HUD) ---
+    // --- 9. EFEKTY POGODOWE (HUD) ---
     let eventName = typeof currentEvent !== 'undefined' ? currentEvent : null;
     
     if (eventName === 'TOXIC_RAIN') {
@@ -962,7 +962,6 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 }
-
 // =========================================================================
 // FUNKCJE SYSTEMOWE
 // =========================================================================

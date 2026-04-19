@@ -529,8 +529,11 @@ socket.on('serverTick', (data) => {
 
     if (!data) return; 
 
-    // --- ZMIANA: Konwersja optymalnych słowników z serwera na tablice dla silnika ---
-    foods = data.foods ? Object.values(data.foods) : []; 
+    // --- ŁATKA ANTY-LAG: Odtwarzanie jedzenia przy kompresji pakietów ---
+    if (data.foods) {
+        foods = Object.values(data.foods);
+    }
+    
     bots = data.bots ? Object.values(data.bots) : []; 
     projectiles = data.projectiles ? Object.values(data.projectiles) : [];
     loots = data.loots ? Object.values(data.loots) : [];              
@@ -538,11 +541,8 @@ socket.on('serverTick', (data) => {
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0;
     
-    if (data.castles) {
-        safeZones.length = 0;
-        data.castles.forEach(c => safeZones.push(c));
-    }
-    
+    // safeZones zostały przeniesione i są rysowane przez klasy map.js.
+
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
     if (myId && otherPlayers[myId]) {
@@ -651,7 +651,7 @@ function update() {
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
-        player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+        player.isSafe = typeof safeZones !== 'undefined' && safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
         
         if (!isNaN(player.x) && !isNaN(player.y)) {
             camera.x = player.x - canvas.width / 2; 
@@ -686,15 +686,17 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
 
     let mapScale = mapSize / WORLD_SIZE;
 
-    safeZones.forEach(z => {
-        ctx.beginPath();
-        ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
-        ctx.fill();
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    });
+    if (typeof safeZones !== 'undefined') {
+        safeZones.forEach(z => {
+            ctx.beginPath();
+            ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+    }
 
     if (isTactical) {
         deathMarkers.forEach(m => {
@@ -919,10 +921,9 @@ function gameLoop(currentTime) {
         });
         ctx.stroke();
 
-        // USUNIĘTO PĘTLĘ RYSOWANIA ZAMKU Z FRONTU. MAP.JS ROBI TO SAM.
-        
+        // JEDZENIE - Piękny pomarańcz
         foods.forEach(f => {
-            ctx.fillStyle = '#000000'; 
+            ctx.fillStyle = '#e67e22'; 
             ctx.beginPath(); 
             ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); 
             ctx.fill();
@@ -1175,7 +1176,7 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
+            // --- ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
