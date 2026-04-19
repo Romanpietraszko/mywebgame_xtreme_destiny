@@ -591,7 +591,6 @@ function checkEquipmentUpgrades() {
 function update() {
     if (gameState !== 'PLAYING') return;
 
-    // KONTROLA LIMITU CZASU (15 MINUT)
     if (Date.now() - gameStartTime >= GAME_TIME_LIMIT_MS) {
         socket.disconnect(); 
         showGameOverScreen(Math.floor(player.score), "CZAS MINĄŁ!");
@@ -608,43 +607,62 @@ function update() {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
-            
             if (!isNaN(dx) && !isNaN(dy)) {
                 lastMoveDir = { x: dx, y: dy };
                 let len = Math.hypot(dx, dy);
-                if (len > 0) { 
-                    dx /= len; 
-                    dy /= len; 
-                }
+                if (len > 0) { dx /= len; dy /= len; }
             }
         }
     } else if (controlType === 'WASD') {
-        if (keys['KeyW']) dy--; 
-        if (keys['KeyS']) dy++; 
-        if (keys['KeyA']) dx--; 
-        if (keys['KeyD']) dx++;
+        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
     } else {
-        if (keys['ArrowUp']) dy--; 
-        if (keys['ArrowDown']) dy++; 
-        if (keys['ArrowLeft']) dx--; 
-        if (keys['ArrowRight']) dx++;
+        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
     }
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        if (player.skin === 'ninja') { 
-            speed *= 1.05; 
-        }
-        
-        if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') { 
-            speed *= 0.4; 
-        }
+        if (player.skin === 'ninja') speed *= 1.05; 
+        if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
 
         if (!isNaN(moveAngle) && !isNaN(speed)) {
-            player.x += Math.cos(moveAngle) * speed; 
-            player.y += Math.sin(moveAngle) * speed;
+            // Zamiast od razu ruszać gracza, obliczamy jego przyszłą pozycję
+            let nextX = player.x + Math.cos(moveAngle) * speed; 
+            let nextY = player.y + Math.sin(moveAngle) * speed;
+
+            // --- FIZYKA MURÓW I MOSTU ---
+            let canMove = true;
+            if (typeof safeZones !== 'undefined') {
+                for (let z of safeZones) {
+                    if (z.type !== 'castle') continue; // Dotyczy tylko zamków z murami
+
+                    let distNow = Math.hypot(player.x - z.x, player.y - z.y);
+                    let distNext = Math.hypot(nextX - z.x, nextY - z.y);
+                    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+                    let playerAngle = Math.atan2(nextY - z.y, nextX - z.x);
+                    
+                    let angleDiff = Math.abs(playerAngle - bridgeAngle);
+                    angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+                    // Jeśli gracz próbuje przekroczyć linię muru (wejść lub wyjść)
+                    let isCrossingWall = (distNow >= z.radius && distNext < z.radius) || 
+                                         (distNow <= z.radius && distNext > z.radius);
+                    // Jeśli ociera się o mur
+                    let isOnWallLine = Math.abs(distNext - z.radius) < 10;
+
+                    // Jeśli dotyka muru, ale NIE JEST na moście (tolerancja kąta mostu to 0.35 radiana)
+                    if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+                        canMove = false; // BUM! Uderzyłeś w mur.
+                        break;
+                    }
+                }
+            }
+
+            if (canMove) {
+                player.x = nextX; 
+                player.y = nextY;
+            }
         }
     }
     
@@ -669,7 +687,6 @@ function update() {
         }
     }
 }
-
 function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.save();
     

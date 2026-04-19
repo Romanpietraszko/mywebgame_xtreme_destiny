@@ -707,58 +707,119 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
     ctx.save();
     ctx.translate(x, y);
 
+    // Wyliczamy kąt mostu (zawsze w stronę centrum mapy 2000x2000)
+    let bridgeAngle = Math.atan2(2000 - y, 2000 - x); 
+    let moatRadius = radius + 40;
+
+    // 1. FOSA (Pofalowany atrament)
     ctx.fillStyle = activeTheme.spotColor; 
     ctx.beginPath();
-    let moatRadius = radius + 40;
     for (let i = 0; i < 32; i++) {
         let angle = (i / 32) * Math.PI * 2;
         let offset = Math.sin(angle * 8 + x) * 8; 
         let px = Math.cos(angle) * (moatRadius + offset);
         let py = Math.sin(angle) * (moatRadius + offset);
-        
-        if (i === 0) ctx.moveTo(px, py); 
-        else ctx.lineTo(px, py);
+        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
     }
     ctx.closePath();
     ctx.fill();
 
+    // 2. SPRAWDZANIE CZY GRACZ JEST W ŚRODKU (Przełączanie na Sklep)
+    let isPlayerHere = typeof player !== 'undefined' && player && Math.hypot(player.x - x, player.y - y) < radius;
+
     ctx.beginPath();
     ctx.arc(0, 0, radius + 15, 0, Math.PI * 2);
-    ctx.fillStyle = activeTheme.bg; 
-    ctx.fill();
+    
+    if (isPlayerHere) {
+        // --- RYSOWANIE WNĘTRZA SKLEPU ---
+        ctx.save();
+        ctx.clip(); // Zamykamy grafikę w okręgu zamku
+        
+        // Kafelkowa podłoga
+        ctx.fillStyle = '#ecf0f1';
+        ctx.fillRect(-radius-15, -radius-15, (radius+15)*2, (radius+15)*2);
+        ctx.fillStyle = '#bdc3c7';
+        let tileSize = 30;
+        for(let tx = -radius-15; tx < radius+15; tx+=tileSize) {
+            for(let ty = -radius-15; ty < radius+15; ty+=tileSize) {
+                if (Math.abs((tx/tileSize) % 2) === Math.abs((ty/tileSize) % 2)) {
+                    ctx.fillRect(tx, ty, tileSize, tileSize);
+                }
+            }
+        }
+        
+        // Dywan królewski przed ladą
+        ctx.fillStyle = '#e74c3c';
+        ctx.fillRect(-30, -30, 60, 80);
+        ctx.strokeStyle = '#c0392b';
+        ctx.lineWidth = 4;
+        ctx.strokeRect(-30, -30, 60, 80);
 
-    ctx.beginPath();
-    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        // Lada sklepowa kupca
+        ctx.fillStyle = '#8b4513';
+        ctx.fillRect(-50, -60, 100, 30);
+        ctx.fillStyle = '#a0522d';
+        ctx.fillRect(-45, -55, 90, 20);
+
+        ctx.restore();
+    } else {
+        // Zwykły, biały dziedziniec z zewnątrz
+        ctx.fillStyle = activeTheme.bg; 
+        ctx.fill();
+    }
+
+    // 3. MUR ZAMKOWY Z PRZERWĄ NA MOST
     ctx.lineWidth = 6;
     ctx.strokeStyle = '#111111';
+    ctx.beginPath();
+    // Rysujemy łuk, ale zostawiamy "dziurę" na most (0.35 radiana z każdej strony)
+    ctx.arc(0, 0, radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2);
     ctx.stroke();
 
+    // 4. DREWNIANY MOST NAD FOSĄ
+    ctx.save();
+    ctx.rotate(bridgeAngle);
+    ctx.fillStyle = '#8b4513'; 
+    ctx.fillRect(radius - 5, -30, 55, 60);
+    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(radius - 5, -30, 55, 60);
+    // Rysowanie desek
+    ctx.lineWidth = 2;
+    for(let i=1; i<=4; i++) {
+        ctx.beginPath(); ctx.moveTo(radius - 5 + i*11, -30); ctx.lineTo(radius - 5 + i*11, 30); ctx.stroke();
+    }
+    ctx.restore();
+
+    // 5. WIEŻYCZKI NA MURZE
     let numTowers = 8;
     for (let i = 0; i < numTowers; i++) {
         let angle = (i / numTowers) * Math.PI * 2;
+        
+        // Pomiń wieżyczkę, jeśli wypadłaby na środku mostu!
+        let angleDiff = Math.abs(angle - bridgeAngle);
+        angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+        if (angleDiff < 0.4) continue; 
+
         let tx = Math.cos(angle) * radius;
         let ty = Math.sin(angle) * radius;
 
         ctx.save();
         ctx.translate(tx, ty);
         ctx.rotate(angle); 
-
         ctx.fillStyle = '#111111';
         ctx.fillRect(-12, -12, 24, 24);
-        
         ctx.fillStyle = activeTheme.bg;
         ctx.fillRect(-7, -7, 14, 14);
-        
         ctx.restore();
     }
 
-    ctx.fillStyle = '#111111';
-    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    
-    // Jeśli brak teamu, nie rysuj litery
-    if (teamLetter && teamLetter !== '') {
+    // 6. LITERA (Tylko jeśli gracz nie jest w sklepie, żeby nie zasłaniać podłogi)
+    if (!isPlayerHere && teamLetter && teamLetter !== '') {
+        ctx.fillStyle = '#111111';
+        ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
         ctx.fillText(teamLetter, 0, 0); 
     }
 
