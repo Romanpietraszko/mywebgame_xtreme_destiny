@@ -1,5 +1,5 @@
 // ==========================================
-// SERVER.JS - Backend i Symulacja Świata (Zoptymalizowany V3 - PRO)
+// SERVER.JS - Backend i Symulacja Świata (Zoptymalizowany V4 - ULTRA PRO z Fizyką Zamków)
 // ==========================================
 
 const express = require('express');
@@ -48,7 +48,6 @@ const MAX_FOODS = 200;
 const MAX_BOTS = 80; 
 const MAX_LOOTS = 15; 
 
-// OPTYMALIZACJA V1: Przejście na słowniki dla szybkiego usunięcia z pamięci
 const players = {};
 let foods = {};
 let bots = {};
@@ -56,6 +55,10 @@ let loots = {};
 let projectiles = {}; 
 let entityIdCounter = 0;
 let botNameCounter = 0;
+
+// OPTYMALIZACJA SIECI 
+let dirtyFoods = true; 
+let tickCounter = 0; 
 
 // --- ŚRODOWISKO I TRUDNOŚĆ BOTÓW ---
 let bushes = [];
@@ -78,12 +81,38 @@ let currentKingId = null;
 
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
 
+// ZAMKI - SĄ UŻYWANE DO FIZYKI!
 let castles = [
-    { id: 'N', team: 'N', x: 2000, y: 300, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: 'N' },
-    { id: 'S', team: 'S', x: 2000, y: 3700, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: 'S' },
-    { id: 'E', team: 'E', x: 3700, y: 2000, radius: 250, color: TEAM_COLORS['E'], captureProgress: 0, owner: 'E' },
-    { id: 'W', team: 'W', x: 300, y: 2000, radius: 250, color: TEAM_COLORS['W'], captureProgress: 0, owner: 'W' }
+    { id: '1', team: '', x: 1000, y: 1000, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: '' },
+    { id: '2', team: '', x: 3000, y: 3000, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: '' },
+    { id: '3', team: '', x: 1000, y: 3000, radius: 250, color: TEAM_COLORS['E'], captureProgress: 0, owner: '' },
+    { id: '4', team: '', x: 3000, y: 1000, radius: 250, color: TEAM_COLORS['W'], captureProgress: 0, owner: '' }
 ];
+
+// --- NOWOŚĆ: SILNIK FIZYKI MURÓW DLA SERWERA ---
+function canCrossCastleWall(oldX, oldY, newX, newY) {
+    for (let c of castles) {
+        let distNow = Math.hypot(oldX - c.x, oldY - c.y);
+        let distNext = Math.hypot(newX - c.x, newY - c.y);
+        
+        // Most zawsze patrzy na środek mapy (2000, 2000)
+        let bridgeAngle = Math.atan2(2000 - c.y, 2000 - c.x);
+        let moveAngle = Math.atan2(newY - c.y, newX - c.x);
+        
+        let angleDiff = Math.abs(moveAngle - bridgeAngle);
+        angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+        let isCrossingWall = (distNow >= c.radius && distNext < c.radius) || 
+                             (distNow <= c.radius && distNext > c.radius);
+        let isOnWallLine = Math.abs(distNext - c.radius) < 10;
+
+        // Jeśli przechodzi przez mur i NIE jest na moście
+        if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+            return false; // Ściana!
+        }
+    }
+    return true; // Droga wolna
+}
 
 const weaponStats = {
     'sword': { dmg: 5, life: 60, speed: 18, cost: 2, piercing: false },
@@ -126,6 +155,7 @@ async function killPlayer(pId) {
 function spawnFood() {
     let id = ++entityIdCounter;
     foods[id] = { id: id, x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
+    dirtyFoods = true; 
 }
 
 function spawnLoot() {
@@ -144,12 +174,15 @@ function spawnBot() {
     let botScore = 1 + Math.random() * 10;
     let botName = `Bot AI #${botNameCounter}`;
     let botColor = `hsl(${Math.random() * 360}, 70%, 50%)`;
+    let isBoss = false;
+    let spawnTime = Date.now();
     
     const randBoss = Math.random();
     if (randBoss < 0.01) { 
         botScore = 150 + Math.random() * 50; 
         botName = `Czarny Tytan AI`;
         botColor = '#111'; 
+        isBoss = true;
     } else if (randBoss < 0.05) { 
         botScore = 50 + Math.random() * 30;
         botName = `Wędrowny Rycerz AI`;
@@ -166,7 +199,9 @@ function spawnBot() {
         ownerId: null, team: null, angleOffset: 0, distOffset: 0,  
         targetX: 0, targetY: 0,
         inventory: { bow: 0, knife: 0, shuriken: 0 }, activeWeapon: 'sword',
-        lastShootTime: 0
+        lastShootTime: 0,
+        isHyperboss: isBoss, 
+        spawnTick: spawnTime
     };
 }
 
@@ -180,12 +215,17 @@ io.on('connection', (socket) => {
     console.log(`===========================================\n`);
 
     socket.on('joinGame', (data) => {
+        if (!data || typeof data !== 'object') return;
+
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
         let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
         
         players[socket.id] = {
-            id: socket.id, x: 2000, y: 2000, score: 0, baseSpeed: baseSpeed, massMultiplier: massGainMult, 
+            id: socket.id, 
+            x: typeof data.spawnX === 'number' ? data.spawnX : 2000, 
+            y: typeof data.spawnY === 'number' ? data.spawnY : 2000, 
+            score: 0, baseSpeed: baseSpeed, massMultiplier: massGainMult, 
             level: 1, skillPoints: 0, skills: { speed: 0, strength: 0, weapon: 0 },
             paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
             lastWinterUse: 0, lastDashUse: 0, isMoving: false, idleTime: 0,     
@@ -195,16 +235,16 @@ io.on('connection', (socket) => {
             isRecruiting: false, formation: 0, moveAngle: 0, team: null,
             isTutorialActive: true, tutorialFlags: { m15: false, m50: false, m100: false }, tutorialText: ""
         };
-        // Wysyłamy statyczne dane tylko raz (razem z krzakami)
         socket.emit('init', { id: socket.id, castles: castles, bushes: bushes });
 
-        console.log(`[NOWY GRACZ FREE] >> ${players[socket.id].name} << wszedł jako ${skinType.toUpperCase()}!`);
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
     });
 
     socket.on('joinTeamGame', (data) => {
+        if (!data || typeof data !== 'object') return;
+
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
         let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
@@ -238,7 +278,6 @@ io.on('connection', (socket) => {
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
         io.to(socket.id).emit('tutorialTick', { text: msg });
-        console.log(`[NOWY GRACZ TEAMS] >> ${players[socket.id].name} << dołączył do drużyny ${chosenTeam}`);
     });
 
     socket.on('setBotDifficulty', (levelIndex) => {
@@ -258,41 +297,43 @@ io.on('connection', (socket) => {
     });
 
     socket.on('playerMovement', (data) => {
+        if (!data) return;
         const p = players[socket.id];
         if (p) {
-            p.isMoving = (data.x !== p.x || data.y !== p.y);
-            if (p.isMoving) p.idleTime = 0; 
-            if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
-            p.x = data.x; p.y = data.y; p.isSafe = data.isSafe; p.isShielding = data.isShielding; 
+            // ANTY-CHEAT: Serwer weryfikuje ruch gracza przez mury zamku
+            if (canCrossCastleWall(p.x, p.y, data.x, data.y)) {
+                p.isMoving = (data.x !== p.x || data.y !== p.y);
+                if (p.isMoving) p.idleTime = 0; 
+                if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
+                p.x = data.x; p.y = data.y; p.isSafe = data.isSafe; p.isShielding = data.isShielding; 
 
-            let newLevel = Math.floor(p.score / 20) + 1;
-            if (newLevel > p.level) {
-                p.level = newLevel; p.skillPoints++;
-                socket.emit('levelUp', { level: p.level, points: p.skillPoints });
+                let newLevel = Math.floor(p.score / 20) + 1;
+                if (newLevel > p.level) {
+                    p.level = newLevel; p.skillPoints++;
+                    socket.emit('levelUp', { level: p.level, points: p.skillPoints });
+                }
+            } else {
+                // Haker zablokowany! Klient zostanie zsynchronizowany w następnym Ticku
+                p.isSafe = false;
             }
         }
     });
 
-    socket.on('playerMovementTeam', (data) => {
-        const p = players[socket.id];
-        if (p) {
-            p.isMoving = (data.x !== p.x || data.y !== p.y);
-            if (p.isMoving) p.idleTime = 0;
-            if (p.isMoving) p.moveAngle = Math.atan2(data.y - p.y, data.x - p.x);
-            p.x = data.x; p.y = data.y; p.isShielding = data.isShielding; 
-            let newLevel = Math.floor(p.score / 20) + 1;
-            if (newLevel > p.level) { p.level = newLevel; p.skillPoints++; socket.emit('levelUp', { level: p.level, points: p.skillPoints }); }
-        }
-    });
-
     socket.on('dash', (dir) => {
+        if (!dir || typeof dir.x !== 'number' || typeof dir.y !== 'number') return;
         const p = players[socket.id];
         const now = Date.now();
         if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
             p.lastDashUse = now; let dashDist = 150;
-            p.x += dir.x * dashDist; p.y += dir.y * dashDist;
-            p.x = Math.max(0, Math.min(WORLD_SIZE, p.x)); p.y = Math.max(0, Math.min(WORLD_SIZE, p.y));
-            io.emit('killEvent', { text: `💨 Zryw!`, time: 100 });
+            
+            let nextX = p.x + dir.x * dashDist; 
+            let nextY = p.y + dir.y * dashDist;
+            
+            if (canCrossCastleWall(p.x, p.y, nextX, nextY)) {
+                p.x = Math.max(0, Math.min(WORLD_SIZE, nextX)); 
+                p.y = Math.max(0, Math.min(WORLD_SIZE, nextY));
+                io.emit('killEvent', { text: `💨 Zryw!`, time: 100 });
+            }
         }
     });
 
@@ -311,10 +352,11 @@ io.on('connection', (socket) => {
     });
 
     socket.on('setBotOffset', (data) => {
+        if (!data || !data.botId) return;
         const p = players[socket.id];
         let b = bots[data.botId];
         if (p && b && b.ownerId === p.id) {
-            b.angleOffset = data.angleOffset; b.distOffset = data.distOffset;
+            b.angleOffset = data.angleOffset || 0; b.distOffset = data.distOffset || 0;
             if (p.formation !== 3) { p.formation = 3; socket.emit('formationSwitched', "WŁASNA (PPM)"); }
         }
     });
@@ -332,6 +374,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('chooseSkillPath', (data) => {
+        if (!data || !data.category || !data.path) return;
         const p = players[socket.id];
         if (p && p.skills[data.category] >= 5 && p.paths[data.category] === 'none') {
             p.paths[data.category] = data.path;
@@ -340,6 +383,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('claimGachaReward', (data) => {
+        if (!data) return;
         const p = players[socket.id];
         if (!p) return;
         if (data.type === 'weapon') {
@@ -385,8 +429,9 @@ io.on('connection', (socket) => {
     });
 
     socket.on('equipFromInventory', (data) => {
+        if (!data || !data.weaponId) return;
         const p = players[socket.id];
-        if (!p || !data.weaponId) return;
+        if (!p) return;
         if (p.inventory[data.weaponId] > 0) {
             p.activeWeapon = data.weaponId;
             for (let bId in bots) { if (bots[bId].ownerId === p.id) bots[bId].activeWeapon = p.activeWeapon; }
@@ -394,6 +439,7 @@ io.on('connection', (socket) => {
     });
 
     socket.on('throwSword', (data) => {
+        if (!data || typeof data.x !== 'number' || typeof data.y !== 'number') return;
         const p = players[socket.id];
         if (!p) return;
         let type = p.activeWeapon;
@@ -420,21 +466,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    socket.on('throwWinterSword', () => {
-        const p = players[socket.id];
-        const now = Date.now();
-        if (p && p.paths.weapon === 'winter' && now - p.lastWinterUse >= 15000) {
-            p.lastWinterUse = now;
-            let winterDmg = 15 + (p.skills.weapon * 2);
-            let pid = ++entityIdCounter;
-            projectiles[pid] = {
-                id: pid, ownerId: socket.id, ownerTeam: p.team || null, teamInitial: p.team || null,
-                x: p.x, y: p.y - 1000, dx: 0, dy: 1.5, life: 150, speed: 18,
-                isBotSword: false, scoreAtThrow: Math.max(700, p.score), isPiercing: true, isWinter: true, damage: winterDmg, projType: 'winter'
-            };
-        }
-    });
-
     socket.on('disconnect', () => {
         const p = players[socket.id];
         if (p) {
@@ -444,9 +475,6 @@ io.on('connection', (socket) => {
     });
 });
 
-// ==========================================
-// OPTYMALIZACJA V2: SIATKA PRZESTRZENNA (Spatial Hash Grid)
-// ==========================================
 const CELL_SIZE = 400; 
 
 function getNearbyEntities(x, y, grid) {
@@ -471,6 +499,7 @@ function getNearbyEntities(x, y, grid) {
 // --- GŁÓWNA PĘTLA SERWERA (30 FPS) ---
 setInterval(() => {
     eventTickCounter++;
+    tickCounter++;
 
     for (let pId in players) {
         let p = players[pId];
@@ -480,7 +509,6 @@ setInterval(() => {
         }
     }
 
-    // --- LOGIKA ZAMKÓW I OBLĘŻEŃ ---
     Object.values(players).forEach(p => { if (p.team && !p.isSafe) p.isSafe = false; }); 
 
     castles.forEach(c => {
@@ -513,7 +541,6 @@ setInterval(() => {
         }
     });
 
-    // --- SYSTEM EVENTÓW ---
     eventTimer++;
     if (eventTimer > 2700 && activeEvent === null) {
         let playersArray = Object.values(players);
@@ -609,9 +636,18 @@ setInterval(() => {
         }
     }
 
-    // --- 1. RUCH BOTÓW ---
+    // --- 1. RUCH BOTÓW Z FIZYKĄ MURÓW ---
     for (let bId in bots) {
         let b = bots[bId];
+        
+        if (b.isHyperboss) {
+            if (b.score > 800) b.score = 800; 
+            let timeAliveSec = (Date.now() - b.spawnTick) / 1000;
+            if (timeAliveSec > 35) {
+                delete bots[bId]; spawnBot(); continue;
+            }
+        }
+        
         let owner = b.ownerId ? players[b.ownerId] : null;
 
         let botSpeedFromOwner = owner ? owner.baseSpeed : (2.5 * botDifficultyMultiplier); 
@@ -619,6 +655,8 @@ setInterval(() => {
         let isLightweight = owner && owner.paths.speed === 'lightweight';
         let currentBotSpeed = (activeEvent === 'BLIZZARD' && !isLightweight) ? baseBotSpeed * 0.4 : baseBotSpeed;
         
+        let nextX = b.x; let nextY = b.y;
+
         if (b.ownerId) {
             if (owner && armies[b.ownerId]) {
                 let myIndex = armies[b.ownerId].indexOf(b);
@@ -626,13 +664,10 @@ setInterval(() => {
                 let targetX = owner.x; let targetY = owner.y;
 
                 if (owner.formation === 0) { 
-                    let angleStep = (Math.PI * 2) / total;
-                    let currentAngle = (Date.now() / 1500) + (myIndex * angleStep);
-                    let radius = 70 + (total * 2); 
+                    let angleStep = (Math.PI * 2) / total; let currentAngle = (Date.now() / 1500) + (myIndex * angleStep); let radius = 70 + (total * 2); 
                     targetX = owner.x + Math.cos(currentAngle) * radius; targetY = owner.y + Math.sin(currentAngle) * radius;
                 } else if (owner.formation === 1) { 
-                    let row = Math.floor(myIndex / 2) + 1; let side = myIndex % 2 === 0 ? 1 : -1;
-                    if (myIndex === 0) { row = 1; side = 0; } 
+                    let row = Math.floor(myIndex / 2) + 1; let side = myIndex % 2 === 0 ? 1 : -1; if (myIndex === 0) { row = 1; side = 0; } 
                     targetX = owner.x - Math.cos(owner.moveAngle) * (row * 45) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * 35);
                     targetY = owner.y - Math.sin(owner.moveAngle) * (row * 45) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * 35);
                 } else if (owner.formation === 2) { 
@@ -649,7 +684,7 @@ setInterval(() => {
                 if (distToTarget > 10) { 
                     b.angle = Math.atan2(targetY - b.y, targetX - b.x);
                     let speedMult = distToTarget > 120 ? 1.8 : (distToTarget > 40 ? 1.3 : 0.8);
-                    b.x += Math.cos(b.angle) * (currentBotSpeed * speedMult); b.y += Math.sin(b.angle) * (currentBotSpeed * speedMult);
+                    nextX += Math.cos(b.angle) * (currentBotSpeed * speedMult); nextY += Math.sin(b.angle) * (currentBotSpeed * speedMult);
                 }
             } else if (!owner) {
                 b.ownerId = null; b.team = null; b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
@@ -661,23 +696,33 @@ setInterval(() => {
                 let king = players[currentKingId];
                 if (!king.isSafe) {
                     isHuntingKing = true; b.angle = Math.atan2(king.y - b.y, king.x - b.x);
-                    b.x += Math.cos(b.angle) * (currentBotSpeed * 1.5); b.y += Math.sin(b.angle) * (currentBotSpeed * 1.5);
+                    nextX += Math.cos(b.angle) * (currentBotSpeed * 1.5); nextY += Math.sin(b.angle) * (currentBotSpeed * 1.5);
                     b.color = '#c0392b'; 
                 }
             }
             if (!isHuntingKing) {
                 if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2;
-                b.x += Math.cos(b.angle) * currentBotSpeed; b.y += Math.sin(b.angle) * currentBotSpeed;
-                if (b.color === '#c0392b') b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
+                nextX += Math.cos(b.angle) * currentBotSpeed; nextY += Math.sin(b.angle) * currentBotSpeed;
+                if (b.color === '#c0392b' && !b.isHyperboss) b.color = `hsl(${Math.random() * 360}, 70%, 50%)`;
             }
-            if (b.x < 0 || b.x > WORLD_SIZE) b.angle = Math.PI - b.angle;
-            if (b.y < 0 || b.y > WORLD_SIZE) b.angle = -b.angle;
+            if (nextX < 0 || nextX > WORLD_SIZE) b.angle = Math.PI - b.angle;
+            if (nextY < 0 || nextY > WORLD_SIZE) b.angle = -b.angle;
+        }
+
+        // Zastosowanie fizyki dla botów
+        if (canCrossCastleWall(b.x, b.y, nextX, nextY)) {
+            b.x = nextX; b.y = nextY;
+        } else {
+            // Bot uderzył w mur -> skręt w bok żeby obejść
+            b.angle += Math.PI / 2; 
+            b.x += Math.cos(b.angle) * 3;
+            b.y += Math.sin(b.angle) * 3;
         }
     }
 
-    // --- BUDOWA SIATKI (GRIDU) NA TĄ KLATKĘ ---
     let grid = {};
     function addToGrid(entity, type) {
+        if(!entity) return;
         let key = `${Math.floor(entity.x / CELL_SIZE)},${Math.floor(entity.y / CELL_SIZE)}`;
         if (!grid[key]) grid[key] = { players: [], bots: [], foods: [], loots: [] };
         grid[key][type].push(entity);
@@ -687,14 +732,12 @@ setInterval(() => {
     Object.values(foods).forEach(f => addToGrid(f, 'foods'));
     Object.values(loots).forEach(l => addToGrid(l, 'loots'));
 
-    // --- 2. KOLIZJE BOTÓW Z WYKORZYSTANIEM SIATKI ---
     for (let bId in bots) {
         let b = bots[bId];
         if (!b) continue;
         let owner = b.ownerId ? players[b.ownerId] : null;
         let nearby = getNearbyEntities(b.x, b.y, grid);
 
-        // Strzelanie
         let shootChance = 0.03 * botDifficultyMultiplier;
         if (b.score >= 15 && Math.random() < shootChance) {
             let stats = weaponStats[b.activeWeapon];
@@ -732,14 +775,12 @@ setInterval(() => {
             }
         }
 
-        // Bot je jedzenie
         nearby.foods.forEach(f => {
             if (foods[f.id] && Math.hypot(b.x - f.x, b.y - f.y) < 25) {
                 b.score += 1; delete foods[f.id]; spawnFood();
             }
         });
 
-        // Bot zjada Bota
         nearby.bots.forEach(b2 => {
             if (!bots[b.id] || !bots[b2.id] || b.id === b2.id) return;
             if (b.ownerId && b.ownerId === b2.ownerId) return;
@@ -751,25 +792,19 @@ setInterval(() => {
 
             if (dist < r1 && b.score > b2.score * 1.15) {
                 io.emit('killEvent', { text: `${b.name} pożarł ${b2.name}` }); 
-                b.score += Math.floor(b2.score * 0.5);
-                io.emit('deathMarker', { x: b2.x, y: b2.y }); 
-                delete bots[b2.id]; spawnBot(); 
+                b.score += Math.floor(b2.score * 0.5); io.emit('deathMarker', { x: b2.x, y: b2.y }); delete bots[b2.id]; spawnBot(); 
             } else if (dist < r2 && b2.score > b.score * 1.15) {
                 io.emit('killEvent', { text: `${b2.name} pożarł ${b.name}` }); 
-                b2.score += Math.floor(b.score * 0.5);
-                io.emit('deathMarker', { x: b.x, y: b.y }); 
-                delete bots[b.id]; spawnBot(); 
+                b2.score += Math.floor(b.score * 0.5); io.emit('deathMarker', { x: b.x, y: b.y }); delete bots[b.id]; spawnBot(); 
             }
         });
 
-        // Przelew masy do Gracza
         if (bots[b.id] && b.ownerId && b.score > 15) {
             let p = players[b.ownerId];
             if (p) { let transfer = Math.floor(b.score - 15); b.score -= transfer; p.score += transfer; }
         }
     }
 
-    // --- 3. KOLIZJE GRACZY Z WYKORZYSTANIEM SIATKI ---
     Object.values(players).forEach(p => {
         if (!players[p.id]) return; 
         let pRadius = 25 * (1 + Math.pow(Math.max(0, p.score - 1), 0.45) * 0.15);
@@ -856,7 +891,6 @@ setInterval(() => {
         });
     });
 
-    // --- 4. FIZYKA MIECZY Z WYKORZYSTANIEM SIATKI ---
     for (let pId in projectiles) {
         let proj = projectiles[pId];
         proj.x += proj.dx * proj.speed;
@@ -927,16 +961,20 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
-    // Wysyłamy do klientów dane o obiektach jako słowniki (bez statycznych krzaków).
-    io.emit('serverTick', { 
-        players, bots, foods, projectiles, loots, 
-        activeEvent, eventTimeLeft, castles, meteorZones 
-    });
+    let payload = {
+        players, bots, projectiles, loots, 
+        activeEvent, eventTimeLeft, castles, meteorZones
+    };
+    
+    if (dirtyFoods || tickCounter % 60 === 0) {
+        payload.foods = foods;
+        dirtyFoods = false;
+    }
+
+    io.emit('serverTick', payload);
+
 }, 33);
 
-// ==========================================
-// MIDAS - WIRTUALNY PRZEWODNIK 
-// ==========================================
 function getTutorialMessage(playerName, eventType) {
     const messages = {
         'join_standard': `Witaj na arenie XD, ${playerName}! Jako Zwykły Wojownik rośniesz odrobinę szybciej. Zbieraj pomarańczowe kropki i skrzynki!`,
@@ -955,7 +993,7 @@ function getTutorialMessage(playerName, eventType) {
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`=========================================`);
-    console.log(` SERWER Xtreme Destiny DZIAŁA W TRYBIE PRO `);
+    console.log(` SERWER Xtreme Destiny DZIAŁA W TRYBIE ULTRA PRO `);
     console.log(` Port nasłuchiwania: ${PORT} `);
     console.log(`=========================================`);
 });

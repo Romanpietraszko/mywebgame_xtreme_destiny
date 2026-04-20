@@ -1,6 +1,15 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KONSOLA & LERP
 // ==========================================
+
+// --- 🛡️ AUTO-DEBUGGER (Ochrona przed crashem pętli) ---
+window.addEventListener('error', function(event) {
+    console.warn("🛡️ [GUARDIAN] Zablokowano błąd krytyczny:", event.message);
+    event.preventDefault(); 
+    if (typeof gameLoop === 'function' && window.gameState === 'PLAYING') {
+        requestAnimationFrame(gameLoop); 
+    }
+});
 
 window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 
@@ -21,6 +30,9 @@ let lastSkillMenuState = '';
 let damageTexts = [], particles = [];
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
 
+// --- 🛡️ SYSTEM ANTY-LAG (Interpolacja LERP) ---
+let entityLerp = {}; 
+
 let lastFrameTime = performance.now();
 const targetFPS = 60;
 const frameDuration = 1000 / targetFPS; 
@@ -34,6 +46,9 @@ for (let i = 0; i < 150; i++) blizzardParticles.push({ x: Math.random() * 5000, 
 for (let i = 0; i < 200; i++) rainParticles.push({ x: Math.random() * 5000, y: Math.random() * 5000, vy: 15 + Math.random() * 10, length: 10 + Math.random() * 20 });
 
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
+const TEAM_EMOJIS = { 'N': '🥶 Północ', 'S': '😈 Południe', 'E': '👺 Wschód', 'W': '👹 Zachód' };
+
+let isDebugMode = false;
 
 initMap(WORLD_SIZE); 
 
@@ -131,6 +146,8 @@ window.onkeydown = (e) => {
     if (e.code === 'KeyH' && player) player.isTutorialActive = !player.isTutorialActive;
     if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
     
+    if (e.code === 'F3') { e.preventDefault(); isDebugMode = !isDebugMode; }
+    
     if (gameState === 'PLAYING') {
         if (e.code === 'Digit1') socket.emit('switchWeapon', 1);
         if (e.code === 'Digit2') socket.emit('switchWeapon', 2);
@@ -183,7 +200,6 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Dowódca";
     window.playerSkin = document.querySelector('.char-card.selected') ? document.querySelector('.char-card.selected').id.replace('char-', '') : 'standard';
 
-    // WAITING ROOM
     gameState = 'WAITING';
     let lobbyDiv = document.createElement('div');
     lobbyDiv.id = 'waiting-room';
@@ -224,7 +240,6 @@ window.startGame = (control, mode) => {
     };
 };
 
-// --- KOMUNIKACJA Z SERWEREM ---
 socket.on('initTeam', (data) => { 
     myId = data.id; myTeam = data.team; 
     if (player) { player.id = myId; player.team = myTeam; player.color = data.color; }
@@ -250,7 +265,6 @@ socket.on('formationSwitched', (formName) => {
     }
 });
 
-// EFEKTY CZĄSTECZKOWE
 socket.on('damageText', (data) => {
     damageTexts.push({ x: data.x + (Math.random() * 20 - 10), y: data.y, val: data.val, color: data.color || '#ff4757', life: 1.0, vx: (Math.random() - 0.5) * 2, vy: -2 - Math.random() * 2 });
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
@@ -267,6 +281,9 @@ socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
     if (data && data.message) finalDeathMessage = data.message;
+    
+    // --- 🛡️ POPRAWKA EKRANU GAME OVER (Ukrywanie białego Menu) ---
+    document.getElementById('ui-layer').style.display = 'none';
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
     const panel = document.getElementById('formation-panel'); if (panel) panel.style.display = 'none';
@@ -276,6 +293,13 @@ socket.on('gameOver', (data) => {
         gameOverDiv = document.createElement('div');
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; color: white;';
+        
+        gameOverDiv.style.backgroundImage = "url('nocnylas.jpg')"; 
+        gameOverDiv.style.backgroundSize = "cover";
+        gameOverDiv.style.backgroundPosition = "center";
+        gameOverDiv.style.backgroundBlendMode = "multiply";
+        gameOverDiv.style.backgroundColor = "rgba(0,0,0,0.85)";
+
         document.body.appendChild(gameOverDiv);
     }
     gameOverDiv.style.display = 'flex';
@@ -288,11 +312,36 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('serverTick', (data) => {
-    foods = data.foods; bots = data.bots; projectiles = data.projectiles || []; loots = data.loots || [];             
-    currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
-    castles = data.castles || []; bushes = data.bushes || []; meteorZones = data.meteorZones || [];
+    // --- 🛡️ POPRAWKA MIGAJĄCEGO JEDZENIA I LERPa ---
+    if (data.foods !== undefined) foods = window.Guardian.safeArray(data.foods);
     
-    otherPlayers = data.players;
+    if (data.bots !== undefined) {
+        bots = window.Guardian.safeArray(data.bots); 
+        bots.forEach(b => {
+            if (!entityLerp[b.id]) entityLerp[b.id] = { x: b.x, y: b.y };
+            entityLerp[b.id].tx = b.x; entityLerp[b.id].ty = b.y;
+        });
+    }
+
+    if (data.projectiles !== undefined) projectiles = window.Guardian.safeArray(data.projectiles); 
+    if (data.loots !== undefined) loots = window.Guardian.safeArray(data.loots);             
+    if (data.bushes !== undefined) bushes = window.Guardian.safeArray(data.bushes); 
+    if (data.meteorZones !== undefined) meteorZones = window.Guardian.safeArray(data.meteorZones);
+    
+    currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
+    
+    if (data.castles !== undefined) {
+        let rawCastles = window.Guardian.safeArray(data.castles);
+        castles = rawCastles.map(c => { c.team = c.owner; return c; });
+    }
+    
+    otherPlayers = data.players || {};
+    Object.values(otherPlayers).forEach(p => {
+        if (p.id === myId) return; 
+        if (!entityLerp[p.id]) entityLerp[p.id] = { x: p.x, y: p.y };
+        entityLerp[p.id].tx = p.x; entityLerp[p.id].ty = p.y;
+    });
+
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
         
@@ -306,9 +355,6 @@ socket.on('serverTick', (data) => {
         player.score = (typeof sSelf.score === 'number' && !isNaN(sSelf.score)) ? sSelf.score : 5;
         player.inventory = sSelf.inventory || { bow: 0, knife: 0, shuriken: 0 };
         player.activeWeapon = sSelf.activeWeapon || 'sword';
-
-        // --- KLUCZ: Ufamy tylko LOKALNEJ fizyce jeśli chodzi o sklep i widzialność ---
-        // Usunięto player.isSafe = sSelf.isSafe, zapobiegając nadpisywaniu ze złego serwera!
 
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
@@ -336,7 +382,6 @@ function checkEquipmentUpgrades() {
     lastCalculatedTier = total;
 }
 
-// --- LOGIKA UPDATE ---
 function update() {
     if (gameState !== 'PLAYING') return;
 
@@ -356,7 +401,7 @@ function update() {
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
-        let speed = 5 + (playerSkills.speed * 0.5);
+        let speed = 5 + ((playerSkills.speed || 0) * 0.5);
         if (player.skin === 'ninja') speed *= 1.05; 
         if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
         if (bushes.some(b => Math.hypot(player.x - b.x, player.y - b.y) < b.radius)) speed *= 0.5;
@@ -365,18 +410,43 @@ function update() {
             if(isNaN(player.x)) player.x = 2000;
             if(isNaN(player.y)) player.y = 2000;
 
-            player.x += Math.cos(moveAngle) * speed; 
-            player.y += Math.sin(moveAngle) * speed;
-            player.isMoving = true;
+            let nextX = player.x + Math.cos(moveAngle) * speed; 
+            let nextY = player.y + Math.sin(moveAngle) * speed;
+
+            let canMove = true;
+            if (typeof castles !== 'undefined') {
+                for (let z of castles) {
+                    let distNow = Math.hypot(player.x - z.x, player.y - z.y);
+                    let distNext = Math.hypot(nextX - z.x, nextY - z.y);
+                    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+                    let playerAngle = Math.atan2(nextY - z.y, nextX - z.x);
+
+                    let angleDiff = Math.abs(playerAngle - bridgeAngle);
+                    angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+                    let isCrossingWall = (distNow >= z.radius && distNext < z.radius) || 
+                                         (distNow <= z.radius && distNext > z.radius);
+                    let isOnWallLine = Math.abs(distNext - z.radius) < 10;
+
+                    if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+                        canMove = false;
+                        break;
+                    }
+                }
+            }
+
+            if (canMove) {
+                player.x = nextX; 
+                player.y = nextY;
+                player.isMoving = true;
+            } else {
+                player.isMoving = false;
+            }
         }
     } else {
         player.isMoving = false;
     }
     
-    // ==========================================
-    // LOKALNE ZARZĄDZANIE BAZĄ 
-    // Odłączamy się od zbugowanej flagi serwera i liczymy wszystko u siebie.
-    // ==========================================
     player.isSafe = castles.some(c => c.owner === player.team && Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
 
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
@@ -385,7 +455,6 @@ function update() {
         if (!isNaN(player.x) && !isNaN(player.y)) { 
             camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2; 
         }
-        // Używamy Eventu 'playerMovement', aby przeforsować na serwerze poprawną flagę z lokalnego isSafe!
         socket.emit('playerMovement', { x: player.x, y: player.y, score: player.score, isSafe: player.isSafe, isShielding: player.isShielding });
     }
 }
@@ -399,7 +468,21 @@ function drawStarBase(ctx, z) {
     
     ctx.beginPath(); ctx.arc(0, 0, z.radius, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(10, 17, 40, 0.7)'; ctx.fill();
-    ctx.lineWidth = 4; ctx.strokeStyle = z.color; ctx.setLineDash([15, 10]); ctx.stroke();
+    
+    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+    
+    ctx.lineWidth = 4; ctx.strokeStyle = z.color;
+    ctx.beginPath();
+    ctx.arc(0, 0, z.radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2);
+    ctx.stroke();
+
+    ctx.save();
+    ctx.rotate(bridgeAngle);
+    ctx.fillStyle = 'rgba(46, 204, 113, 0.4)'; 
+    ctx.fillRect(z.radius - 15, -30, 30, 60);
+    ctx.strokeStyle = '#2ecc71';
+    ctx.strokeRect(z.radius - 15, -30, 30, 60);
+    ctx.restore();
     
     ctx.rotate(Date.now() / 1000); 
     ctx.beginPath();
@@ -410,8 +493,9 @@ function drawStarBase(ctx, z) {
     ctx.fillStyle = z.color; ctx.fill();
 
     ctx.rotate(-Date.now() / 1000); 
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 30px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(`${z.team}`, 0, -5);
+    let dispName = TEAM_EMOJIS[z.team] || z.team || "BAZA";
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(dispName, 0, -5);
 
     ctx.restore();
 }
@@ -509,12 +593,16 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
-        // ==========================================
-        // RYSOWANIE GRACZY I BOTÓW
-        // ==========================================
         allEntities.forEach(e => {
-            // CAŁKOWITE UKRYCIE GRACZA I JEGO NICKU W SKLEPIE
             if (e.isSafe) return; 
+
+            if (e.id && e.id !== myId && entityLerp[e.id]) {
+                let le = entityLerp[e.id];
+                le.x += (le.tx - le.x) * 0.3; 
+                le.y += (le.ty - le.y) * 0.3;
+                e.x = le.x;
+                e.y = le.y;
+            }
             
             let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
@@ -525,12 +613,7 @@ function gameLoop(currentTime) {
             
             drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
             
-            if (e.team) {
-                ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                let r = 25 * getScale(renderMass);
-                ctx.font = `bold ${Math.floor(r * 1.2)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(e.team, 0, 0);
-                ctx.restore();
-            }
+            // --- 🛡️ ZMIANA: USUNIĘTO RYSOWANIE UTRUDNIAJĄCEJ LITERY NA POSTACI ---
         });
 
         if (particles.length > 300) particles.shift();
@@ -590,7 +673,21 @@ function gameLoop(currentTime) {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
-        // --- RYSOWANIE UI ---
+        if (isDebugMode && player) {
+            ctx.save();
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 140);
+            ctx.fillStyle = '#2ecc71'; ctx.font = '13px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+            ctx.fillText(`=== DEBUG MODE (F3) ===`, 20, 210);
+            ctx.fillStyle = '#ecf0f1';
+            ctx.fillText(`X: ${player.x.toFixed(1)}  Y: ${player.y.toFixed(1)}`, 20, 235);
+            ctx.fillText(`Masa (Score): ${player.score}`, 20, 255);
+            ctx.fillText(`Speed: ${(5 + (playerSkills.speed||0) * 0.5).toFixed(2)}`, 20, 275);
+            ctx.fillText(`Skin: ${player.skin}`, 20, 295);
+            ctx.fillStyle = (Date.now() - lastServerTickTime) > 100 ? '#e74c3c' : '#2ecc71';
+            ctx.fillText(`Ping/Lag: ${Date.now() - lastServerTickTime} ms`, 20, 315);
+            ctx.restore();
+        }
+
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save(); let tutorialX = 20; let tutorialY = canvas.height - 200; 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; ctx.fillRect(tutorialX, tutorialY, 380, 110); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
@@ -610,9 +707,9 @@ function gameLoop(currentTime) {
             });
 
             let displayMyScore = isNaN(player.score) ? 5 : Math.floor(player.score);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 40);
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 100);
             if (player.isRecruiting !== undefined) {
-                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 60);
+                ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 120);
             }
 
             if (killLogs.length > 0) {

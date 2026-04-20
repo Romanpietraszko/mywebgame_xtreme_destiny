@@ -5,6 +5,11 @@
 window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 const socket = window.socket;
 
+// --- ŁADOWANIE ZDJĘCIA DO LOBBY ---
+const lobbyBg = new Image();
+lobbyBg.src = 'tłolas.png';
+// ----------------------------------
+
 // --- ZMIENNE STANU I KONFIGURACJI ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [];
 let loots = [];            
@@ -35,8 +40,8 @@ let lastSkillMenuState = '';
 
 let damageTexts = [];
 let particles = [];
-let deathMarkers = []; // NOWOŚĆ: Tablica na ślady śmierci na mapie taktycznej
-let isMapOpen = false; // NOWOŚĆ: Stan otwarcia dużej mapy
+let deathMarkers = []; 
+let isMapOpen = false; 
 
 let draggedBotId = null; 
 let dragMouseWorld = { x: 0, y: 0 };
@@ -51,14 +56,12 @@ const GACHA_INTERVAL_MS = 60 * 1000;
 let lastServerTickTime = Date.now();
 let isServerLagging = false;
 
-// --- NOWOŚĆ: SPACE ROOM I LIMIT CZASU ---
 let spawnCountdown = 10;
 let spawnCountdownTimer = null;
 let selectedSpawn = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
 let gameStartTime = 0;
-const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; // 15 minut
+const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; 
 
-// Zmienna do kontrolowania Drag & Drop
 let lastInventoryStateStr = '';
 
 window.addEventListener('contextmenu', e => e.preventDefault());
@@ -83,7 +86,6 @@ window.equipWeaponFromInventory = (weaponCode) => {
     if (inventoryUI) inventoryUI.style.display = 'none'; 
 };
 
-// --- NOWOŚĆ: Prawdziwy Drag & Drop na Canvasie ---
 canvas.addEventListener('dragover', (e) => {
     e.preventDefault(); 
 });
@@ -95,10 +97,6 @@ canvas.addEventListener('drop', (e) => {
         window.equipWeaponFromInventory(weaponCode);
     }
 });
-
-// ==========================================
-// OBSŁUGA STEROWANIA (Mysz i Klawiatura)
-// ==========================================
 
 window.addEventListener('mousemove', (e) => {
     if (gameState === 'PLAYING' && player && controlType !== 'TOUCH') {
@@ -133,11 +131,10 @@ window.addEventListener('mousedown', (e) => {
     const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
-    // --- NOWOŚĆ: WYBÓR MIEJSCA SPAWNU W SPACE ROOMIE ---
     if (gameState === 'SPAWN_SELECTION') {
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2 + 20; // Lekkie przesunięcie mapy w dół
+        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
         
         if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
             let mapScale = WORLD_SIZE / mapSize;
@@ -265,12 +262,8 @@ window.onkeydown = (e) => {
 window.onkeyup = (e) => {
     keys[e.code] = false;
     if (e.code === 'KeyQ' && player) player.isShielding = false;
-    if (e.code === 'KeyM') isMapOpen = false; // Schowanie mapy
+    if (e.code === 'KeyM') isMapOpen = false; 
 };
-
-// ==========================================
-// SYSTEM EFEKTÓW WIZUALNYCH (Ptaki i Wiatr)
-// ==========================================
 
 function triggerStartBirds(x, y) {
     let birdCount = 80 + Math.floor(Math.random() * 40); 
@@ -328,12 +321,10 @@ function drawNotebookBird(ctx, b) {
     ctx.restore();
 }
 
-// --- LOGIKA MENU I STARTU (ZMIENIONA NA SPACE ROOM) ---
 window.startGame = (type) => {
     controlType = type;
     document.getElementById('ui-layer').style.display = 'none';
     
-    // Przechodzimy do wyboru spawnu
     gameState = 'SPAWN_SELECTION';
     spawnCountdown = 10;
     
@@ -384,7 +375,7 @@ function finalizeSpawn() {
     socket.emit('joinGame', { name, color, skin: player.skin, spawnX: selectedSpawn.x, spawnY: selectedSpawn.y });
     gameState = 'PLAYING';
     
-    gameStartTime = Date.now(); // Startujemy timer 15 min!
+    gameStartTime = Date.now(); 
     lastFrameTime = performance.now();
     lastServerTickTime = Date.now(); 
     nextGachaTime = Date.now() + GACHA_INTERVAL_MS; 
@@ -396,6 +387,15 @@ function showGameOverScreen(finalScore, reasonText) {
     document.getElementById('ui-layer').style.display = 'flex';
     document.getElementById('step-1').style.display = 'none';
     document.getElementById('step-2').style.display = 'none';
+
+    // ZMIANA: Nocny las jako tło Game Over
+    const uiLayer = document.getElementById('ui-layer');
+    uiLayer.style.backgroundImage = "url('nocnylas.jpg')"; 
+    uiLayer.style.backgroundSize = "cover";
+    uiLayer.style.backgroundPosition = "center";
+    uiLayer.style.backgroundRepeat = "no-repeat";
+    uiLayer.style.backgroundBlendMode = "multiply";
+    uiLayer.style.backgroundColor = "rgba(0,0,0,0.85)";
 
     let gameOverDiv = document.getElementById('game-over-screen');
     if (!gameOverDiv) {
@@ -421,7 +421,6 @@ function showGameOverScreen(finalScore, reasonText) {
     if (shop) shop.style.display = 'none';
 }
 
-// --- KOMUNIKACJA Z SERWEREM ---
 socket.on('init', (data) => { 
     myId = data.id; 
     if (player) player.id = myId; 
@@ -520,20 +519,16 @@ socket.on('gameOver', (data) => {
     showGameOverScreen(scoreDisplay, "Zostałeś pożarty!");
 });
 
-/**
- * ODBIÓR DANYCH Z SERWERA
- */
-/**
- * ODBIÓR DANYCH Z SERWERA
- */
 socket.on('serverTick', (data) => {
     lastServerTickTime = Date.now(); 
     isServerLagging = false;
 
     if (!data) return; 
 
-    // --- ZMIANA: Konwersja optymalnych słowników z serwera na tablice dla silnika ---
-    foods = data.foods ? Object.values(data.foods) : []; 
+    if (data.foods) {
+        foods = Object.values(data.foods);
+    }
+    
     bots = data.bots ? Object.values(data.bots) : []; 
     projectiles = data.projectiles ? Object.values(data.projectiles) : [];
     loots = data.loots ? Object.values(data.loots) : [];              
@@ -542,10 +537,12 @@ socket.on('serverTick', (data) => {
     eventTimeLeft = data.eventTimeLeft || 0;
     
     if (data.castles) {
+        let nonCastles = safeZones.filter(z => z.type !== 'castle');
+        let serverCastles = data.castles.map(c => { c.type = 'castle'; c.team = c.owner; return c; });
         safeZones.length = 0;
-        data.castles.forEach(c => safeZones.push(c));
+        safeZones.push(...nonCastles, ...serverCastles);
     }
-    
+
     otherPlayers = typeof data.players === 'object' && data.players !== null ? data.players : {};
     
     if (myId && otherPlayers[myId]) {
@@ -594,9 +591,8 @@ function checkEquipmentUpgrades() {
 function update() {
     if (gameState !== 'PLAYING') return;
 
-    // KONTROLA LIMITU CZASU (15 MINUT)
     if (Date.now() - gameStartTime >= GAME_TIME_LIMIT_MS) {
-        socket.disconnect(); // Odlaczamy od serwera
+        socket.disconnect(); 
         showGameOverScreen(Math.floor(player.score), "CZAS MINĄŁ!");
         return;
     }
@@ -611,50 +607,64 @@ function update() {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
-            
             if (!isNaN(dx) && !isNaN(dy)) {
                 lastMoveDir = { x: dx, y: dy };
                 let len = Math.hypot(dx, dy);
-                if (len > 0) { 
-                    dx /= len; 
-                    dy /= len; 
-                }
+                if (len > 0) { dx /= len; dy /= len; }
             }
         }
     } else if (controlType === 'WASD') {
-        if (keys['KeyW']) dy--; 
-        if (keys['KeyS']) dy++; 
-        if (keys['KeyA']) dx--; 
-        if (keys['KeyD']) dx++;
+        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
     } else {
-        if (keys['ArrowUp']) dy--; 
-        if (keys['ArrowDown']) dy++; 
-        if (keys['ArrowLeft']) dx--; 
-        if (keys['ArrowRight']) dx++;
+        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
     }
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
         let speed = 5 + (playerSkills.speed * 0.5);
         
-        if (player.skin === 'ninja') { 
-            speed *= 1.05; 
-        }
-        
-        if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') { 
-            speed *= 0.4; 
-        }
+        if (player.skin === 'ninja') speed *= 1.05; 
+        if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
 
         if (!isNaN(moveAngle) && !isNaN(speed)) {
-            player.x += Math.cos(moveAngle) * speed; 
-            player.y += Math.sin(moveAngle) * speed;
+            let nextX = player.x + Math.cos(moveAngle) * speed; 
+            let nextY = player.y + Math.sin(moveAngle) * speed;
+
+            let canMove = true;
+            if (typeof safeZones !== 'undefined') {
+                for (let z of safeZones) {
+                    if (z.type !== 'castle') continue; 
+
+                    let distNow = Math.hypot(player.x - z.x, player.y - z.y);
+                    let distNext = Math.hypot(nextX - z.x, nextY - z.y);
+                    let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
+                    let playerAngle = Math.atan2(nextY - z.y, nextX - z.x);
+                    
+                    let angleDiff = Math.abs(playerAngle - bridgeAngle);
+                    angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+                    let isCrossingWall = (distNow >= z.radius && distNext < z.radius) || 
+                                         (distNow <= z.radius && distNext > z.radius);
+                    let isOnWallLine = Math.abs(distNext - z.radius) < 10;
+
+                    if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+                        canMove = false; 
+                        break;
+                    }
+                }
+            }
+
+            if (canMove) {
+                player.x = nextX; 
+                player.y = nextY;
+            }
         }
     }
     
     if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
-        player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+        player.isSafe = typeof safeZones !== 'undefined' && safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
         
         if (!isNaN(player.x) && !isNaN(player.y)) {
             camera.x = player.x - canvas.width / 2; 
@@ -689,15 +699,17 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
 
     let mapScale = mapSize / WORLD_SIZE;
 
-    safeZones.forEach(z => {
-        ctx.beginPath();
-        ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-        ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
-        ctx.fill();
-        ctx.strokeStyle = '#111';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-    });
+    if (typeof safeZones !== 'undefined') {
+        safeZones.forEach(z => {
+            ctx.beginPath();
+            ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
+            ctx.fill();
+            ctx.strokeStyle = '#111';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+        });
+    }
 
     if (isTactical) {
         deathMarkers.forEach(m => {
@@ -748,11 +760,10 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         ctx.stroke();
     }
     
-    // Rysuj wybrany punkt na etapie SPAWN_SELECTION
     if (gameState === 'SPAWN_SELECTION') {
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#111111'; // Celownik na czarny
+        ctx.fillStyle = '#111111'; 
         ctx.fill(); 
         ctx.lineWidth = 2; 
         ctx.strokeStyle = '#111111'; 
@@ -760,16 +771,13 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#111111'; // Animacja celownika na czarno
+        ctx.strokeStyle = '#111111'; 
         ctx.stroke();
     }
 
     ctx.restore();
 }
 
-/**
- * GŁÓWNA PĘTLA GRY (GAME LOOP)
- */
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
 
@@ -784,28 +792,32 @@ function gameLoop(currentTime) {
         isServerLagging = true;
     }
 
-    // --- EKRAN WYBORU SPAWNU (SPACE ROOM / LOBBY) ---
     if (gameState === 'SPAWN_SELECTION') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // ZMIANA: Tło zeszytowe w kratkę dla Lobby
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#e0e0e0';
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let i = 0; i < canvas.width; i += 40) { ctx.moveTo(i, 0); ctx.lineTo(i, canvas.height); }
-        for (let i = 0; i < canvas.height; i += 40) { ctx.moveTo(0, i); ctx.lineTo(canvas.width, i); }
-        ctx.stroke();
+        if (lobbyBg.complete && lobbyBg.width > 0) {
+            let ratio = Math.max(canvas.width / lobbyBg.width, canvas.height / lobbyBg.height);
+            let newWidth = lobbyBg.width * ratio;
+            let newHeight = lobbyBg.height * ratio;
+            let offsetX = (canvas.width - newWidth) / 2;
+            let offsetY = (canvas.height - newHeight) / 2;
+            ctx.drawImage(lobbyBg, offsetX, offsetY, newWidth, newHeight);
+            
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        } else {
+            ctx.fillStyle = '#111111';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+        }
 
-        ctx.fillStyle = '#111111';
+        ctx.fillStyle = '#ffffff';
         ctx.font = "bold 40px 'Permanent Marker', Arial";
         ctx.textAlign = 'center';
         ctx.fillText("🚀 LOBBY / SPACE ROOM", canvas.width / 2, 60);
         
         ctx.font = "bold 18px Arial";
-        ctx.fillStyle = '#555';
+        ctx.fillStyle = '#cccccc';
         ctx.fillText("Serwer synchronizuje dane... Wybierz taktyczny punkt zrzutu:", canvas.width / 2, 95);
 
         let mapSize = 400;
@@ -818,7 +830,7 @@ function gameLoop(currentTime) {
         ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
 
         const tempName = document.getElementById('playerName') ? document.getElementById('playerName').value || "Gracz" : "Gracz";
-        ctx.fillStyle = '#111';
+        ctx.fillStyle = '#ffffff';
         ctx.font = "bold 16px Arial";
         ctx.fillText(`Status: W gotowości | Oczekujący gracz: ${tempName}`, canvas.width / 2, mapY + mapSize + 90);
 
@@ -922,14 +934,8 @@ function gameLoop(currentTime) {
         });
         ctx.stroke();
 
-        safeZones.forEach(z => {
-            if(typeof drawCastle === 'function') {
-                drawCastle(ctx, z);
-            }
-        }); 
-        
         foods.forEach(f => {
-            ctx.fillStyle = '#000000'; 
+            ctx.fillStyle = '#e67e22'; 
             ctx.beginPath(); 
             ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); 
             ctx.fill();
@@ -1156,7 +1162,6 @@ function gameLoop(currentTime) {
 
         if (gameState !== 'GAMEOVER') {
             
-            // --- UI: RANKING ---
             ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
             
@@ -1170,7 +1175,6 @@ function gameLoop(currentTime) {
                 else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
-            // --- UI: LEWA GÓRA (Punkty) ---
             ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
             ctx.textAlign = 'left';
             let displayScoreP = isNaN(player.score) ? 5 : Math.floor(player.score);
@@ -1182,7 +1186,6 @@ function gameLoop(currentTime) {
                 ctx.fillText(`TRYB (P): ${player.isRecruiting ? 'WERBUNEK' : 'ZJADANIE'}`, 20, 60);
             }
 
-            // --- ZMIANA: ELEKTRONICZNY CZARNO-BIAŁY LICZNIK Z BOTAMI ---
             let timePlayedMs = Date.now() - gameStartTime;
             let timeLeftMs = Math.max(0, GAME_TIME_LIMIT_MS - timePlayedMs);
             let mins = Math.floor(timeLeftMs / 60000);
@@ -1193,34 +1196,27 @@ function gameLoop(currentTime) {
             let timerH = 46;
             let timerX = canvas.width / 2 - timerW / 2;
             
-            // Dynamiczne wyliczanie Y
-            let timerY = (currentEvent === null) ? 65 : 95;
+            let timerY = (currentEvent === null) ? 80 : 110;
 
             ctx.save();
-            // Białe tło
             ctx.fillStyle = '#ffffff';
             ctx.fillRect(timerX, timerY, timerW, timerH);
-            // Czarna gruba ramka
             ctx.strokeStyle = '#111111';
             ctx.lineWidth = 4;
             ctx.strokeRect(timerX, timerY, timerW, timerH);
 
-            // Ikonki botów w rogach (czarne kuleczki)
             ctx.fillStyle = '#111111';
             ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
-            // Oczy botów
             ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
 
-            // Cyfrowy czarny tekst
             ctx.fillStyle = '#111111';
             ctx.font = "bold 28px monospace";
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
             
-            // Ostatnia minuta - niech cyfry migają na szaro
             if (timeLeftMs <= 60000 && Math.floor(Date.now() / 500) % 2 === 0) {
                 ctx.fillStyle = '#777777'; 
             }
@@ -1228,16 +1224,14 @@ function gameLoop(currentTime) {
             ctx.fillText(timeString, timerX + timerW / 2, timerY + timerH / 2 + 2);
             ctx.restore();
 
-            let logStartY = 170; // Logi zabójstw po prawej
+            let logStartY = 170; 
 
-            // --- MAPA I RADAR ---
             let smallRadarSize = 120;
             let smallRadarX = 20;
             let smallRadarY = 80; 
             
             drawRadarMap(ctx, smallRadarX, smallRadarY, smallRadarSize, false);
 
-            // --- MAPA TAKTYCZNA Z LEWEJ STRONY ---
             if (isMapOpen) {
                 let tacMapSize = 300; 
                 let tacMapX = 20; 
@@ -1245,7 +1239,6 @@ function gameLoop(currentTime) {
                 drawRadarMap(ctx, tacMapX, tacMapY, tacMapSize, true);
             }
 
-            // --- UI: ŚRODEK (Eventy) ---
             ctx.save();
             ctx.textAlign = 'center';
             if (currentEvent === null) {
@@ -1267,7 +1260,6 @@ function gameLoop(currentTime) {
             }
             ctx.restore();
 
-            // --- UI: PRAWA STRONA (Logi zabójstw) ---
             if (killLogs.length > 0) {
                 ctx.save(); ctx.font = "bold 14px 'Permanent Marker', Arial"; ctx.textAlign = 'right';
                 for (let i = 0; i < killLogs.length; i++) {
@@ -1294,7 +1286,6 @@ function gameLoop(currentTime) {
             }
 
             if (inventoryUI && inventoryUI.style.display !== 'none' && player.inventory) {
-                // ZMIANA: Zoptymalizowano rysowanie ekwipunku dla Drag & Drop
                 let slotsHTML = '';
                 Object.keys(player.inventory).forEach(key => {
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
@@ -1314,7 +1305,7 @@ function gameLoop(currentTime) {
                 
                 let invSlots = document.getElementById('inventory-slots');
                 if (invSlots && invSlots.innerHTML !== slotsHTML) {
-                    invSlots.innerHTML = slotsHTML; // Ograniczono wywołania do minimum
+                    invSlots.innerHTML = slotsHTML; 
                 }
             }
 
