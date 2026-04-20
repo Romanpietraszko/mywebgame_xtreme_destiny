@@ -1,6 +1,15 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA & UI
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA & ANTY-LAG
 // ==========================================
+
+// --- 🛡️ AUTO-DEBUGGER (Ochrona przed crashem pętli) ---
+window.addEventListener('error', function(event) {
+    console.warn("🛡️ [GUARDIAN] Zablokowano błąd krytyczny:", event.message);
+    event.preventDefault(); // Blokujemy czerwony ekran śmierci
+    if (typeof gameLoop === 'function' && window.gameState === 'PLAYING') {
+        requestAnimationFrame(gameLoop); // Wymuszenie kontynuacji gry
+    }
+});
 
 window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hostname) ? 'https://mywebgame-xtreme-destiny.onrender.com' : undefined );
 
@@ -21,6 +30,9 @@ let lastSkillMenuState = '';
 let damageTexts = [], particles = [];
 let draggedBotId = null, dragMouseWorld = { x: 0, y: 0 };
 
+// --- 🛡️ SYSTEM ANTY-LAG (Interpolacja LERP) ---
+let entityLerp = {}; 
+
 let lastFrameTime = performance.now();
 const targetFPS = 60;
 const frameDuration = 1000 / targetFPS; 
@@ -36,7 +48,7 @@ for (let i = 0; i < 200; i++) rainParticles.push({ x: Math.random() * 5000, y: M
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
 const TEAM_EMOJIS = { 'N': '🥶 Północ', 'S': '😈 Południe', 'E': '👺 Wschód', 'W': '👹 Zachód' };
 
-let isDebugMode = false; // <-- SKRYPT DEBUGUJĄCY
+let isDebugMode = false;
 
 initMap(WORLD_SIZE); 
 
@@ -134,7 +146,6 @@ window.onkeydown = (e) => {
     if (e.code === 'KeyH' && player) player.isTutorialActive = !player.isTutorialActive;
     if (e.code === 'Space' && (gameState === 'PLAYING' || gameState === 'PAUSED')) gameState = (gameState === 'PLAYING') ? 'PAUSED' : 'PLAYING';
     
-    // --- SKRYPT DEBUGUJĄCY F3 ---
     if (e.code === 'F3') { e.preventDefault(); isDebugMode = !isDebugMode; }
     
     if (gameState === 'PLAYING') {
@@ -282,7 +293,6 @@ socket.on('gameOver', (data) => {
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.cssText = 'position: fixed; inset: 0; background: rgba(0,0,0,0.85); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; color: white;';
         
-        // Mroczne tło Game Over z lasem
         gameOverDiv.style.backgroundImage = "url('nocnylas.jpg')"; 
         gameOverDiv.style.backgroundSize = "cover";
         gameOverDiv.style.backgroundPosition = "center";
@@ -300,16 +310,38 @@ socket.on('gameOver', (data) => {
     `;
 });
 
+// --- 🛡️ GŁÓWNA OCHRONA DANYCH (Sanityzacja & Guardian) ---
 socket.on('serverTick', (data) => {
-    if (data.foods) foods = Object.values(data.foods);
-    bots = data.bots ? Object.values(data.bots) : []; 
-    projectiles = data.projectiles ? Object.values(data.projectiles) : []; 
-    loots = data.loots ? Object.values(data.loots) : [];             
     
-    currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
-    castles = data.castles || []; bushes = data.bushes || []; meteorZones = data.meteorZones || [];
+    foods = Guardian.safeArray(data.foods);
     
-    otherPlayers = data.players;
+    // Zapisywanie celów do Interpolacji (Anty-Lag) - 100% Bezpieczne forEach
+    bots = Guardian.safeArray(data.bots); 
+    bots.forEach(b => {
+        if (!entityLerp[b.id]) entityLerp[b.id] = { x: b.x, y: b.y };
+        entityLerp[b.id].tx = b.x; entityLerp[b.id].ty = b.y;
+    });
+
+    projectiles = Guardian.safeArray(data.projectiles); 
+    loots       = Guardian.safeArray(data.loots);             
+    
+    currentEvent  = data.activeEvent; 
+    eventTimeLeft = data.eventTimeLeft || 0; 
+    
+    bushes      = Guardian.safeArray(data.bushes); 
+    meteorZones = Guardian.safeArray(data.meteorZones);
+    
+    // Konwersja owner -> team żeby emojki działały na bazach
+    let rawCastles = Guardian.safeArray(data.castles);
+    castles = rawCastles.map(c => { c.team = c.owner; return c; });
+    
+    otherPlayers = data.players || {};
+    Object.values(otherPlayers).forEach(p => {
+        if (p.id === myId) return; // Siebie nie interpolujemy
+        if (!entityLerp[p.id]) entityLerp[p.id] = { x: p.x, y: p.y };
+        entityLerp[p.id].tx = p.x; entityLerp[p.id].ty = p.y;
+    });
+
     if (myId && otherPlayers[myId] && player) {
         let sSelf = otherPlayers[myId];
         
@@ -370,7 +402,8 @@ function update() {
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
-        let speed = 5 + (playerSkills.speed * 0.5);
+        // 🛡️ POPRAWKA: Zabezpieczenie przed NaN (Postać znowu chodzi!)
+        let speed = 5 + ((playerSkills.speed || 0) * 0.5);
         if (player.skin === 'ninja') speed *= 1.05; 
         if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
         if (bushes.some(b => Math.hypot(player.x - b.x, player.y - b.y) < b.radius)) speed *= 0.5;
@@ -382,7 +415,7 @@ function update() {
             let nextX = player.x + Math.cos(moveAngle) * speed; 
             let nextY = player.y + Math.sin(moveAngle) * speed;
 
-            // --- LOKALNA FIZYKA MURÓW (Blokada wychodzenia przez ścianę) ---
+            // --- LOKALNA FIZYKA MURÓW ---
             let canMove = true;
             if (typeof castles !== 'undefined') {
                 for (let z of castles) {
@@ -398,7 +431,6 @@ function update() {
                                          (distNow <= z.radius && distNext > z.radius);
                     let isOnWallLine = Math.abs(distNext - z.radius) < 10;
 
-                    // Jeśli dotykasz muru, a nie jesteś na moście
                     if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
                         canMove = false;
                         break;
@@ -438,19 +470,16 @@ function drawStarBase(ctx, z) {
     ctx.shadowColor = z.color;
     ctx.shadowBlur = 40;
     
-    // Tło bazy
     ctx.beginPath(); ctx.arc(0, 0, z.radius, 0, Math.PI * 2);
     ctx.fillStyle = 'rgba(10, 17, 40, 0.7)'; ctx.fill();
     
     let bridgeAngle = Math.atan2(2000 - z.y, 2000 - z.x);
     
-    // Mur bazy z przerwą na bramę
     ctx.lineWidth = 4; ctx.strokeStyle = z.color;
     ctx.beginPath();
     ctx.arc(0, 0, z.radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2);
     ctx.stroke();
 
-    // Rysowanie świecącej bramy (mostu)
     ctx.save();
     ctx.rotate(bridgeAngle);
     ctx.fillStyle = 'rgba(46, 204, 113, 0.4)'; 
@@ -459,7 +488,6 @@ function drawStarBase(ctx, z) {
     ctx.strokeRect(z.radius - 15, -30, 30, 60);
     ctx.restore();
     
-    // Ozdoby i spinnery
     ctx.rotate(Date.now() / 1000); 
     ctx.beginPath();
     for (let i = 0; i < 8; i++) {
@@ -468,9 +496,8 @@ function drawStarBase(ctx, z) {
     ctx.closePath();
     ctx.fillStyle = z.color; ctx.fill();
 
-    // Wyświetlanie Nazwy i Emojki Frakcji na środku bazy
     ctx.rotate(-Date.now() / 1000); 
-    let dispName = TEAM_EMOJIS[z.team] || z.team;
+    let dispName = TEAM_EMOJIS[z.team] || z.team || "BAZA";
     ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(dispName, 0, -5);
 
@@ -572,6 +599,15 @@ function gameLoop(currentTime) {
 
         allEntities.forEach(e => {
             if (e.isSafe) return; 
+
+            // 🛡️ APLIKOWANIE LERP (Wygładzanie trzęsących się botów)
+            if (e.id && e.id !== myId && entityLerp[e.id]) {
+                let le = entityLerp[e.id];
+                le.x += (le.tx - le.x) * 0.3; // Magia płynności!
+                le.y += (le.ty - le.y) * 0.3;
+                e.x = le.x;
+                e.y = le.y;
+            }
             
             let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
             e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
@@ -647,7 +683,7 @@ function gameLoop(currentTime) {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
-        // --- SKRYPT DEBUGUJĄCY WYSWIETLANIE (F3) ---
+        // --- SKRYPT DEBUGUJĄCY (Włączany klawiszem F3) ---
         if (isDebugMode && player) {
             ctx.save();
             ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 140);
@@ -656,14 +692,13 @@ function gameLoop(currentTime) {
             ctx.fillStyle = '#ecf0f1';
             ctx.fillText(`X: ${player.x.toFixed(1)}  Y: ${player.y.toFixed(1)}`, 20, 235);
             ctx.fillText(`Masa (Score): ${player.score}`, 20, 255);
-            ctx.fillText(`Speed: ${(5 + playerSkills.speed * 0.5).toFixed(2)}`, 20, 275);
+            ctx.fillText(`Speed: ${(5 + (playerSkills.speed||0) * 0.5).toFixed(2)}`, 20, 275);
             ctx.fillText(`Skin: ${player.skin}`, 20, 295);
             ctx.fillStyle = (Date.now() - lastServerTickTime) > 100 ? '#e74c3c' : '#2ecc71';
             ctx.fillText(`Ping/Lag: ${Date.now() - lastServerTickTime} ms`, 20, 315);
             ctx.restore();
         }
 
-        // --- RYSOWANIE UI ---
         if (gameState === 'PLAYING' && player && player.isTutorialActive) {
             ctx.save(); let tutorialX = 20; let tutorialY = canvas.height - 200; 
             ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; ctx.fillRect(tutorialX, tutorialY, 380, 110); ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
@@ -683,7 +718,6 @@ function gameLoop(currentTime) {
             });
 
             let displayMyScore = isNaN(player.score) ? 5 : Math.floor(player.score);
-            // ZMIANA Y: Obniżono tekst, aby nie nachodził na logo Uczelni!
             ctx.fillStyle = '#fff'; ctx.font = 'bold 20px Arial'; ctx.fillText(`MASA ARMII: ${displayMyScore}`, 20, 100);
             if (player.isRecruiting !== undefined) {
                 ctx.font = 'bold 14px Arial'; ctx.fillStyle = player.isRecruiting ? '#3498db' : '#e74c3c'; ctx.fillText(`CEL: ${player.isRecruiting ? 'WERBUNEK (P)' : 'ELIMINACJA (P)'}`, 20, 120);
