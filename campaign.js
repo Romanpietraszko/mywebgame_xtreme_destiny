@@ -423,10 +423,10 @@ function gameLoop(currentTime) {
         updateLocalPhysics(); 
     }
 
-    // 1. CZYSZCZENIE EKRANU
+    // 1. CZYSZCZENIE EKRANU - VIBE NOIR (Głęboka Czerń)
     ctx.setTransform(1, 0, 0, 1, 0, 0); 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height);
 
     let vWidth = canvas.width / globalScale; let vHeight = canvas.height / globalScale;
     let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
@@ -437,7 +437,7 @@ function gameLoop(currentTime) {
     ctx.scale(globalScale, globalScale);
     ctx.translate(-vWidth / 2, -vHeight / 2);
     
-    ctx.fillStyle = '#27ae60'; ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
+    ctx.fillStyle = '#050505'; ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
     drawForestMap(ctx, vCamera, vWidth, vHeight);
     ctx.restore();
 
@@ -447,7 +447,8 @@ function gameLoop(currentTime) {
     ctx.scale(globalScale, globalScale);
     ctx.translate(-player.x, -player.y); 
 
-    ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+    // Granice Mapy (Białe Neonowe)
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
     
     // --- WROTA (Północ) - NOWA JASKINIA ---
     let isGateGlowing = (currentQuest === 10 || currentQuest === 15);
@@ -466,7 +467,7 @@ function gameLoop(currentTime) {
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.beginPath(); ctx.ellipse(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
         
-        ctx.fillStyle = '#7f8c8d'; 
+        ctx.fillStyle = '#ffffff'; 
         ctx.font = 'bold 14px Arial'; 
         ctx.textAlign = 'center';
         ctx.fillText("Zwiadowca", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 50);
@@ -496,7 +497,7 @@ function gameLoop(currentTime) {
     });
     ctx.globalAlpha = 1.0;
 
-    foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
+    foods.forEach(f => { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, Math.PI * 2); ctx.fill(); });
     
     projectiles.forEach(p => {
         let rot = Math.atan2(p.dy, p.dx) + (Date.now() / 100); 
@@ -520,13 +521,13 @@ function gameLoop(currentTime) {
     }
     ctx.restore(); 
 
-    // --- UI Z DYNAMICZNYM MÓWCĄ ---
+    // --- UI Z DYNAMICZNYM MÓWCĄ (VIBE NOIR) ---
     if (gameState === 'PLAYING' && player && player.isTutorialActive) {
         ctx.save();
         let tutorialX = 20; let tutorialY = canvas.height - 200; 
-        ctx.fillStyle = currentQuest === 21 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(255, 255, 255, 0.95)';
+        ctx.fillStyle = currentQuest === 21 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(10, 10, 10, 0.95)'; // Ciemne tło
         ctx.fillRect(tutorialX, tutorialY, 380, 110);
-        ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 4; ctx.strokeRect(tutorialX, tutorialY, 380, 110);
+        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(tutorialX, tutorialY, 380, 110); // Biała ramka
         
         let speakerName = "MIDAS";
         let rawText = player.tutorialText || "";
@@ -551,18 +552,19 @@ function gameLoop(currentTime) {
             ctx.drawImage(imgZwiadowca, tutorialX + 10, tutorialY + 15, 80, 80);
         }
 
-        ctx.fillStyle = '#2c3e50'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
         ctx.fillText(speakerName + ":", tutorialX + 110, tutorialY + 25);
-        ctx.fillStyle = '#000'; ctx.font = '13px Arial';
+        ctx.fillStyle = '#dddddd'; ctx.font = '13px Arial';
         
         if (displayText) { window.wrapText(ctx, displayText, tutorialX + 110, tutorialY + 50, 250, 18); }
         
-        ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial'; ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
+        ctx.fillStyle = '#aaaaaa'; ctx.font = 'bold 10px Arial'; ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
         ctx.restore();
     }
 
-    // --- DYNAMICZNY TYTUŁ AKTU W PRAWYM ROGU ---
-    ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 80);
+    // --- DYNAMICZNY TYTUŁ AKTU W PRAWYM ROGU (VIBE NOIR) ---
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 80);
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 80);
     ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; 
     
     let actName = "📜 AKT 1: RUINY";
@@ -570,7 +572,7 @@ function gameLoop(currentTime) {
     if (currentMapType === 'campaign_3') actName = "📜 AKT 3: PUSTKOWIA KRÓLÓW";
     
     ctx.fillText(actName, canvas.width - 265, 30);
-    ctx.fillStyle = '#fff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
+    ctx.fillStyle = '#ffffff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
     ctx.fillText(`Etap Fabuły: ${currentQuest}/21`, canvas.width - 265, 75);
 
     if (killLogs.length > 0) {
@@ -585,7 +587,7 @@ function gameLoop(currentTime) {
     requestAnimationFrame(gameLoop);
 }
 
-// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) - MROCZNA ---
+// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) - VIBE NOIR ---
 function drawHut(x, y, size) {
     ctx.save();
     
@@ -595,13 +597,13 @@ function drawHut(x, y, size) {
     ctx.ellipse(x, y + size/2, size * 0.8, size * 0.25, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // 2. Główne ściany (Szaro-Czarne)
-    ctx.fillStyle = '#333333'; 
+    // 2. Główne ściany (Line Art Noir)
+    ctx.fillStyle = '#050505'; 
     ctx.fillRect(x - size/2, y - size/2, size, size);
     
-    // 3. Zarys desek (Mroczny)
-    ctx.strokeStyle = '#1a1a1a';
-    ctx.lineWidth = 3;
+    // 3. Zarys desek (Mroczny / Neon)
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.strokeRect(x - size/2, y - size/2, size, size);
     ctx.beginPath();
     ctx.moveTo(x - size/2, y); 
@@ -609,7 +611,7 @@ function drawHut(x, y, size) {
     ctx.stroke();
 
     // 4. Dach
-    ctx.fillStyle = '#222222'; 
+    ctx.fillStyle = '#111111'; 
     ctx.beginPath();
     ctx.moveTo(x - size/2 - 20, y - size/2); 
     ctx.lineTo(x, y - size/2 - size * 0.6);  
@@ -619,24 +621,27 @@ function drawHut(x, y, size) {
     ctx.stroke();
 
     // 5. Drzwi
-    ctx.fillStyle = '#0a0a0a'; 
+    ctx.fillStyle = '#050505'; 
     let doorWidth = size * 0.35;
     let doorHeight = size * 0.55;
     ctx.fillRect(x - doorWidth/2, y + size/2 - doorHeight, doorWidth, doorHeight);
+    ctx.strokeRect(x - doorWidth/2, y + size/2 - doorHeight, doorWidth, doorHeight);
     
     // 6. Złoty detal Midasa
     ctx.fillStyle = '#F1C40F';
+    if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#F1C40F'; }
     ctx.beginPath();
     ctx.arc(x, y - size/2 + 15, 6, 0, Math.PI*2);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     ctx.restore();
 }
 
-// --- DODATKOWE ELEMENTY OTOCZENIA ---
+// --- DODATKOWE ELEMENTY OTOCZENIA (VIBE NOIR) ---
 function drawDeadTree(x, y) {
     ctx.save();
-    ctx.strokeStyle = '#2c3e50'; ctx.lineWidth = 8; ctx.lineCap = 'round';
+    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
     ctx.beginPath(); 
     ctx.moveTo(x, y); ctx.lineTo(x, y - 80); 
     ctx.lineTo(x - 30, y - 120); 
@@ -647,11 +652,12 @@ function drawDeadTree(x, y) {
 
 function drawBlacksmithArea(x, y) {
     ctx.save();
-    ctx.fillStyle = '#555'; ctx.beginPath(); ctx.arc(x + 40, y - 10, 30, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#444'; ctx.beginPath(); ctx.arc(x + 35, y - 5, 20, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#222'; ctx.beginPath(); ctx.ellipse(x - 45, y + 25, 25, 12, 0, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = '#e74c3c'; 
-    ctx.beginPath(); ctx.moveTo(x - 45, y + 25); ctx.lineTo(x - 55, y + 5); ctx.lineTo(x - 40, y + 15); ctx.lineTo(x - 35, y); ctx.lineTo(x - 45, y + 25); ctx.fill();
+    ctx.fillStyle = '#050505'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(x + 40, y - 10, 30, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 35, y - 5, 20, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    
+    ctx.beginPath(); ctx.ellipse(x - 45, y + 25, 25, 12, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    
     if (Math.random() > 0.5) spawnParticle(x - 45 + (Math.random()*10-5), y + 15, 'rgba(255, 100, 0, 0.8)', 'fire');
     ctx.restore();
 }
@@ -660,20 +666,27 @@ function drawCaveEntrance(x, y, isGlowing) {
     ctx.save();
     
     // Zarys skał (jaskinia)
-    ctx.fillStyle = '#444';
+    ctx.fillStyle = '#050505'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.arc(x, y + 50, 140, Math.PI, 0); 
     ctx.lineTo(x + 140, y + 100);
     ctx.lineTo(x - 140, y + 100);
     ctx.fill();
+    ctx.stroke();
 
     // Wnętrze mroku (lub świecący portal)
-    ctx.fillStyle = isGlowing ? '#3498db' : '#050505';
+    if (isGlowing) {
+        if (!window.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = '#3498db'; }
+        ctx.fillStyle = '#3498db';
+    } else {
+        ctx.fillStyle = '#111111';
+    }
     ctx.beginPath();
     ctx.arc(x, y + 50, 90, Math.PI, 0);
     ctx.lineTo(x + 90, y + 100);
     ctx.lineTo(x - 90, y + 100);
     ctx.fill();
+    ctx.shadowBlur = 0;
 
     // Cząsteczki dla aktywnej jaskini
     if(isGlowing && Math.random() > 0.5) {

@@ -4,18 +4,18 @@
 
 // --- SYSTEM MOTYWÓW WIZUALNYCH ---
 const MAP_THEMES = {
-    'FREE': { bg: '#ffffff', road: 'rgba(17, 17, 17, 0.05)', border: '#e74c3c', spotColor: '#111111' },
-    'PvP': { bg: '#f4f1ea', road: 'rgba(139, 69, 19, 0.1)', border: '#8b4513', spotColor: '#2c3e50' },
-    'TRAINING': { bg: '#f4f1ea', road: 'rgba(139, 69, 19, 0.1)', border: '#8b4513', spotColor: '#2c3e50' },
+    'FREE': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
+    'PvP': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
+    'TRAINING': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
     
-    // AKT 1: Ruiny (Jasny, zarośnięty las)
-    'campaign_1': { bg: '#e8f8f5', road: 'rgba(39, 174, 96, 0.1)', border: '#1abc9c', spotColor: '#111111' },
+    // AKT 1: Ruiny (Mroczny Las - Vibe Noir z neonowym zielonym zarysem)
+    'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff' },
     
-    // AKT 2: Dolina Cieni (Chłodniejszy, blady szary, mroczne kontrasty)
-    'campaign_2': { bg: '#f0f4f8', road: 'rgba(17, 17, 17, 0.1)', border: '#0a0a0a', spotColor: '#111111' },
+    // AKT 2: Dolina Cieni (Głęboki mrok z fioletowym neonem)
+    'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff' },
     
-    // AKT 3: Pustkowia Królów (Zimny, brudny popiół, sterylna geometria)
-    'campaign_3': { bg: '#e6e9ed', road: 'rgba(0, 0, 0, 0.08)', border: '#050505', spotColor: '#111111' }
+    // AKT 3: Pustkowia Królów (Czarna otchłań z krwistoczerwonymi akcentami)
+    'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff' }
 };
 
 let activeTheme = MAP_THEMES['FREE'];
@@ -219,9 +219,6 @@ class CampaignMap extends MapGenerator {
 // -------------------------------------------------------------------------
 // KLASA: TEAMS (Dla trybu teams.js - PvP i Trening drużynowy)
 // -------------------------------------------------------------------------
-// -------------------------------------------------------------------------
-// KLASA: TEAMS (Dla trybu teams.js - PvP i Trening drużynowy)
-// -------------------------------------------------------------------------
 class TeamsMap extends MapGenerator {
     generate(modeType) {
         this.clearData();
@@ -279,7 +276,7 @@ function initMap(worldSize, mapType = 'FREE') {
 function drawNotebookGrass(ctx, x, y) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 1.5; 
     ctx.lineCap = 'round';
     
@@ -298,12 +295,12 @@ function drawNotebookGrass(ctx, x, y) {
 function drawGrave(ctx, x, y) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2.5; 
     ctx.lineCap = 'round'; 
     ctx.lineJoin = 'round';
     
-    ctx.fillStyle = '#ddd'; 
+    ctx.fillStyle = activeTheme.bg; 
     ctx.beginPath(); 
     ctx.moveTo(-6, 8); 
     ctx.lineTo(-6, -4); 
@@ -328,7 +325,7 @@ function drawSwordDetail(ctx, x, y) {
     ctx.save(); 
     ctx.translate(x, y); 
     ctx.rotate(-0.3); 
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2;
     
     ctx.beginPath(); 
@@ -351,7 +348,7 @@ function drawSwordDetail(ctx, x, y) {
 function drawWastelandSkull(ctx, x, y) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2; 
     ctx.lineCap = 'round'; 
     ctx.lineJoin = 'round';
@@ -367,7 +364,7 @@ function drawWastelandSkull(ctx, x, y) {
     ctx.lineTo(3, 3); 
     ctx.stroke(); 
     
-    ctx.fillStyle = '#111111';
+    ctx.fillStyle = activeTheme.bg;
     ctx.beginPath(); 
     ctx.arc(-2, -2, 1.5, 0, Math.PI*2); 
     ctx.fill(); 
@@ -381,7 +378,7 @@ function drawWastelandSkull(ctx, x, y) {
 function drawBrokenCrown(ctx, x, y) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2; 
     ctx.lineCap = 'round'; 
     ctx.lineJoin = 'round';
@@ -404,7 +401,7 @@ function drawNotebookRock(ctx, x, y, radius) {
     ctx.save(); 
     ctx.translate(x, y);
     ctx.fillStyle = activeTheme.bg; 
-    ctx.strokeStyle = '#111111'; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2; 
     ctx.lineJoin = 'round';
     
@@ -443,7 +440,9 @@ function drawNotebookRock(ctx, x, y, radius) {
 function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
     ctx.save();
     ctx.translate(x, y);
-    ctx.fillStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; 
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.lineWidth = 2;
     
     ctx.beginPath();
     for (let i = 0; i < numPoints; i++) {
@@ -459,6 +458,7 @@ function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
     }
     ctx.closePath();
     ctx.fill(); 
+    ctx.stroke();
 
     ctx.beginPath();
     let drop1X = Math.cos(x) * (radius * 1.3);
@@ -477,8 +477,8 @@ function drawDeepCrater(ctx, x, y, radius) {
     ctx.save(); 
     ctx.translate(x, y);
     
-    ctx.fillStyle = '#cccccc'; 
-    ctx.strokeStyle = '#111111'; 
+    ctx.fillStyle = '#111111'; 
+    ctx.strokeStyle = '#ffffff'; 
     ctx.lineWidth = 3; 
     ctx.lineJoin = 'round';
     
@@ -501,7 +501,7 @@ function drawDeepCrater(ctx, x, y, radius) {
         ctx.stroke();
     }
 
-    ctx.fillStyle = '#111111';
+    ctx.fillStyle = '#000000';
     ctx.beginPath();
     for(let i=0; i<10; i++) {
         let a = (i/10) * Math.PI * 2;
@@ -517,7 +517,7 @@ function drawDeepCrater(ctx, x, y, radius) {
 function drawSpikesField(ctx, x, y, radius) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2.5; 
     ctx.lineJoin = 'round';
     
@@ -530,7 +530,7 @@ function drawSpikesField(ctx, x, y, radius) {
         ctx.translate(Math.cos(a)*dist, Math.sin(a)*dist);
         ctx.rotate(a + Math.PI/2); 
         
-        ctx.fillStyle = '#e0e5ec'; 
+        ctx.fillStyle = '#111111'; 
         ctx.beginPath(); 
         ctx.moveTo(-8, 10); 
         ctx.lineTo(0, -25); 
@@ -539,7 +539,7 @@ function drawSpikesField(ctx, x, y, radius) {
         ctx.fill(); 
         ctx.stroke();
         
-        ctx.fillStyle = '#111111'; 
+        ctx.fillStyle = '#050505'; 
         ctx.beginPath(); 
         ctx.moveTo(0, -25); 
         ctx.lineTo(8, 10); 
@@ -560,12 +560,13 @@ function drawNotebookTree(ctx, x, y, radius) {
     ctx.save();
     ctx.translate(x, y);
     
-    ctx.fillStyle = '#111111'; 
-    ctx.strokeStyle = '#111111';
+    ctx.fillStyle = activeTheme.bg; 
+    ctx.strokeStyle = activeTheme.border;
     ctx.lineJoin = 'miter'; 
-    ctx.lineWidth = 1;
+    ctx.lineWidth = 2;
 
     ctx.fillRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8);
+    ctx.strokeRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8);
 
     ctx.beginPath();
     ctx.moveTo(0, -radius * 0.1); 
@@ -581,14 +582,15 @@ function drawNotebookTree(ctx, x, y, radius) {
     ctx.lineTo(-radius * 0.5, -radius * 0.4);
     
     ctx.fill();
+    ctx.stroke();
     ctx.restore();
 }
 
 function drawSpookyTree(ctx, x, y, radius) {
     ctx.save(); 
     ctx.translate(x, y);
-    ctx.strokeStyle = '#111111'; 
-    ctx.lineWidth = 8; 
+    ctx.strokeStyle = activeTheme.border; 
+    ctx.lineWidth = 4; 
     ctx.lineCap = 'round'; 
     ctx.lineJoin = 'round';
     
@@ -597,7 +599,7 @@ function drawSpookyTree(ctx, x, y, radius) {
     ctx.lineTo(0, -radius * 0.3); 
     ctx.stroke();
     
-    ctx.lineWidth = 6;
+    ctx.lineWidth = 3;
     ctx.beginPath(); 
     ctx.moveTo(0, 0); 
     ctx.lineTo(-radius * 0.6, -radius * 0.5); 
@@ -610,10 +612,11 @@ function drawSpookyTree(ctx, x, y, radius) {
     ctx.lineTo(radius * 0.8, -radius * 0.2); 
     ctx.stroke();
     
-    ctx.fillStyle = '#111111';
+    ctx.fillStyle = activeTheme.bg;
     ctx.beginPath(); 
     ctx.ellipse(0, radius * 0.4, radius * 0.15, radius * 0.3, 0, 0, Math.PI*2); 
     ctx.fill();
+    ctx.stroke();
     
     ctx.restore();
 }
@@ -622,7 +625,7 @@ function drawBrokenColumn(ctx, x, y, radius) {
     ctx.save(); 
     ctx.translate(x, y);
     ctx.fillStyle = activeTheme.bg; 
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 3; 
     ctx.lineJoin = 'round';
     
@@ -679,22 +682,17 @@ function drawSafeZone(ctx, x, y, radius) {
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
     ctx.clip(); 
     
-    ctx.strokeStyle = 'rgba(150, 150, 150, 0.3)';
-    ctx.lineWidth = 1;
-    for (let i = -radius; i < radius; i += 15) {
-        ctx.beginPath();
-        ctx.moveTo(i, -radius);
-        ctx.lineTo(i + radius * 2, radius);
-        ctx.stroke();
-    }
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+    ctx.fillRect(-radius, -radius, radius * 2, radius * 2);
     
     ctx.restore(); 
     ctx.save();
     ctx.translate(x, y);
     
-    ctx.strokeStyle = 'rgba(100, 100, 100, 0.6)';
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
     ctx.lineWidth = 4;
     ctx.setLineDash([20, 15]); 
+    if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
     
     ctx.beginPath();
     for (let i = 0; i < 32; i++) {
@@ -709,9 +707,10 @@ function drawSafeZone(ctx, x, y, radius) {
     ctx.closePath();
     ctx.stroke();
     ctx.setLineDash([]);
+    ctx.shadowBlur = 0;
     
-    ctx.fillStyle = 'rgba(100, 100, 100, 0.8)';
-    ctx.font = "bold 16px 'Permanent Marker', Arial";
+    ctx.fillStyle = '#ffffff';
+    ctx.font = "bold 16px 'Courier New', monospace";
     ctx.textAlign = 'center';
     ctx.fillText("BEZPIECZNA STREFA", 0, radius - 20);
     
@@ -726,8 +725,8 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
     let bridgeAngle = Math.atan2(2000 - y, 2000 - x); 
     let moatRadius = radius + 40;
 
-    // 1. FOSA (Pofalowany atrament)
-    ctx.fillStyle = activeTheme.spotColor; 
+    // 1. FOSA
+    ctx.fillStyle = '#020202'; 
     ctx.beginPath();
     for (let i = 0; i < 32; i++) {
         let angle = (i / 32) * Math.PI * 2;
@@ -739,7 +738,7 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
     ctx.closePath();
     ctx.fill();
 
-    // 2. SPRAWDZANIE CZY GRACZ JEST W ŚRODKU (Przełączanie na Sklep)
+    // 2. SPRAWDZANIE CZY GRACZ JEST W ŚRODKU
     let isPlayerHere = typeof player !== 'undefined' && player && Math.hypot(player.x - x, player.y - y) < radius;
 
     ctx.beginPath();
@@ -748,12 +747,12 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
     if (isPlayerHere) {
         // --- RYSOWANIE WNĘTRZA SKLEPU ---
         ctx.save();
-        ctx.clip(); // Zamykamy grafikę w okręgu zamku
+        ctx.clip(); 
         
         // Kafelkowa podłoga
-        ctx.fillStyle = '#ecf0f1';
+        ctx.fillStyle = '#050505';
         ctx.fillRect(-radius-15, -radius-15, (radius+15)*2, (radius+15)*2);
-        ctx.fillStyle = '#bdc3c7';
+        ctx.fillStyle = '#111111';
         let tileSize = 30;
         for(let tx = -radius-15; tx < radius+15; tx+=tileSize) {
             for(let ty = -radius-15; ty < radius+15; ty+=tileSize) {
@@ -764,17 +763,18 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
         }
         
         // Dywan królewski przed ladą
-        ctx.fillStyle = '#e74c3c';
+        ctx.fillStyle = '#333333';
         ctx.fillRect(-30, -30, 60, 80);
-        ctx.strokeStyle = '#c0392b';
-        ctx.lineWidth = 4;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
         ctx.strokeRect(-30, -30, 60, 80);
 
         // Lada sklepowa kupca
-        ctx.fillStyle = '#8b4513';
+        ctx.fillStyle = '#1a1a1a';
         ctx.fillRect(-50, -60, 100, 30);
-        ctx.fillStyle = '#a0522d';
-        ctx.fillRect(-45, -55, 90, 20);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.strokeRect(-50, -60, 100, 30);
 
         ctx.restore();
     } else {
@@ -784,23 +784,25 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
     }
 
     // 3. MUR ZAMKOWY Z PRZERWĄ NA MOST
-    ctx.lineWidth = 6;
-    ctx.strokeStyle = '#111111';
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffffff';
+    if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#ffffff'; }
     ctx.beginPath();
     // Rysujemy łuk, ale zostawiamy "dziurę" na most (0.35 radiana z każdej strony)
     ctx.arc(0, 0, radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2);
     ctx.stroke();
+    ctx.shadowBlur = 0;
 
     // 4. DREWNIANY MOST NAD FOSĄ
     ctx.save();
     ctx.rotate(bridgeAngle);
-    ctx.fillStyle = '#8b4513'; 
+    ctx.fillStyle = '#050505'; 
     ctx.fillRect(radius - 5, -30, 55, 60);
-    ctx.strokeStyle = '#111111';
-    ctx.lineWidth = 4;
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.strokeRect(radius - 5, -30, 55, 60);
     // Rysowanie desek
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 1;
     for(let i=1; i<=4; i++) {
         ctx.beginPath(); ctx.moveTo(radius - 5 + i*11, -30); ctx.lineTo(radius - 5 + i*11, 30); ctx.stroke();
     }
@@ -822,17 +824,18 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
         ctx.save();
         ctx.translate(tx, ty);
         ctx.rotate(angle); 
-        ctx.fillStyle = '#111111';
+        ctx.fillStyle = '#050505';
         ctx.fillRect(-12, -12, 24, 24);
-        ctx.fillStyle = activeTheme.bg;
-        ctx.fillRect(-7, -7, 14, 14);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-12, -12, 24, 24);
         ctx.restore();
     }
 
     // 6. LITERA (Tylko jeśli gracz nie jest w sklepie, żeby nie zasłaniać podłogi)
     if (!isPlayerHere && teamLetter && teamLetter !== '') {
-        ctx.fillStyle = '#111111';
-        ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
+        ctx.fillStyle = '#ffffff';
+        ctx.font = `bold ${radius * 0.6}px 'Courier New', monospace`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.fillText(teamLetter, 0, 0); 
@@ -860,7 +863,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
 
     // --- 1. DROGI (Na samym spodzie) ---
     ctx.fillStyle = activeTheme.road; 
-    ctx.strokeStyle = activeTheme.spotColor;
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 2;
     for(let road of mapData.roads) {
         ctx.fillRect(road.x, road.y, road.width, road.height);
@@ -871,7 +874,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         
         if (typeof currentQuest !== 'undefined' && currentQuest > 10) {
             ctx.lineWidth = 1.5;
-            ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
             for(let i = road.y + 100; i < road.y + road.height; i += 150) {
                 ctx.beginPath(); 
                 ctx.moveTo(road.x + 10, i); 
@@ -971,7 +974,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         mapData.birds.push({ x: -200, y: Math.random() * 3000 + 500, speed: 2 + Math.random(), flock: flock });
     }
 
-    ctx.strokeStyle = activeTheme.spotColor; 
+    ctx.strokeStyle = activeTheme.border; 
     ctx.lineWidth = 2; 
     ctx.lineJoin = 'miter';
     for (let i = mapData.birds.length - 1; i >= 0; i--) {
@@ -1003,7 +1006,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; 
         ctx.fillRect(0, 0, canvasWidth, canvasHeight);
         
-        ctx.strokeStyle = 'rgba(46, 204, 113, 0.7)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
         ctx.lineWidth = 1.5;
         
         ctx.beginPath();
