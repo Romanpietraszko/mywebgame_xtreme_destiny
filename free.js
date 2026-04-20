@@ -1475,10 +1475,17 @@ function gameLoop(currentTime) {
                 skillMenu.style.display = 'none'; 
             }
 
+            // --- ZAKTUALIZOWANA LOGIKA POKAZYWANIA PEŁNOEKRANOWEGO ZAMKU ---
             if (player.isSafe && !wasSafe) {
-                const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'flex';
+                const shop = document.getElementById('castle-shop'); 
+                if (shop) {
+                    shop.style.display = 'flex';
+                    const massDisplay = document.getElementById('shop-player-mass');
+                    if (massDisplay) massDisplay.innerText = Math.floor(player.score);
+                }
             } else if (!player.isSafe && wasSafe) {
-                const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
+                const shop = document.getElementById('castle-shop'); 
+                if (shop) shop.style.display = 'none';
             }
             wasSafe = player.isSafe; 
         }
