@@ -8,14 +8,14 @@ const MAP_THEMES = {
     'PvP': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
     'TRAINING': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
     
-    // AKT 1: Ruiny (Jasny, zarośnięty las)
-    'campaign_1': { bg: '#e8f8f5', road: 'rgba(39, 174, 96, 0.1)', border: '#1abc9c', spotColor: '#111111' },
+    // AKT 1: Ruiny (Mroczny Las - Vibe Noir z neonowym zielonym zarysem)
+    'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff' },
     
-    // AKT 2: Dolina Cieni (Chłodniejszy, blady szary, mroczne kontrasty)
-    'campaign_2': { bg: '#f0f4f8', road: 'rgba(17, 17, 17, 0.1)', border: '#0a0a0a', spotColor: '#111111' },
+    // AKT 2: Dolina Cieni (Głęboki mrok z fioletowym neonem)
+    'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff' },
     
-    // AKT 3: Pustkowia Królów (Zimny, brudny popiół, sterylna geometria)
-    'campaign_3': { bg: '#e6e9ed', road: 'rgba(0, 0, 0, 0.08)', border: '#050505', spotColor: '#111111' }
+    // AKT 3: Pustkowia Królów (Czarna otchłań z krwistoczerwonymi akcentami)
+    'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff' }
 };
 
 let activeTheme = MAP_THEMES['FREE'];
