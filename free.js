@@ -685,95 +685,96 @@ function update() {
 
 function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.save();
-    
-    // Vibe Noir: Ciemne tło radaru z białą ramką
-    ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
+
+    // Vibe Noir: Ciemna czeluść radaru z neonową białą ramką
+    ctx.fillStyle = 'rgba(2, 2, 5, 0.9)';
     ctx.fillRect(mapX, mapY, mapSize, mapSize);
+
+    // Siatka taktyczna (Grid)
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+    ctx.lineWidth = 1;
+    let gridCells = 8;
+    for(let i=1; i<gridCells; i++) {
+        let pos = i * (mapSize / gridCells);
+        ctx.beginPath(); ctx.moveTo(mapX + pos, mapY); ctx.lineTo(mapX + pos, mapY + mapSize); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(mapX, mapY + pos); ctx.lineTo(mapX + mapSize, mapY + pos); ctx.stroke();
+    }
+
+    // Zewnętrzna neonowa ramka
     ctx.strokeStyle = '#ffffff';
+    if (!window.isMobile && isTactical) { ctx.shadowBlur = 15; ctx.shadowColor = '#ffffff'; }
     ctx.lineWidth = 3;
     ctx.strokeRect(mapX, mapY, mapSize, mapSize);
-    
+    ctx.shadowBlur = 0;
+
     ctx.fillStyle = '#ffffff';
-    ctx.font = "bold 14px 'Permanent Marker', Arial";
+    ctx.font = "bold 14px 'Courier New', monospace";
     ctx.textAlign = 'center';
-    ctx.fillText(isTactical ? "MAPA TAKTYCZNA" : "RADAR", mapX + mapSize / 2, mapY - 8);
+    ctx.fillText(isTactical ? "SYSTEM ZRZUTU: WYBIERZ SEKTOR" : "RADAR", mapX + mapSize / 2, mapY - 12);
 
     let mapScale = mapSize / WORLD_SIZE;
 
+    // Bazy / Zamki (Line-Art Neon z engine.js)
     if (typeof safeZones !== 'undefined') {
         safeZones.forEach(z => {
             ctx.beginPath();
             ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; 
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
             ctx.fill();
             ctx.strokeStyle = '#ffffff';
-            ctx.lineWidth = 1;
+            ctx.lineWidth = 2;
+            if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
             ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // Kropka w środku zamku
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, 2, 0, Math.PI*2); ctx.fill();
         });
     }
 
+    // Czerwone Markery (Zagrożenia - dawne krzyżyki)
     if (isTactical) {
-        deathMarkers.forEach(m => {
+        let hazards = [ {x: 1500, y: 1500}, {x: 2500, y: 1800}, {x: 3200, y: 3000}, {x: 800, y: 3500} ];
+        hazards.forEach(h => {
             ctx.save();
-            ctx.translate(mapX + m.x * mapScale, mapY + m.y * mapScale);
-            ctx.globalAlpha = Math.max(0, m.life);
-            ctx.strokeStyle = '#e74c3c'; 
+            ctx.translate(mapX + h.x * mapScale, mapY + h.y * mapScale);
+            ctx.strokeStyle = '#ff0000'; // Neon Red
+            if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000'; }
             ctx.lineWidth = 2;
-            ctx.beginPath();
-            ctx.moveTo(-4, -4); ctx.lineTo(4, 4);
-            ctx.moveTo(4, -4); ctx.lineTo(-4, 4);
-            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(5, 5); ctx.moveTo(5, -5); ctx.lineTo(-5, 5); ctx.stroke();
             ctx.restore();
         });
     }
 
-    let currentKingId = null;
-    let allEntities = Object.values(otherPlayers).concat(bots);
-    if (player && gameState !== 'GAMEOVER') allEntities.push(player);
-    allEntities.sort((a,b) => (b.score || 0) - (a.score || 0));
-    if (allEntities.length > 0) currentKingId = allEntities[0].id || allEntities[0].name;
-
-    if (currentKingId) {
-        let king = allEntities.find(e => e.id === currentKingId || e.name === currentKingId);
-        if (king && king !== player) {
-            ctx.beginPath();
-            ctx.arc(mapX + king.x * mapScale, mapY + king.y * mapScale, isTactical ? 4 : 3, 0, Math.PI * 2);
-            ctx.fillStyle = '#f1c40f'; 
-            ctx.fill();
-            ctx.strokeStyle = '#111';
-            ctx.stroke();
-        }
-    }
-
-    if (player) {
-        ctx.beginPath();
-        ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, isTactical ? 5 : 4, 0, Math.PI * 2);
-        ctx.fillStyle = '#2ecc71'; 
-        ctx.fill();
-        ctx.lineWidth = 1.5;
-        ctx.strokeStyle = '#111';
-        ctx.stroke();
-        
-        ctx.beginPath();
-        let pulse = (Date.now() / 300) % 3;
-        ctx.arc(mapX + player.x * mapScale, mapY + player.y * mapScale, (isTactical ? 5 : 4) + pulse * 2, 0, Math.PI * 2);
-        ctx.strokeStyle = `rgba(46, 204, 113, ${1 - pulse/3})`;
-        ctx.stroke();
-    }
-    
+    // Twój punkt zrzutu (Interaktywny - Gracz może go przesuwać myszką)
     if (gameState === 'SPAWN_SELECTION') {
+        let sx = mapX + selectedSpawn.x * mapScale;
+        let sy = mapY + selectedSpawn.y * mapScale;
+
+        // Pulsująca zielona aura punktu zrzutu
+        let pulse = (Math.sin(Date.now() / 150) + 1) / 2; // Od 0 do 1
+
         ctx.beginPath();
-        ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#ffffff'; 
-        ctx.fill(); 
-        ctx.lineWidth = 2; 
-        ctx.strokeStyle = '#ffffff'; 
-        ctx.stroke();
-        
+        ctx.arc(sx, sy, 8 + pulse * 4, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(46, 204, 113, ${0.3 + pulse * 0.4})`;
+        ctx.fill();
+
+        // Środek wskaźnika
         ctx.beginPath();
-        ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#ffffff'; 
-        ctx.stroke();
+        ctx.arc(sx, sy, 4, 0, Math.PI * 2);
+        ctx.fillStyle = '#2ecc71';
+        if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#2ecc71'; }
+        ctx.fill();
+        ctx.shadowBlur = 0;
+
+        // Celownik (Krzyżyk taktyczny) wokół zrzutu
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 1.5;
+        ctx.beginPath(); ctx.moveTo(sx - 12, sy); ctx.lineTo(sx - 4, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx + 12, sy); ctx.lineTo(sx + 4, sy); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy - 12); ctx.lineTo(sx, sy - 4); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(sx, sy + 12); ctx.lineTo(sx, sy + 4); ctx.stroke();
     }
 
     ctx.restore();
@@ -796,44 +797,54 @@ function gameLoop(currentTime) {
     if (gameState === 'SPAWN_SELECTION') {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        
-        if (lobbyBg.complete && lobbyBg.width > 0) {
-            let ratio = Math.max(canvas.width / lobbyBg.width, canvas.height / lobbyBg.height);
-            let newWidth = lobbyBg.width * ratio;
-            let newHeight = lobbyBg.height * ratio;
-            let offsetX = (canvas.width - newWidth) / 2;
-            let offsetY = (canvas.height - newHeight) / 2;
-            ctx.drawImage(lobbyBg, offsetX, offsetY, newWidth, newHeight);
-            
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-        } else {
-            ctx.fillStyle = '#050505';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // --- KOSMICZNA OTCHŁAŃ (Zamiast pliku tłolas.png) ---
+        let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+        grad.addColorStop(0, '#020205'); // Głęboki kosmos
+        grad.addColorStop(1, '#0a0a0a');
+        ctx.fillStyle = grad;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Subtelne przemieszczające się gwiazdy w tle
+        ctx.fillStyle = '#ffffff';
+        for(let i=0; i<100; i++) {
+            let sx = (Math.sin(i*123) * 10000 + Date.now()*0.02) % canvas.width;
+            let sy = (Math.cos(i*321) * 10000) % canvas.height;
+            if (sx < 0) sx += canvas.width;
+            ctx.globalAlpha = Math.abs(Math.sin(Date.now()*0.001 + i));
+            ctx.beginPath(); ctx.arc(sx, sy, (i%2 === 0 ? 1 : 0.5), 0, Math.PI*2); ctx.fill();
         }
+        ctx.globalAlpha = 1.0;
 
         ctx.fillStyle = '#ffffff';
-        ctx.font = "bold 40px 'Permanent Marker', Arial";
+        ctx.font = "bold 40px 'Courier New', monospace";
         ctx.textAlign = 'center';
+        if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
         ctx.fillText("🚀 LOBBY / SPACE ROOM", canvas.width / 2, 60);
-        
-        ctx.font = "bold 18px Arial";
+        ctx.shadowBlur = 0;
+
+        ctx.font = "bold 18px 'Courier New', monospace";
         ctx.fillStyle = '#cccccc';
-        ctx.fillText("Serwer synchronizuje dane... Wybierz taktyczny punkt zrzutu:", canvas.width / 2, 95);
+        ctx.fillText("System nawigacji aktywny... Kliknij na mapę, by wybrać punkt zrzutu.", canvas.width / 2, 95);
 
         let mapSize = 400;
         let mapX = canvas.width / 2 - mapSize / 2;
-        let mapY = canvas.height / 2 - mapSize / 2 + 20; 
+        let mapY = canvas.height / 2 - mapSize / 2 + 20;
+
+        // Rysowanie nowej interaktywnej mapy
         drawRadarMap(ctx, mapX, mapY, mapSize, true);
 
-        ctx.fillStyle = '#e74c3c';
-        ctx.font = "bold 50px 'Permanent Marker', Arial";
-        ctx.fillText(`START ZA: ${spawnCountdown}s`, canvas.width / 2, mapY + mapSize + 60);
+        // Neonowy przycisk Startu
+        ctx.fillStyle = '#e67e22'; // Pomarańczowy neon
+        ctx.font = "bold 45px 'Courier New', monospace";
+        if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#e67e22'; }
+        ctx.fillText(`[ START ZA: ${spawnCountdown}s ]`, canvas.width / 2, mapY + mapSize + 60);
+        ctx.shadowBlur = 0;
 
         const tempName = document.getElementById('playerName') ? document.getElementById('playerName').value || "Gracz" : "Gracz";
-        ctx.fillStyle = '#ffffff';
-        ctx.font = "bold 16px Arial";
-        ctx.fillText(`Status: W gotowości | Oczekujący gracz: ${tempName}`, canvas.width / 2, mapY + mapSize + 90);
+        ctx.fillStyle = '#2ecc71'; // Zielony status
+        ctx.font = "bold 16px 'Courier New', monospace";
+        ctx.fillText(`STATUS: W GOTOWOŚCI | OCZEKUJĄCY GRACZ: ${tempName}`, canvas.width / 2, mapY + mapSize + 95);
 
         requestAnimationFrame(gameLoop);
         return;
