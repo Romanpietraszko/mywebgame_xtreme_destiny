@@ -1,13 +1,13 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KOLIZJA & ANTY-LAG
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KONSOLA & LERP
 // ==========================================
 
 // --- 🛡️ AUTO-DEBUGGER (Ochrona przed crashem pętli) ---
 window.addEventListener('error', function(event) {
     console.warn("🛡️ [GUARDIAN] Zablokowano błąd krytyczny:", event.message);
-    event.preventDefault(); // Blokujemy czerwony ekran śmierci
+    event.preventDefault(); 
     if (typeof gameLoop === 'function' && window.gameState === 'PLAYING') {
-        requestAnimationFrame(gameLoop); // Wymuszenie kontynuacji gry
+        requestAnimationFrame(gameLoop); 
     }
 });
 
@@ -200,7 +200,6 @@ window.startGame = (control, mode) => {
     const name = document.getElementById('playerName').value || "Dowódca";
     window.playerSkin = document.querySelector('.char-card.selected') ? document.querySelector('.char-card.selected').id.replace('char-', '') : 'standard';
 
-    // WAITING ROOM
     gameState = 'WAITING';
     let lobbyDiv = document.createElement('div');
     lobbyDiv.id = 'waiting-room';
@@ -241,7 +240,6 @@ window.startGame = (control, mode) => {
     };
 };
 
-// --- KOMUNIKACJA Z SERWEREM ---
 socket.on('initTeam', (data) => { 
     myId = data.id; myTeam = data.team; 
     if (player) { player.id = myId; player.team = myTeam; player.color = data.color; }
@@ -283,6 +281,9 @@ socket.on('shopError', (data) => { killLogs.push({ text: `❌ ${data.message}`, 
 socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
     if (data && data.message) finalDeathMessage = data.message;
+    
+    // --- 🛡️ POPRAWKA EKRANU GAME OVER (Ukrywanie białego Menu) ---
+    document.getElementById('ui-layer').style.display = 'none';
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
     const panel = document.getElementById('formation-panel'); if (panel) panel.style.display = 'none';
@@ -310,34 +311,33 @@ socket.on('gameOver', (data) => {
     `;
 });
 
-// --- 🛡️ GŁÓWNA OCHRONA DANYCH (Sanityzacja & Guardian) ---
 socket.on('serverTick', (data) => {
+    // --- 🛡️ POPRAWKA MIGAJĄCEGO JEDZENIA I LERPa ---
+    if (data.foods !== undefined) foods = window.Guardian.safeArray(data.foods);
     
-    foods = Guardian.safeArray(data.foods);
-    
-    // Zapisywanie celów do Interpolacji (Anty-Lag) - 100% Bezpieczne forEach
-    bots = Guardian.safeArray(data.bots); 
-    bots.forEach(b => {
-        if (!entityLerp[b.id]) entityLerp[b.id] = { x: b.x, y: b.y };
-        entityLerp[b.id].tx = b.x; entityLerp[b.id].ty = b.y;
-    });
+    if (data.bots !== undefined) {
+        bots = window.Guardian.safeArray(data.bots); 
+        bots.forEach(b => {
+            if (!entityLerp[b.id]) entityLerp[b.id] = { x: b.x, y: b.y };
+            entityLerp[b.id].tx = b.x; entityLerp[b.id].ty = b.y;
+        });
+    }
 
-    projectiles = Guardian.safeArray(data.projectiles); 
-    loots       = Guardian.safeArray(data.loots);             
+    if (data.projectiles !== undefined) projectiles = window.Guardian.safeArray(data.projectiles); 
+    if (data.loots !== undefined) loots = window.Guardian.safeArray(data.loots);             
+    if (data.bushes !== undefined) bushes = window.Guardian.safeArray(data.bushes); 
+    if (data.meteorZones !== undefined) meteorZones = window.Guardian.safeArray(data.meteorZones);
     
-    currentEvent  = data.activeEvent; 
-    eventTimeLeft = data.eventTimeLeft || 0; 
+    currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
     
-    bushes      = Guardian.safeArray(data.bushes); 
-    meteorZones = Guardian.safeArray(data.meteorZones);
-    
-    // Konwersja owner -> team żeby emojki działały na bazach
-    let rawCastles = Guardian.safeArray(data.castles);
-    castles = rawCastles.map(c => { c.team = c.owner; return c; });
+    if (data.castles !== undefined) {
+        let rawCastles = window.Guardian.safeArray(data.castles);
+        castles = rawCastles.map(c => { c.team = c.owner; return c; });
+    }
     
     otherPlayers = data.players || {};
     Object.values(otherPlayers).forEach(p => {
-        if (p.id === myId) return; // Siebie nie interpolujemy
+        if (p.id === myId) return; 
         if (!entityLerp[p.id]) entityLerp[p.id] = { x: p.x, y: p.y };
         entityLerp[p.id].tx = p.x; entityLerp[p.id].ty = p.y;
     });
@@ -382,7 +382,6 @@ function checkEquipmentUpgrades() {
     lastCalculatedTier = total;
 }
 
-// --- LOGIKA UPDATE Z FIZYKĄ MURÓW ---
 function update() {
     if (gameState !== 'PLAYING') return;
 
@@ -402,7 +401,6 @@ function update() {
     
     if (dx !== 0 || dy !== 0) {
         let moveAngle = Math.atan2(dy, dx); 
-        // 🛡️ POPRAWKA: Zabezpieczenie przed NaN (Postać znowu chodzi!)
         let speed = 5 + ((playerSkills.speed || 0) * 0.5);
         if (player.skin === 'ninja') speed *= 1.05; 
         if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
@@ -415,7 +413,6 @@ function update() {
             let nextX = player.x + Math.cos(moveAngle) * speed; 
             let nextY = player.y + Math.sin(moveAngle) * speed;
 
-            // --- LOKALNA FIZYKA MURÓW ---
             let canMove = true;
             if (typeof castles !== 'undefined') {
                 for (let z of castles) {
@@ -462,7 +459,6 @@ function update() {
     }
 }
 
-// --- RYSOWANIE BAZY FRAKCJI ---
 function drawStarBase(ctx, z) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -600,10 +596,9 @@ function gameLoop(currentTime) {
         allEntities.forEach(e => {
             if (e.isSafe) return; 
 
-            // 🛡️ APLIKOWANIE LERP (Wygładzanie trzęsących się botów)
             if (e.id && e.id !== myId && entityLerp[e.id]) {
                 let le = entityLerp[e.id];
-                le.x += (le.tx - le.x) * 0.3; // Magia płynności!
+                le.x += (le.tx - le.x) * 0.3; 
                 le.y += (le.ty - le.y) * 0.3;
                 e.x = le.x;
                 e.y = le.y;
@@ -618,12 +613,7 @@ function gameLoop(currentTime) {
             
             drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
             
-            if (e.team) {
-                ctx.save(); ctx.translate(e.x, e.y); ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-                let r = 25 * getScale(renderMass);
-                ctx.font = `bold ${Math.floor(r * 1.2)}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(e.team, 0, 0);
-                ctx.restore();
-            }
+            // --- 🛡️ ZMIANA: USUNIĘTO RYSOWANIE UTRUDNIAJĄCEJ LITERY NA POSTACI ---
         });
 
         if (particles.length > 300) particles.shift();
@@ -683,7 +673,6 @@ function gameLoop(currentTime) {
             ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.fillText(`POLOWANIE NA KRÓLA: ${eventTimeLeft}s`, canvas.width / 2, 80);
         }
 
-        // --- SKRYPT DEBUGUJĄCY (Włączany klawiszem F3) ---
         if (isDebugMode && player) {
             ctx.save();
             ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 140);
