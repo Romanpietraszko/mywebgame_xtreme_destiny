@@ -244,7 +244,7 @@
     <div id="castle-shop" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 5, 0.7); backdrop-filter: blur(15px); z-index: 1000; color: #fff; font-family: 'Courier New', monospace; flex-direction: row; box-sizing: border-box;">
 
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px dashed rgba(255, 255, 255, 0.2); background: linear-gradient(90deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);">
-            <img src="obraz.jpg" style="width: 350px; filter: drop-shadow(0 0 25px rgba(255, 255, 255, 0.2));">
+            <img src="straznik-postac.png" style="width: 350px; filter: drop-shadow(0 0 25px rgba(255, 255, 255, 0.2));">
             <h2 style="color: #e74c3c; margin-top: 20px; text-shadow: 0 0 10px #e74c3c; font-size: 28px;">[ STRAŻNIK BAZY ]</h2>
             <p style="text-align: center; max-width: 300px; color: #aaa; font-size: 14px; margin-top: 10px;">"Udało ci się przetrwać mrok... Przyniosłeś masę? Wymień ją na potęgę, zanim wrócisz na zewnątrz."</p>
         </div>
@@ -271,8 +271,10 @@
                 </button>
             </div>
 
-            <div style="margin-top: 30px; text-align: right; color: #777; font-size: 14px; animation: pulseInfo 2s infinite;">
-                Użyj klawiszy [W, A, S, D], aby opuścić zamek i wyjść w mrok...
+            <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+                <button onclick="leaveCastle()" style="padding: 15px 30px; background: #e74c3c; border: 2px solid #ffffff; color: #ffffff; font-family: 'Courier New', monospace; font-size: 18px; font-weight: bold; cursor: pointer; box-shadow: 0 0 15px rgba(231, 76, 60, 0.5); transition: 0.2s;" onmouseover="this.style.background='#c0392b'; this.style.transform='scale(1.05)';" onmouseout="this.style.background='#e74c3c'; this.style.transform='scale(1)';">
+                    🚪 OPUŚĆ ZAMEK
+                </button>
             </div>
 
         </div>

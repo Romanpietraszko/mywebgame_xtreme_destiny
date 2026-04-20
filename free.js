@@ -446,7 +446,17 @@ socket.on('botEaten', (data) => {
 
 socket.on('killEvent', (data) => { 
     if(data && data.text) {
-        killLogs.push({ text: data.text, time: 200 }); 
+        // Filtr 1: Ignorujemy spam, gdy bot zabija bota
+        let isBotVsBot = data.text.includes('Bot AI') && data.text.match(/Bot AI/g) !== null && data.text.match(/Bot AI/g).length > 1;
+        
+        if (!isBotVsBot) {
+            killLogs.push({ text: data.text, time: 200 }); 
+        }
+
+        // Filtr 2: Twardy limit logów (max 4 na ekranie)
+        if (killLogs.length > 4) {
+            killLogs.shift();
+        }
     }
 });
 
@@ -1515,3 +1525,36 @@ function gameLoop(currentTime) {
     }
     requestAnimationFrame(gameLoop);
 }
+
+// --- FUNKCJA WYJŚCIA Z ZAMKU ---
+window.leaveCastle = () => {
+    if (!player) return;
+    
+    // Szukamy zamku, w którym obecnie jesteśmy
+    let currentCastle = safeZones.find(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+    
+    if (currentCastle) {
+        // Obliczamy kąt w stronę środka mapy (żeby wyjść przez bramę)
+        let angle = Math.atan2(2000 - currentCastle.y, 2000 - currentCastle.x);
+        
+        // Przesuwamy gracza tuż za obręb strefy ochronnej (+50 pikseli zapasu)
+        player.x = currentCastle.x + Math.cos(angle) * (currentCastle.radius + 50);
+        player.y = currentCastle.y + Math.sin(angle) * (currentCastle.radius + 50);
+        
+        // Wyłączamy status bezpieczeństwa i zamykamy sklep
+        player.isSafe = false;
+        const shop = document.getElementById('castle-shop');
+        if (shop) shop.style.display = 'none';
+        
+        // Aktualizujemy pozycję na serwerze od razu
+        if (!isServerLagging) {
+            socket.emit('playerMovement', { 
+                x: player.x, 
+                y: player.y, 
+                score: player.score, 
+                isSafe: player.isSafe, 
+                isShielding: player.isShielding 
+            });
+        }
+    }
+};
