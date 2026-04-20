@@ -358,7 +358,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
     ctx.save();
     
-    // --- GŁÓWNE CIAŁO POSTACI ---
+    // --- GŁÓWNE CIAŁO POSTACI (VIBE NOIR Z TWOIMI GRAFIKAMI) ---
     if (isHuman) {
         const spriteSize = 60 * sc; 
         let timeOffset = Date.now() + e.x; 
@@ -374,7 +374,17 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         if (e.skin === 'ninja') currentSkinImg = skins.ninja;
         else if (e.skin === 'arystokrata') currentSkinImg = skins.arystokrata;
         
+        // --- DODAJEMY POTĘŻNĄ BIAŁĄ AURĘ POD TWOJĄ GRAFIKĄ ---
+        if (!window.isMobile) {
+            ctx.shadowBlur = 35 * sc;
+            ctx.shadowColor = '#ffffff'; 
+        }
+        
+        // Rysujemy Twoją autorską postać z Figmy
         ctx.drawImage(currentSkinImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
+        
+        // Resetujemy cień, żeby inne rzeczy nie świeciły
+        ctx.shadowBlur = 0; 
         
         // PAS TAKTYCZNY NA BRONIE (Dla Humana)
         if (score >= 20) {
@@ -388,13 +398,35 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
         if (visualStates[eId].eatTimer > 0) {
             ctx.rotate(-wobble); ctx.scale(1/breatheX, 1/breatheY);
-            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(25 * sc, -25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = '#ffffff'; // Zmiana tła emotki na białe
+            ctx.beginPath(); ctx.arc(25 * sc, -25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#050505'; ctx.lineWidth = 2; ctx.stroke();
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', 25 * sc, -25 * sc);
         }
     } else {
-        ctx.fillStyle = e.color || '#2ecc71';
-        ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
+        // --- BOTY I BOSSOWIE ---
+        let isBoss = score >= 200; // System wykrywania potężnych botów
+        
+        if (isBoss) {
+            // Boss: Czarna bryła, biała obwódka i czerwone oczy
+            if (!window.isMobile) { ctx.shadowBlur = 15 * sc; ctx.shadowColor = '#ff0000'; }
+            ctx.fillStyle = '#050505';
+            ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * sc; ctx.stroke();
+            ctx.shadowBlur = 0; // Reset cienia po narysowaniu obwódki
+            
+            ctx.fillStyle = '#ff0000';
+            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+        } else {
+            // Zwykły Bot: Biała zjawa
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
+            
+            ctx.fillStyle = '#050505'; // Czarne oczy
+            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+        }
         
         // PAS TAKTYCZNY (Dla Botów AI)
         if (score >= 20) {
@@ -403,22 +435,6 @@ function drawStickman(e, x, y, sc, safe, kingId) {
             ctx.fillStyle = '#f1c40f'; 
             ctx.fillRect(x - 3 * sc, y + 15 * sc, 6 * sc, 7 * sc); 
         }
-
-        ctx.fillStyle = 'white';
-        ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
-        
-        ctx.fillStyle = 'black';
-        ctx.beginPath(); ctx.arc(x - 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(x + 6.5 * sc, y - 4 * sc, 1.8 * sc, 0, Math.PI * 2); ctx.fill();
-
-        ctx.strokeStyle = 'black';
-        ctx.lineWidth = 1.5 * sc;
-        ctx.lineCap = 'round';
-        ctx.beginPath(); 
-        ctx.moveTo(x - 11 * sc, y - 11 * sc); ctx.lineTo(x - 4 * sc, y - 8 * sc); 
-        ctx.moveTo(x + 11 * sc, y - 11 * sc); ctx.lineTo(x + 4 * sc, y - 8 * sc); 
-        ctx.stroke();
 
         if (equipmentTier > 0) {
             drawDynamicArmor(e, x, y, sc, equipmentTier);
@@ -461,17 +477,14 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
     }
 
-    // --- NOWOŚĆ: CZARNA OBWÓDKA NA BIAŁYM TEKŚCIE (Do czytelności na śniegu) ---
-    ctx.font = `bold ${13 * sc}px Arial`; 
+    // --- NOWOŚĆ: VIBE NOIR TEKST ---
+    ctx.font = `bold ${13 * sc}px 'Courier New', monospace`; 
     ctx.textAlign = 'center';
     let displayScore = Math.floor(score);
     let textToShow = (e.name !== 'Wojownik') ? `${e.name || "Bot"} [${displayScore}]` : `[${displayScore}]`;
     
-    ctx.lineWidth = 3 * sc;
-    ctx.strokeStyle = '#111111';
-    ctx.strokeText(textToShow, x, y - 65 * sc);
-    
-    ctx.fillStyle = '#ffffff'; 
+    // Gracze mają czysty biały tekst, boty lekko szary
+    ctx.fillStyle = isHuman ? '#ffffff' : '#aaaaaa'; 
     ctx.fillText(textToShow, x, y - 65 * sc); 
     
     ctx.restore();
@@ -488,12 +501,14 @@ function drawCastle(x, y, radius) {
     ctx.save();
     ctx.translate(x, y);
 
+    // Strefa ochronna (Mroczna z białym pulsującym brzegiem)
     ctx.beginPath();
     ctx.arc(0, 0, radius + 40, 0, Math.PI * 2);
-    ctx.fillStyle = '#ffffff'; 
+    ctx.fillStyle = '#050505'; 
     ctx.fill();
     ctx.lineWidth = 2;
-    ctx.strokeStyle = '#111111'; 
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)'; 
+    if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#ffffff'; }
     ctx.setLineDash([8, 12]); 
     ctx.lineDashOffset = -(Date.now() / 40) % 40; 
     ctx.stroke(); 
@@ -501,10 +516,12 @@ function drawCastle(x, y, radius) {
     ctx.lineDashOffset = (Date.now() / 60) % 40; 
     ctx.stroke(); 
     ctx.setLineDash([]);
+    ctx.shadowBlur = 0; // Reset cienia dla wnętrza
 
-    ctx.fillStyle = '#ffffff'; 
+    // Budynek wewnętrzny (Line Art)
+    ctx.fillStyle = '#000000'; 
     ctx.fillRect(-25, radius - 10, 50, 60);
-    ctx.strokeStyle = '#111111';
+    ctx.strokeStyle = '#ffffff'; // Białe kontury
     ctx.lineWidth = 2;
     ctx.strokeRect(-25, radius - 10, 50, 60);
     ctx.beginPath();
@@ -514,35 +531,30 @@ function drawCastle(x, y, radius) {
     }
     ctx.stroke();
 
+    // Centralna wieża
     ctx.beginPath();
     ctx.arc(0, 0, radius, 0, Math.PI * 2);
-    ctx.fillStyle = '#111111'; 
+    ctx.fillStyle = '#080808'; 
     ctx.fill();
+    ctx.strokeStyle = '#ffffff';
+    ctx.stroke();
 
-    ctx.fillStyle = '#ffffff';
+    ctx.fillStyle = '#000000';
     for(let i = 0; i < 12; i++) {
         ctx.save();
         ctx.rotate((Math.PI * 2 / 12) * i);
         ctx.fillRect(-15, -radius - 12, 30, 20);
-        ctx.strokeStyle = '#111111';
-        ctx.lineWidth = 3;
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
         ctx.strokeRect(-15, -radius - 12, 30, 20);
         ctx.restore();
     }
 
-    ctx.beginPath();
-    ctx.arc(0, 0, radius - 15, 0, Math.PI * 2);
     ctx.fillStyle = '#ffffff'; 
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.strokeStyle = '#111111';
-    ctx.stroke();
-
-    ctx.fillStyle = '#111111'; 
-    ctx.font = `bold ${radius * 0.6}px 'Permanent Marker', Arial`;
+    ctx.font = `bold ${radius * 0.5}px 'Courier New', monospace`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.fillText('B', 0, 0); 
+    ctx.fillText('SAFE', 0, 0); 
 
     ctx.restore();
 }

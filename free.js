@@ -307,7 +307,7 @@ function drawNotebookBird(ctx, b) {
 
     let flap = Math.sin(b.wingPhase) * b.size * 0.8;
 
-    ctx.strokeStyle = '#111111'; 
+    ctx.strokeStyle = '#ffffff'; 
     ctx.lineWidth = 2.5;
     ctx.lineJoin = 'round';
     ctx.lineCap = 'round';
@@ -402,7 +402,7 @@ function showGameOverScreen(finalScore, reasonText) {
         gameOverDiv = document.createElement('div');
         gameOverDiv.id = 'game-over-screen';
         gameOverDiv.style.textAlign = 'center';
-        gameOverDiv.style.color = '#111'; 
+        gameOverDiv.style.color = '#fff'; 
         document.getElementById('menu').appendChild(gameOverDiv);
     }
     gameOverDiv.style.display = 'block';
@@ -493,7 +493,7 @@ socket.on('damageText', (data) => {
         deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
     }
 
-    let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#bdc3c7');
+    let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#ffffff');
     let count = data.val > 20 ? 12 : 6; 
     
     if (particles.length < 250) {
@@ -686,13 +686,14 @@ function update() {
 function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.save();
     
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+    // Vibe Noir: Ciemne tło radaru z białą ramką
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.85)';
     ctx.fillRect(mapX, mapY, mapSize, mapSize);
-    ctx.strokeStyle = '#111';
+    ctx.strokeStyle = '#ffffff';
     ctx.lineWidth = 3;
     ctx.strokeRect(mapX, mapY, mapSize, mapSize);
     
-    ctx.fillStyle = '#111';
+    ctx.fillStyle = '#ffffff';
     ctx.font = "bold 14px 'Permanent Marker', Arial";
     ctx.textAlign = 'center';
     ctx.fillText(isTactical ? "MAPA TAKTYCZNA" : "RADAR", mapX + mapSize / 2, mapY - 8);
@@ -703,9 +704,9 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         safeZones.forEach(z => {
             ctx.beginPath();
             ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(17, 17, 17, 0.2)'; 
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)'; 
             ctx.fill();
-            ctx.strokeStyle = '#111';
+            ctx.strokeStyle = '#ffffff';
             ctx.lineWidth = 1;
             ctx.stroke();
         });
@@ -763,15 +764,15 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     if (gameState === 'SPAWN_SELECTION') {
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6, 0, Math.PI * 2);
-        ctx.fillStyle = '#111111'; 
+        ctx.fillStyle = '#ffffff'; 
         ctx.fill(); 
         ctx.lineWidth = 2; 
-        ctx.strokeStyle = '#111111'; 
+        ctx.strokeStyle = '#ffffff'; 
         ctx.stroke();
         
         ctx.beginPath();
         ctx.arc(mapX + selectedSpawn.x * mapScale, mapY + selectedSpawn.y * mapScale, 6 + ((Date.now()/100)%5), 0, Math.PI * 2);
-        ctx.strokeStyle = '#111111'; 
+        ctx.strokeStyle = '#ffffff'; 
         ctx.stroke();
     }
 
@@ -807,7 +808,7 @@ function gameLoop(currentTime) {
             ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         } else {
-            ctx.fillStyle = '#111111';
+            ctx.fillStyle = '#050505';
             ctx.fillRect(0, 0, canvas.width, canvas.height);
         }
 
@@ -901,7 +902,8 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        ctx.fillStyle = '#ffffff'; 
+        // Vibe Noir: GŁĘBOKA CZERŃ zamiast białego tła
+        ctx.fillStyle = '#050505'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
         let vWidth = canvas.width / globalScale;
@@ -923,7 +925,7 @@ function gameLoop(currentTime) {
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        ctx.strokeStyle = 'rgba(17, 17, 17, 0.4)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Białe podmuchy wiatru
         ctx.lineWidth = 1.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -935,21 +937,25 @@ function gameLoop(currentTime) {
         ctx.stroke();
 
         foods.forEach(f => {
-            ctx.fillStyle = '#e67e22'; 
+            ctx.fillStyle = '#ffffff'; // Masa świeci na biało
+            if (!window.isMobile) { ctx.shadowBlur = 5; ctx.shadowColor = '#ffffff'; }
             ctx.beginPath(); 
-            ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); 
+            ctx.arc(f.x, f.y, 6, 0, Math.PI * 2); 
             ctx.fill();
+            ctx.shadowBlur = 0;
         });
 
         loots.forEach(l => {
             ctx.save();
             ctx.translate(l.x, l.y);
-            ctx.fillStyle = '#ffffff'; 
+            ctx.fillStyle = '#050505'; // Czarne skrzynki
             ctx.fillRect(-12, -10, 24, 20); 
-            ctx.strokeStyle = '#111111'; 
+            ctx.strokeStyle = '#ffffff'; // Biała neonowa ramka
+            if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
             ctx.lineWidth = 2; 
             ctx.strokeRect(-12, -10, 24, 20); 
-            ctx.fillStyle = '#111111';
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = '#ffffff';
             ctx.font = "bold 14px 'Permanent Marker', Arial"; 
             ctx.textAlign = 'center'; 
             ctx.textBaseline = 'middle';
@@ -992,7 +998,7 @@ function gameLoop(currentTime) {
 
         if (draggedBotId && player) {
             ctx.save();
-            ctx.strokeStyle = 'rgba(241, 196, 15, 0.8)'; 
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // Biała smycz
             ctx.lineWidth = 2; 
             ctx.setLineDash([5, 5]);
             
@@ -1003,14 +1009,14 @@ function gameLoop(currentTime) {
             
             ctx.beginPath(); 
             ctx.arc(dragMouseWorld.x, dragMouseWorld.y, 25, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(241, 196, 15, 0.2)'; 
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.1)'; 
             ctx.fill(); 
             ctx.stroke();
 
             let b = bots.find(bot => bot.id === draggedBotId);
             if (b) {
                 ctx.setLineDash([]); 
-                ctx.strokeStyle = '#f1c40f'; 
+                ctx.strokeStyle = '#ffffff'; 
                 ctx.lineWidth = 4;
                 ctx.beginPath(); 
                 ctx.arc(b.x, b.y, 40, 0, Math.PI * 2); 
@@ -1096,7 +1102,7 @@ function gameLoop(currentTime) {
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save();
             ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = 'rgba(17, 17, 17, 0.8)'; ctx.lineWidth = 2; ctx.beginPath();
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 2; ctx.beginPath(); // Jasne smugi deszczu
             let timeOffset = Date.now() / 5;
             for(let i = 0; i < 150; i++) {
                 let rx = (Math.random() * canvas.width + timeOffset) % canvas.width;
@@ -1110,7 +1116,7 @@ function gameLoop(currentTime) {
             ctx.fillStyle = 'rgba(52, 152, 219, 0.15)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            ctx.fillStyle = '#111';
+            ctx.fillStyle = '#ffffff'; // Biały śnieg na czarnym tle
             ctx.beginPath();
             let timeOffset = Date.now() / 15;
             for(let i = 0; i < 200; i++) {
@@ -1129,22 +1135,23 @@ function gameLoop(currentTime) {
             let tutorialX = canvas.width - tutorialWidth - 20; 
             let tutorialY = canvas.height - 230; 
             
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.95)'; 
+            // Ciemne tło dla tutoriala
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.95)'; 
             ctx.fillRect(tutorialX, tutorialY, tutorialWidth, 110);
-            ctx.strokeStyle = '#111'; 
-            ctx.lineWidth = 4; 
+            ctx.strokeStyle = '#ffffff'; 
+            ctx.lineWidth = 2; 
             ctx.strokeRect(tutorialX, tutorialY, tutorialWidth, 110);
             
             if (typeof skins !== 'undefined' && skins.midas && skins.midas.complete) {
                 ctx.drawImage(skins.midas, tutorialX + 10, tutorialY + 15, 80, 80); 
             }
             
-            ctx.fillStyle = '#111'; 
+            ctx.fillStyle = '#ffffff'; 
             ctx.font = "bold 16px 'Permanent Marker', Arial"; 
             ctx.textAlign = 'left';
             ctx.fillText("MIDAS (Przewodnik XD):", tutorialX + 110, tutorialY + 25);
             
-            ctx.fillStyle = '#333'; 
+            ctx.fillStyle = '#dddddd'; 
             ctx.font = '13px Arial';
             if (player.tutorialText) {
                 if (window.wrapText) {
@@ -1154,7 +1161,7 @@ function gameLoop(currentTime) {
                 }
             }
             
-            ctx.fillStyle = '#7f8c8d'; ctx.font = 'bold 10px Arial';
+            ctx.fillStyle = '#aaaaaa'; ctx.font = 'bold 10px Arial';
             ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
             
             ctx.restore();
@@ -1162,8 +1169,9 @@ function gameLoop(currentTime) {
 
         if (gameState !== 'GAMEOVER') {
             
-            ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
-            ctx.strokeStyle = '#111'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
+            // Ciemny Panel Rankingu
+            ctx.fillStyle = 'rgba(10, 10, 10, 0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
+            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
             
             ctx.fillStyle = '#e74c3c'; ctx.font = "bold 16px 'Permanent Marker', Arial";
             ctx.fillText("🏆 RANKING ARENY", canvas.width - 265, 30);
@@ -1172,10 +1180,10 @@ function gameLoop(currentTime) {
                 let yPos = 55 + i * 20;
                 let displayScore = isNaN(p.score) ? 5 : Math.floor(p.score);
                 if (i === 0) { ctx.fillStyle = '#f1c40f'; ctx.fillText(`👑 [KRÓL] ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); } 
-                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#333'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
+                else { ctx.fillStyle = (p.id === myId || p === player) ? '#2ecc71' : '#dddddd'; ctx.fillText(`${i+1}. ${p.name} - ${displayScore} pkt`, canvas.width - 265, yPos); }
             });
 
-            ctx.fillStyle = '#111'; ctx.font = "bold 20px 'Permanent Marker', Arial";
+            ctx.fillStyle = '#ffffff'; ctx.font = "bold 20px 'Permanent Marker', Arial";
             ctx.textAlign = 'left';
             let displayScoreP = isNaN(player.score) ? 5 : Math.floor(player.score);
             ctx.fillText(`PUNKTY: ${displayScoreP}`, 20, 40);
@@ -1198,21 +1206,22 @@ function gameLoop(currentTime) {
             
             let timerY = (currentEvent === null) ? 80 : 110;
 
+            // Ciemny Panel Timera
             ctx.save();
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#050505';
             ctx.fillRect(timerX, timerY, timerW, timerH);
-            ctx.strokeStyle = '#111111';
-            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#ffffff';
+            ctx.lineWidth = 2;
             ctx.strokeRect(timerX, timerY, timerW, timerH);
 
-            ctx.fillStyle = '#111111';
+            ctx.fillStyle = '#ffffff';
             ctx.beginPath(); ctx.arc(timerX + 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 16, timerY + timerH / 2, 10, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = '#050505';
             ctx.beginPath(); ctx.arc(timerX + 18, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
             ctx.beginPath(); ctx.arc(timerX + timerW - 14, timerY + timerH / 2 - 2, 3, 0, Math.PI * 2); ctx.fill();
 
-            ctx.fillStyle = '#111111';
+            ctx.fillStyle = '#ffffff';
             ctx.font = "bold 28px monospace";
             ctx.textAlign = 'center';
             ctx.textBaseline = 'middle';
@@ -1247,7 +1256,7 @@ function gameLoop(currentTime) {
                     ctx.fillStyle = '#e74c3c';
                     ctx.font = 'bold 24px Arial';
                 } else {
-                    ctx.fillStyle = 'rgba(17, 17, 17, 0.8)';
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
                 }
                 ctx.fillText(`Kolejny event za: ${eventTimeLeft}s`, canvas.width / 2, 40);
             } else {
@@ -1255,8 +1264,8 @@ function gameLoop(currentTime) {
                 ctx.fillStyle = '#e74c3c';
                 let eName = currentEvent === 'KING_HUNT' ? '👑 POLOWANIE NA KRÓLA!' : (currentEvent === 'TOXIC_RAIN' ? '🌧️ KWAŚNY DESZCZ!' : '❄️ ZAMIĘĆ ŚNIEŻNA!');
                 ctx.fillText(eName, canvas.width / 2, 50);
-                if (currentEvent === 'TOXIC_RAIN') { ctx.font = '16px Arial'; ctx.fillText("Chowaj się w zamku!", canvas.width / 2, 75); }
-                if (currentEvent === 'BLIZZARD') { ctx.font = '16px Arial'; ctx.fillText("Poruszasz się znacznie wolniej!", canvas.width / 2, 75); }
+                if (currentEvent === 'TOXIC_RAIN') { ctx.font = '16px Arial'; ctx.fillStyle='#ffffff'; ctx.fillText("Chowaj się w zamku!", canvas.width / 2, 75); }
+                if (currentEvent === 'BLIZZARD') { ctx.font = '16px Arial'; ctx.fillStyle='#ffffff'; ctx.fillText("Poruszasz się znacznie wolniej!", canvas.width / 2, 75); }
             }
             ctx.restore();
 
@@ -1291,7 +1300,7 @@ function gameLoop(currentTime) {
                     if (player.inventory[key] > 0 && key !== player.activeWeapon) {
                         let displayName = key.replace('_', ' ').toUpperCase();
                         slotsHTML += `
-                            <div draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${key}')" onclick="window.equipWeaponFromInventory('${key}')" style="background: #f0f0f0; border: 2px solid #111; border-radius: 5px; width: 60px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: grab; transition: 0.1s;">
+                            <div draggable="true" ondragstart="event.dataTransfer.setData('text/plain', '${key}')" onclick="window.equipWeaponFromInventory('${key}')" style="background: #111; border: 2px solid #fff; color: #fff; border-radius: 5px; width: 60px; height: 60px; display: flex; flex-direction: column; justify-content: center; align-items: center; cursor: grab; transition: 0.1s;">
                                 <span style="font-size: 20px; pointer-events: none;">⚔️</span>
                                 <span style="font-size: 8px; font-weight: bold; text-align: center; margin-top: 5px; pointer-events: none;">${displayName.substring(0, 8)}</span>
                             </div>
@@ -1300,7 +1309,7 @@ function gameLoop(currentTime) {
                 });
                 
                 if (slotsHTML === '') {
-                    slotsHTML = '<p style="font-size: 11px; text-align: center; width: 100%; color: #777;">Twój plecak jest pusty.</p>';
+                    slotsHTML = '<p style="font-size: 11px; text-align: center; width: 100%; color: #aaa;">Twój plecak jest pusty.</p>';
                 }
                 
                 let invSlots = document.getElementById('inventory-slots');
@@ -1322,13 +1331,13 @@ function gameLoop(currentTime) {
                 let isActive = player.activeWeapon && player.activeWeapon.includes(w.id);
                 if (w.id === 'sword' && player.activeWeapon === 'sword') isActive = true;
 
-                ctx.fillStyle = isActive ? '#111' : '#fff';
+                ctx.fillStyle = isActive ? '#ffffff' : '#050505';
                 ctx.fillRect(btnX, startY, btnWidth, btnWidth);
-                ctx.strokeStyle = '#111';
+                ctx.strokeStyle = '#ffffff';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(btnX, startY, btnWidth, btnWidth);
 
-                ctx.fillStyle = isActive ? '#fff' : '#111';
+                ctx.fillStyle = isActive ? '#050505' : '#ffffff';
                 ctx.font = 'bold 14px Arial';
                 ctx.fillText(w.key, btnX + 15, startY + 18);
 
@@ -1344,15 +1353,15 @@ function gameLoop(currentTime) {
                 let winterProgress = Math.min(1, timePassed / cooldownTotal);
                 let timeLeft = Math.ceil((cooldownTotal - timePassed) / 1000);
 
-                ctx.fillStyle = '#fff'; 
+                ctx.fillStyle = '#050505'; 
                 ctx.fillRect(currentSkillX, startY, btnWidth, btnWidth);
                 ctx.fillStyle = 'rgba(52, 152, 219, 0.8)'; 
                 ctx.fillRect(currentSkillX, startY + btnWidth * (1 - winterProgress), btnWidth, btnWidth * winterProgress);
-                ctx.strokeStyle = '#111'; 
+                ctx.strokeStyle = '#ffffff'; 
                 ctx.lineWidth = 2; 
                 ctx.strokeRect(currentSkillX, startY, btnWidth, btnWidth);
                 
-                ctx.fillStyle = '#111'; 
+                ctx.fillStyle = '#ffffff'; 
                 ctx.font = 'bold 14px Arial'; 
                 ctx.fillText('R', currentSkillX + 25, startY + 18);
                 
@@ -1373,15 +1382,15 @@ function gameLoop(currentTime) {
                 let dashProgress = Math.min(1, timePassedD / cooldownTotalD);
                 let timeLeftD = Math.ceil((cooldownTotalD - timePassedD) / 1000);
 
-                ctx.fillStyle = '#fff'; 
+                ctx.fillStyle = '#050505'; 
                 ctx.fillRect(currentSkillX, startY, btnWidth, btnWidth);
                 ctx.fillStyle = 'rgba(46, 204, 113, 0.8)'; 
                 ctx.fillRect(currentSkillX, startY + btnWidth * (1 - dashProgress), btnWidth, btnWidth * dashProgress);
-                ctx.strokeStyle = '#111'; 
+                ctx.strokeStyle = '#ffffff'; 
                 ctx.lineWidth = 2; 
                 ctx.strokeRect(currentSkillX, startY, btnWidth, btnWidth);
                 
-                ctx.fillStyle = '#111'; 
+                ctx.fillStyle = '#ffffff'; 
                 ctx.font = 'bold 12px Arial'; 
                 ctx.fillText('SHIFT', currentSkillX + 25, startY + 18);
                 
@@ -1424,25 +1433,26 @@ function gameLoop(currentTime) {
                         let canUpgrade = skillPoints > 0 && player.score >= cat.req && lvl < 20; 
                         
                         let levelText = lvl >= 20 ? `(Lv. MAX)` : `(Lv. ${lvl}/20)`;
-                        let titleColor = '#111';
+                        let titleColor = '#ffffff';
                         
-                        html += `<div style="border: 2px solid #111; padding: 6px; margin-bottom: 6px; background: #fff; color: #111; box-shadow: 2px 2px 0px #111;">
+                        // Mroczny motyw w HTML (Neon/Noir)
+                        html += `<div style="border: 2px solid #ffffff; padding: 6px; margin-bottom: 6px; background: #050505; color: #ffffff; box-shadow: 2px 2px 0px #ffffff;">
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                                         <span style="font-weight: bold; font-size: 13px; text-transform: uppercase;">
                                             ${cat.icon} ${cat.name} <span style="font-size: 10px;">${levelText}</span>
                                         </span>
-                                        <button style="background: ${canUpgrade ? '#fff' : '#ddd'}; color: #111; border: 2px solid #111; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'}; padding: 2px 8px; font-size: 14px;" ${!canUpgrade ? 'disabled' : ''} onclick="upgrade('${cat.id}')">➕</button>
+                                        <button style="background: ${canUpgrade ? '#ffffff' : '#333333'}; color: ${canUpgrade ? '#050505' : '#888888'}; border: 2px solid #ffffff; font-weight: bold; cursor: ${canUpgrade ? 'pointer' : 'not-allowed'}; padding: 2px 8px; font-size: 14px;" ${!canUpgrade ? 'disabled' : ''} onclick="upgrade('${cat.id}')">➕</button>
                                     </div>`;
                         
                         if (currentPath !== 'none') {
-                            html += `<div style="font-size: 10px; font-weight: bold; text-align: center; border-top: 1px dashed #111; padding-top: 4px; text-transform: uppercase;">▶ ${currentPath}</div>`;
+                            html += `<div style="font-size: 10px; font-weight: bold; text-align: center; border-top: 1px dashed #ffffff; padding-top: 4px; text-transform: uppercase;">▶ ${currentPath}</div>`;
                         } else if (lvl >= 5) {
-                            html += `<div style="display: flex; gap: 4px; border-top: 1px dashed #111; padding-top: 4px;">
-                                        <button style="flex: 1; border: 1px solid #111; background: #fff; color: #111; font-size: 9px; font-weight: bold; padding: 4px; cursor: pointer;" onclick="choosePath('${cat.id}', '${cat.path1}')">${cat.path1Name}</button>
-                                        <button style="flex: 1; border: 1px solid #111; background: #fff; color: #111; font-size: 9px; font-weight: bold; padding: 4px; cursor: pointer;" onclick="choosePath('${cat.id}', '${cat.path2}')">${cat.path2Name}</button>
+                            html += `<div style="display: flex; gap: 4px; border-top: 1px dashed #ffffff; padding-top: 4px;">
+                                        <button style="flex: 1; border: 1px solid #ffffff; background: #111111; color: #ffffff; font-size: 9px; font-weight: bold; padding: 4px; cursor: pointer;" onclick="choosePath('${cat.id}', '${cat.path1}')">${cat.path1Name}</button>
+                                        <button style="flex: 1; border: 1px solid #ffffff; background: #111111; color: #ffffff; font-size: 9px; font-weight: bold; padding: 4px; cursor: pointer;" onclick="choosePath('${cat.id}', '${cat.path2}')">${cat.path2Name}</button>
                                      </div>`;
                         } else {
-                            html += `<div style="font-size: 9px; color: #555; text-align: center; border-top: 1px dashed #111; padding-top: 4px;">Odblokowanie Ścieżki na Lv. 5</div>`;
+                            html += `<div style="font-size: 9px; color: #aaaaaa; text-align: center; border-top: 1px dashed #ffffff; padding-top: 4px;">Odblokowanie Ścieżki na Lv. 5</div>`;
                         }
                         html += `</div>`;
                     });
@@ -1475,13 +1485,13 @@ function gameLoop(currentTime) {
         }
 
         if (gameState === 'PAUSED' && !document.getElementById('gacha-modal').style.display.includes('flex')) {
-            ctx.fillStyle = 'rgba(255,255,255,0.8)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.fillStyle = '#111'; ctx.font = "bold 40px 'Permanent Marker', Arial"; ctx.textAlign = 'center';
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height); // Ciemny pauza screen
+            ctx.fillStyle = '#ffffff'; ctx.font = "bold 40px 'Permanent Marker', Arial"; ctx.textAlign = 'center';
             ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
             
             const btnX = canvas.width / 2 - 100; const btnY = canvas.height / 2 + 10;
-            ctx.fillStyle = '#e74c3c'; ctx.fillRect(btnX, btnY, 200, 50); ctx.strokeStyle = '#111'; ctx.lineWidth = 3; ctx.strokeRect(btnX, btnY, 200, 50);
-            ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.fillText("WYJŚCIE", canvas.width / 2, btnY + 33);
+            ctx.fillStyle = '#e74c3c'; ctx.fillRect(btnX, btnY, 200, 50); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.strokeRect(btnX, btnY, 200, 50);
+            ctx.fillStyle = '#ffffff'; ctx.font = 'bold 24px Arial'; ctx.fillText("WYJŚCIE", canvas.width / 2, btnY + 33);
             ctx.textAlign = 'left';
         }
     }
