@@ -292,6 +292,13 @@ io.on('connection', (socket) => {
         if (p) {
             p.formation = formationIndex;
             let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : (p.formation === 2 ? "LINIA" : "WŁASNA (PPM)"));
+            
+            // RESET: Jeśli zmieniamy formację klawiszem, wszystkie boty zapominają "ręczne" ustawienia
+            for (let bId in bots) {
+                if (bots[bId].ownerId === p.id) {
+                    bots[bId].isCustomPosition = false;
+                }
+            }
             socket.emit('formationSwitched', formName);
         }
     });
@@ -320,14 +327,27 @@ io.on('connection', (socket) => {
     });
 
     socket.on('dash', (dir) => {
-        if (!dir || typeof dir.x !== 'number' || typeof dir.y !== 'number') return;
+        if (!dir) return; 
         const p = players[socket.id];
         const now = Date.now();
         if (p && p.paths.speed === 'dash' && now - p.lastDashUse > 3000) {
-            p.lastDashUse = now; let dashDist = 150;
+            p.lastDashUse = now; 
+            let dashDist = 150;
             
-            let nextX = p.x + dir.x * dashDist; 
-            let nextY = p.y + dir.y * dashDist;
+            let dx = parseFloat(dir.x) || 0;
+            let dy = parseFloat(dir.y) || 0;
+            let len = Math.hypot(dx, dy);
+            
+            if (len > 0) {
+                dx /= len; dy /= len;
+            } else {
+                // MAGIA: Jeśli gracz stoi w miejscu, Zryw wyrzuca go tam, gdzie "patrzy" (ostatni ruch)
+                dx = Math.cos(p.moveAngle || 0);
+                dy = Math.sin(p.moveAngle || 0);
+            }
+            
+            let nextX = p.x + dx * dashDist; 
+            let nextY = p.y + dy * dashDist;
             
             if (canCrossCastleWall(p.x, p.y, nextX, nextY)) {
                 p.x = Math.max(0, Math.min(WORLD_SIZE, nextX)); 
@@ -347,6 +367,13 @@ io.on('connection', (socket) => {
         if (p) {
             p.formation = (p.formation + 1) % 4; 
             let formName = p.formation === 0 ? "OKRĄG" : (p.formation === 1 ? "KLIN (V)" : (p.formation === 2 ? "LINIA" : "WŁASNA (PPM)"));
+            
+            // RESET: Jeśli zmieniamy formację klawiszem, wszystkie boty zapominają "ręczne" ustawienia
+            for (let bId in bots) {
+                if (bots[bId].ownerId === p.id) {
+                    bots[bId].isCustomPosition = false;
+                }
+            }
             socket.emit('formationSwitched', formName);
         }
     });
@@ -356,8 +383,9 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         let b = bots[data.botId];
         if (p && b && b.ownerId === p.id) {
-            b.angleOffset = data.angleOffset || 0; b.distOffset = data.distOffset || 0;
-            if (p.formation !== 3) { p.formation = 3; socket.emit('formationSwitched', "WŁASNA (PPM)"); }
+            b.angleOffset = data.angleOffset || 0; 
+            b.distOffset = data.distOffset || 0;
+            b.isCustomPosition = true; // FLAGA: Ten konkretny bot ma własną pozycję
         }
     });
 
@@ -663,20 +691,28 @@ setInterval(() => {
                 let total = armies[b.ownerId].length;
                 let targetX = owner.x; let targetY = owner.y;
 
-                if (owner.formation === 0) { 
-                    let angleStep = (Math.PI * 2) / total; let currentAngle = (Date.now() / 1500) + (myIndex * angleStep); let radius = 70 + (total * 2); 
-                    targetX = owner.x + Math.cos(currentAngle) * radius; targetY = owner.y + Math.sin(currentAngle) * radius;
-                } else if (owner.formation === 1) { 
-                    let row = Math.floor(myIndex / 2) + 1; let side = myIndex % 2 === 0 ? 1 : -1; if (myIndex === 0) { row = 1; side = 0; } 
-                    targetX = owner.x - Math.cos(owner.moveAngle) * (row * 45) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * 35);
-                    targetY = owner.y - Math.sin(owner.moveAngle) * (row * 45) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * 35);
-                } else if (owner.formation === 2) { 
-                    let offset = (myIndex - (total - 1) / 2) * 45;
-                    targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
-                    targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
-                } else if (owner.formation === 3) {
+                // Zawsze najpierw sprawdzamy, czy bot został ręcznie przeciągnięty myszką
+                if (b.isCustomPosition) {
                     targetX = owner.x + Math.cos(owner.moveAngle + b.angleOffset) * b.distOffset;
                     targetY = owner.y + Math.sin(owner.moveAngle + b.angleOffset) * b.distOffset;
+                } else {
+                    // Standardowe formacje dla reszty armii
+                    if (owner.formation === 0) { 
+                        let angleStep = (Math.PI * 2) / total; let currentAngle = (Date.now() / 1500) + (myIndex * angleStep); let radius = 70 + (total * 2); 
+                        targetX = owner.x + Math.cos(currentAngle) * radius; targetY = owner.y + Math.sin(currentAngle) * radius;
+                    } else if (owner.formation === 1) { 
+                        let row = Math.floor(myIndex / 2) + 1; let side = myIndex % 2 === 0 ? 1 : -1; if (myIndex === 0) { row = 1; side = 0; } 
+                        targetX = owner.x - Math.cos(owner.moveAngle) * (row * 45) + Math.cos(owner.moveAngle + Math.PI/2) * (side * row * 35);
+                        targetY = owner.y - Math.sin(owner.moveAngle) * (row * 45) + Math.sin(owner.moveAngle + Math.PI/2) * (side * row * 35);
+                    } else if (owner.formation === 2) { 
+                        let offset = (myIndex - (total - 1) / 2) * 45;
+                        targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
+                        targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
+                    } else if (owner.formation === 3) {
+                        // Ktoś wcisnął formację 3, ale bot nie ma ręcznej pozycji - ustawiamy go w bezpiecznym kole
+                        targetX = owner.x + Math.cos(owner.moveAngle + (myIndex * 0.5)) * 80;
+                        targetY = owner.y + Math.sin(owner.moveAngle + (myIndex * 0.5)) * 80;
+                    }
                 }
 
                 b.targetX = targetX; b.targetY = targetY;

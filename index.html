@@ -4,7 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
+    
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
+    
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
     <script>
     window.weaponPath = 'none';
     (async function() {
@@ -18,23 +25,16 @@
     </script>
     <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
     <style>
-        /* ====================================================
-           WYWALILIŚMY STYLE.CSS! CAŁY WYGLĄD JEST TERAZ TUTAJ.
-           Dzięki temu unikamy gigantycznych, popsutych przycisków.
-           ==================================================== */
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #2c3e50; /* Kolor zapasowy */
-            
-            /* --- TWOJE LEŚNE TŁO --- */
+            background-color: #2c3e50; 
             background-image: url('tłolas.png');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
             background-attachment: fixed;
-            /* ----------------------- */
         }
         
         canvas {
@@ -46,7 +46,6 @@
         #ui-layer {
             position: absolute;
             inset: 0;
-            /* Zmieniono kratkę na ciemny filtr, by las ładnie wyglądał pod spodem */
             background: rgba(0, 0, 0, 0.4); 
             display: flex;
             justify-content: center;
@@ -59,7 +58,6 @@
         #menu {
             position: relative;
             z-index: 10; 
-            /* Mleczno-białe, półprzezroczyste tło, by las z tyłu delikatnie prześwitywał */
             background: rgba(255, 255, 255, 0.85); 
             padding: 30px;
             border-radius: 15px;
@@ -99,11 +97,9 @@
         .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
         .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
 
-        /* ZESZYTOWE MENU SKILLI (Tylko CSS pozycjonujący, wygląd jest twardo w JS) */
         #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 250px; z-index: 90; }
         .sp-label { font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
 
-        /* MOBILKA */
         #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
         #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
         #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(17,17,17,0.5); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
@@ -126,6 +122,8 @@
     </style>
 </head>
 <body>
+
+    <video id="input_video" style="display:none;" autoplay playsinline></video>
 
     <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
         <img src="logo.svg" alt="WSIZ Logo">
@@ -155,10 +153,10 @@
 
             <div class="tutorial-box">
                 <b>📜 Szybki poradnik:</b><br>
-                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć (Startujesz z pustym kontem!).<br>
-                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy. Zjadaj słabszych, uciekaj przed większymi!<br>
-                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować epickie klasy po lewej.<br>
-                🏰 Gdy z nieba leci deszcz, uciekaj pod dach Zamku. W nim kupisz lepszą broń!
+                🟠 Zbieraj kropki i żółte skrzynki, by rosnąć.<br>
+                ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy.<br>
+                ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować klasy.<br>
+                🏰 Gdy leci deszcz, uciekaj pod dach Zamku.
             </div>
 
             <div id="step-1">
@@ -190,15 +188,17 @@
                         <div class="keys-preview">WASD</div>
                         <span>Klasyczne</span>
                     </div>
-                    
                     <div class="control-card" onclick="launchGame('ARROWS')">
                         <div class="keys-preview">↑↓←→</div>
                         <span>Strzałki</span>
                     </div>
-
                     <div class="control-card" onclick="launchGame('TOUCH')">
                         <div class="keys-preview" style="font-size: 24px;">📱</div>
-                        <span>Dotyk (Mobile)</span>
+                        <span>Dotyk</span>
+                    </div>
+                    <div class="control-card" onclick="launchGame('GESTURES')">
+                        <div class="keys-preview" style="font-size: 24px;">🖐️</div>
+                        <span>Gesty (Kamera)</span>
                     </div>
                 </div>
                 <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
@@ -229,7 +229,7 @@
             </div>
 
             <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA/DOTYK] Celowanie i Strzał | [1, 2, 3, 4] Zmiana broni | [Q] Tarcza (50 pkt)</small>
+                <small>[MYSZKA/DOTYK/KAMERA] Celowanie i Strzał | [1, 2, 3, 4] Zmiana broni | [Q] Tarcza (50 pkt)</small>
             </div>
         </div>
     </div>
@@ -347,9 +347,12 @@
             
             window.playerSkin = chosenSkin; 
 
+            // INICJALIZACJA WYBRANEGO STEROWANIA
             if (chosenControlType === 'TOUCH') {
                 document.getElementById('mobile-controls').style.display = 'block';
                 initMobileControls();
+            } else if (chosenControlType === 'GESTURES') {
+                initGestureControls();
             }
 
             let loadingDiv = document.getElementById('loading-step');
@@ -366,7 +369,8 @@
                 shopScript.src = 'shop.js'; 
                 shopScript.onload = () => { 
                     const safeColor = document.getElementById('playerColor').value || '#ffffff'; 
-                    startGame(chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
+                    // Przekazujemy WASD jako bazowy typ do silnika, gesty będą same symulować klawisze
+                    startGame(chosenControlType === 'GESTURES' ? 'WASD' : chosenControlType, chosenMode === 'FREE' ? safeColor : chosenMode); 
                 }; 
                 document.body.appendChild(shopScript); 
             };
@@ -495,6 +499,80 @@
                 e.preventDefault(); 
                 window.dispatchEvent(new KeyboardEvent('keyup', {'key': 'q', 'code': 'KeyQ'})); 
             }, {passive: false});
+        }
+
+        // ==========================================
+        // SYSTEM STEROWANIA GESTAMI (Kamera AI)
+        // ==========================================
+        window.virtualKeys = { 'KeyW': false, 'KeyS': false, 'KeyA': false, 'KeyD': false };
+
+        function triggerKey(code, isPressed) {
+            if (window.virtualKeys[code] !== isPressed) {
+                window.virtualKeys[code] = isPressed;
+                const eventType = isPressed ? 'keydown' : 'keyup';
+                window.dispatchEvent(new KeyboardEvent(eventType, { 'code': code }));
+            }
+        }
+
+        function initGestureControls() {
+            const videoElement = document.getElementById('input_video');
+            let lastGestureTime = 0;
+
+            const hands = new Hands({locateFile: (file) => {
+              return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }});
+            
+            hands.setOptions({
+              maxNumHands: 1,             
+              modelComplexity: 1,
+              minDetectionConfidence: 0.6,
+              minTrackingConfidence: 0.6
+            });
+
+            hands.onResults((results) => {
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    const landmarks = results.multiHandLandmarks[0];
+                    
+                    // --- ZRYW (Uszczypnięcie) ---
+                    const thumbTip = landmarks[4];
+                    const indexTip = landmarks[8];
+                    const dist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+
+                    if (dist < 0.05) { 
+                        const now = Date.now();
+                        if (now - lastGestureTime > 3000) { 
+                            lastGestureTime = now;
+                            window.dispatchEvent(new KeyboardEvent('keydown', {'code': 'ShiftLeft'}));
+                            window.dispatchEvent(new KeyboardEvent('keyup', {'code': 'ShiftLeft'}));
+                        }
+                    }
+
+                    // --- RUCH POSTACI (Joystick) ---
+                    const handX = landmarks[9].x; 
+                    const handY = landmarks[9].y; 
+
+                    triggerKey('KeyW', handY < 0.4); 
+                    triggerKey('KeyS', handY > 0.6); 
+                    triggerKey('KeyA', handX > 0.6); 
+                    triggerKey('KeyD', handX < 0.4); 
+
+                } else {
+                    // Brak dłoni = stój
+                    triggerKey('KeyW', false);
+                    triggerKey('KeyS', false);
+                    triggerKey('KeyA', false);
+                    triggerKey('KeyD', false);
+                }
+            });
+
+            const camera = new Camera(videoElement, {
+              onFrame: async () => {
+                await hands.send({image: videoElement});
+              },
+              width: 640,
+              height: 480
+            });
+            camera.start();
         }
     </script>
 </body>

@@ -43,16 +43,16 @@ const NPC_ZWIADOWCA = { x: 400, y: 3880 };
 const NPC_KOWAL = { x: 3600, y: 3880 };
 const DOOR_POS = { x: 2000, y: 0 };
 
-// Opowieść Midasa (Pełne 3 Akty, 21 misji)
+// Opowieść Midasa (Pełne 3 Akty, Zasadzki i Wellbeing)
 const campaignDialogues = {
     // AKT 1: Ruiny
     1: "MIDAS: Witaj, {NAME}. Twój cel to Tron. Idź na północ i zbierz 10 masy z zielonych kulek.",
     2: "MIDAS: Dobrze, {NAME}. Teraz przetestuj rzut mieczem (LPM) na Szlamach. Wbij 25 masy.",
-    3: "MIDAS: Dobrze sobie radzisz. Podejdź do Kowala po prawej stronie.",
+    3: "MIDAS: Świetnie. Pamiętaj, mruganie nawilża oczy przed ekranem. Zrób to teraz i podejdź do Kowala (po prawej).",
     4: "KOWAL: Potrzebuję surowców! Wbij 40 masy w lesie, by udowodnić swoją siłę.",
     5: "MIDAS: Zuch z ciebie. Podejdź do Zwiadowcy po lewej.",
-    6: "ZWIADOWCA: Na północy jest Jaskinia. Wbij 60 masy, by przetrwać drogę.",
-    7: "MIDAS: Musisz być potężny. Zanurz się w las i zdobądź 80 masy.",
+    6: "ZWIADOWCA: UWAŻAJ! Wyprostuj plecy, weź głęboki oddech... ZASADZKA! Zabójcze Cienie nadciągają, przetrwaj to i wbij 60 masy!",
+    7: "MIDAS: Uff... Udało się! Rozluźnij dłonie, napij się wody. Odpocznij chwilę, a potem w spokoju zdobądź 80 masy.",
     8: "KOWAL: Zróbmy interes! Podejdź do mnie po Ognisty Klucz.",
     9: "KOWAL: Klucz gotowy! Osiągnij 100 masy, by mieć siłę go unieść.",
     10: "MIDAS: Jesteś gotów, {NAME}. Wejdź w świecącą Jaskinię na północy!",
@@ -61,16 +61,16 @@ const campaignDialogues = {
     11: "MIDAS: Przetrwałeś Jaskinię! Witaj w Dolinie Cieni. Zdobądź 130 masy.",
     12: "ZWIADOWCA: Szlamy tutaj są potężniejsze. Wbij 160 masy, by zyskać szacunek.",
     13: "KOWAL: Twoja broń tępieje. Przynieś mi surowce! (Osiągnij 190 masy)",
-    14: "MIDAS: Czuję, że rośniesz w siłę, {NAME}. Pokaż na co cię stać i wbij 220 masy.",
-    15: "ZWIADOWCA: Droga do Tronu znów zamknięta. Wbij 250 masy i wejdź do Jaskini!",
+    14: "MIDAS: ZASADZKA! Skup wzrok, mrugnij dwa razy i walcz o życie! Wbij 220 masy, nie daj się!",
+    15: "ZWIADOWCA: Tętno w normie? Odetchnij głęboko. Droga do Tronu znów zamknięta. Wbij 250 masy i wejdź do Jaskini!",
 
     // AKT 3: Pustkowia Królów
     16: "MIDAS: To już Pustkowia Królów. Tutaj nikt nie wybacza błędów. Zdobądź 280 masy.",
     17: "KOWAL: Wykuję ci pancerz godny władcy. Zbierz 310 masy!",
-    18: "ZWIADOWCA: Uważaj, czuję niebezpieczeństwo. Osiągnij 350 masy, by przeżyć.",
+    18: "MIDAS: Zanim zrobimy kolejny krok... oderwij wzrok od ekranu na 5 sekund. Odpocznij. Gotowy? Zdobądź 350 masy.",
     19: "MIDAS: To ostatnia prosta do Tronu, {NAME}! Wbij 380 masy!",
     20: "MIDAS: Ostateczna próba! Osiągnij 400 masy i udowodnij, że jesteś Królem Serwera!",
-    21: "MIDAS: 👑 KAMPANIA UKOŃCZONA! 👑 Jesteś prawdziwym Królem, {NAME}!"
+    21: "MIDAS: 👑 KAMPANIA UKOŃCZONA! 👑 Jesteś prawdziwym Królem, {NAME}! Teraz możesz odpocząć w realnym świecie."
 };
 
 // Inicjalizacja lokalnej mapy (Z POPRAWKĄ NA MAPĘ FABULARNĄ)
@@ -103,6 +103,33 @@ function updateParticles() {
     }
 }
 
+// --- SYSTEM ZASADZEK FABULARNYCH ---
+function triggerAmbush(count) {
+    killLogs.push({ text: "⚠️ UWAGA! ZASADZKA! ⚠️", time: 300 });
+    for (let i = 0; i < count; i++) {
+        let angle = Math.random() * Math.PI * 2;
+        let dist = 400 + Math.random() * 200; // Respią się wokół gracza
+        let bx = player.x + Math.cos(angle) * dist;
+        let by = player.y + Math.sin(angle) * dist;
+        
+        let bScore = Math.max(10, player.score * 0.7); // Boty skalują się z graczem
+        
+        bots.push({
+            id: `ambush_${Math.random()}`,
+            x: bx, y: by,
+            score: bScore, color: '#e74c3c', name: 'Zabójczy Cień',
+            angle: Math.atan2(player.y - by, player.x - bx),
+            speed: 3.5 + (currentQuest * 0.1), // Bardzo szybkie
+            ownerId: null, team: null,
+            activeWeapon: 'sword',
+            inventory: { bow: 0, knife: 0, shuriken: 0 },
+            paths: { weapon: 'none' },
+            skills: { speed: 0, weapon: 0, strength: 0 },
+            isAmbushTarget: true // Flaga do namierzania gracza
+        });
+    }
+}
+
 // Lokalny symulator serwera (Tworzy kropki i wrogów na komputerze gracza)
 function spawnLocalFood() {
     return { id: Math.random(), x: Math.random() * WORLD_SIZE, y: Math.random() * WORLD_SIZE };
@@ -111,14 +138,12 @@ function spawnLocalFood() {
 function spawnLocalBot(type) {
     let bx, by, bColor, bName, bScore;
 
-    // Strefa: Szepczący Las (Słabe boty, północ mapy)
     if (type === 'slime') {
         bx = 1000 + Math.random() * 2000;
         by = 500 + Math.random() * 1500;
-        bColor = '#2ecc71'; // Zielone szlamy
+        bColor = '#2ecc71'; 
         bName = 'Dzikie Szlamy';
         
-        // Zwiększamy siłę botów wraz z Aktem
         if (currentMapType === 'campaign_1') bScore = 5 + Math.random() * 10;
         else if (currentMapType === 'campaign_2') bScore = 15 + Math.random() * 20;
         else if (currentMapType === 'campaign_3') bScore = 30 + Math.random() * 40;
@@ -163,7 +188,6 @@ window.addEventListener('mousedown', (e) => {
     if (gameState === 'PLAYING' && player) { 
         if (player.isSafe) return; // W zamku nie strzelamy
         if (e.button === 0 && player.score >= 2) {
-            // Lokalny rzut mieczem
             player.score -= 2;
             projectiles.push({
                 id: Math.random(), ownerId: player.id,
@@ -174,7 +198,6 @@ window.addEventListener('mousedown', (e) => {
     }
 });
 
-// --- NOWOŚĆ: ODBIÓR STRZAŁU Z PRZYCISKU MOBILNEGO ---
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player && !player.isSafe && player.score >= 2) {
         player.score -= 2;
@@ -190,7 +213,10 @@ window.onkeydown = (e) => {
     keys[e.code] = true; 
     if (e.code === 'KeyH' && player) player.isTutorialActive = !player.isTutorialActive;
 };
-window.onkeyup = (e) => { keys[e.code] = false; };
+
+window.onkeyup = (e) => {
+    keys[e.code] = false;
+};
 
 // --- START GRY KAMPANI ---
 window.startGame = (type) => {
@@ -198,7 +224,6 @@ window.startGame = (type) => {
     document.getElementById('ui-layer').style.display = 'none';
     const name = document.getElementById('playerName').value || "Bohater";
 
-    // Punkt odrodzenia Kampanii: Baza wypadowa (Południe mapy)
     let spawnX = 2000;
     let spawnY = 3800; 
 
@@ -214,8 +239,8 @@ window.startGame = (type) => {
         skin: window.playerSkin || 'standard',
         baseSpeed: window.playerSkin === 'ninja' ? 5.5 : 5.0,
         massMultiplier: window.playerSkin === 'arystokrata' ? 1.15 : (window.playerSkin === 'standard' ? 1.02 : 1.0),
-        paths: { speed: 'none', strength: 'none', weapon: 'none' }, // Zabezpieczenie ciała!
-        skills: { speed: 0, strength: 0, weapon: 0 } // Zabezpieczenie silnika!
+        paths: { speed: 'none', strength: 'none', weapon: 'none' }, 
+        skills: { speed: 0, strength: 0, weapon: 0 } 
     };
     
     gameState = 'PLAYING';
@@ -228,6 +253,14 @@ function advanceQuest(newQuestNum) {
     currentQuest = newQuestNum;
     player.tutorialText = campaignDialogues[currentQuest].replace('{NAME}', player.name);
     killLogs.push({ text: "⭐ MISJA ZAKTUALIZOWANA!", time: 200 });
+
+    // Wywoływanie zasadzek na odpowiednich etapach
+    if (newQuestNum === 6) {
+        triggerAmbush(4);
+    }
+    if (newQuestNum === 14) {
+        triggerAmbush(7);
+    }
 }
 
 function checkQuestProgress() {
@@ -238,11 +271,13 @@ function checkQuestProgress() {
     else if (currentQuest === 6 && player.score >= 60) advanceQuest(7);
     else if (currentQuest === 7 && player.score >= 80) advanceQuest(8);
     else if (currentQuest === 9 && player.score >= 100) advanceQuest(10);
+    
     // AKT 2
     else if (currentQuest === 11 && player.score >= 130) advanceQuest(12);
     else if (currentQuest === 12 && player.score >= 160) advanceQuest(13);
     else if (currentQuest === 13 && player.score >= 190) advanceQuest(14);
     else if (currentQuest === 14 && player.score >= 220) advanceQuest(15);
+    
     // AKT 3
     else if (currentQuest === 16 && player.score >= 280) advanceQuest(17);
     else if (currentQuest === 17 && player.score >= 310) advanceQuest(18);
@@ -251,52 +286,53 @@ function checkQuestProgress() {
     else if (currentQuest === 20 && player.score >= 400) advanceQuest(21);
 }
 
-// --- FUNKCJA ZMIENIAJĄCA AKT (NOWOŚĆ) ---
+// --- FUNKCJA ZMIENIAJĄCA AKT ---
 function transitionToNextAct(newMapType) {
     currentMapType = newMapType;
     
-    // Generowanie nowego świata
     initMap(WORLD_SIZE, currentMapType);
     
-    // Teleportacja gracza do bazy w nowym świecie (zawsze baza startowa to południe)
     player.x = 2000;
     player.y = 3800;
     player.isSafe = true;
     
-    // Reset kulek i botów na nowej mapie
     foods.length = 0;
     bots.length = 0;
     projectiles.length = 0;
+    
     for (let i = 0; i < 150; i++) foods.push(spawnLocalFood());
     for (let i = 0; i < 15; i++) bots.push(spawnLocalBot('slime'));
     
     killLogs.push({ text: "Wkraczasz do nowego regionu...", time: 300 });
 }
 
-// --- LOKALNA LOGIKA FIZYKI (Zastępuje serwer) ---
+// --- LOKALNA LOGIKA FIZYKI ---
 function updateLocalPhysics() {
     if (!player) return;
 
-    // Ruch Gracza
     let dx = 0, dy = 0;
     
-    // --- NOWOŚĆ: OBSŁUGA RUCHU Z JOYSTICKA MOBILNEGO ---
     if (controlType === 'TOUCH') {
         if (window.mobileJoy && window.mobileJoy.active) {
             dx = window.mobileJoy.dx;
             dy = window.mobileJoy.dy;
-            
-            // Na telefonie postać celuje dokładnie tam, gdzie aktualnie idzie
             lastMoveDir = { x: dx, y: dy }; 
-            
-            // Wyrównanie prędkości
             let len = Math.hypot(dx, dy);
-            if (len > 0) { dx /= len; dy /= len; }
+            if (len > 0) {
+                dx /= len;
+                dy /= len;
+            }
         }
     } else if (controlType === 'WASD') {
-        if (keys['KeyW']) dy--; if (keys['KeyS']) dy++; if (keys['KeyA']) dx--; if (keys['KeyD']) dx++;
+        if (keys['KeyW']) dy--;
+        if (keys['KeyS']) dy++;
+        if (keys['KeyA']) dx--;
+        if (keys['KeyD']) dx++;
     } else {
-        if (keys['ArrowUp']) dy--; if (keys['ArrowDown']) dy++; if (keys['ArrowLeft']) dx--; if (keys['ArrowRight']) dx++;
+        if (keys['ArrowUp']) dy--;
+        if (keys['ArrowDown']) dy++;
+        if (keys['ArrowLeft']) dx--;
+        if (keys['ArrowRight']) dx++;
     }
     
     if (dx !== 0 || dy !== 0) {
@@ -305,15 +341,14 @@ function updateLocalPhysics() {
         player.x += Math.cos(moveAngle) * speed; 
         player.y += Math.sin(moveAngle) * speed;
         
-        // EFEKT KURZU POD STOPAMI GRACZA (Ciemniejszy, grubszy)
-        if (Math.random() > 0.6) spawnParticle(player.x, player.y + 20, 'rgba(50,50,50,0.8)', 'dust');
+        if (Math.random() > 0.6) {
+            spawnParticle(player.x, player.y + 20, 'rgba(50,50,50,0.8)', 'dust');
+        }
 
-        // Granice mapy
         player.x = Math.max(0, Math.min(WORLD_SIZE, player.x));
         player.y = Math.max(0, Math.min(WORLD_SIZE, player.y));
     }
 
-    // SPRAWDZANIE INTERAKCJI Z NPC I OBIEKTAMI
     let distSmith = Math.hypot(player.x - NPC_KOWAL.x, player.y - NPC_KOWAL.y);
     let distScout = Math.hypot(player.x - NPC_ZWIADOWCA.x, player.y - NPC_ZWIADOWCA.y);
     let distGate = Math.hypot(player.x - DOOR_POS.x, player.y - DOOR_POS.y);
@@ -326,7 +361,6 @@ function updateLocalPhysics() {
         if (currentQuest === 5) advanceQuest(6);
     }
     
-    // WEJŚCIE DO JASKINI I ZMIANA MAPY (ZAKTUALIZOWANE)
     if (distGate < 120) {
         if (currentQuest === 10) {
             advanceQuest(11);
@@ -338,11 +372,9 @@ function updateLocalPhysics() {
         }
     }
 
-    // Bezpieczna strefa (Baza i koniec gry)
     player.isSafe = safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius) || currentQuest === 21;
     let playerRadius = 25 * (1 + Math.pow(Math.max(0, player.score - 1), 0.45) * 0.15);
 
-    // Jedzenie Kulek
     foods.forEach((f, fi) => {
         if (Math.hypot(player.x - f.x, player.y - f.y) < playerRadius) {
             player.score += 1 * player.massMultiplier;
@@ -351,72 +383,95 @@ function updateLocalPhysics() {
         }
     });
 
-    // Ruch Botów i Kolizje z graczem
     bots.forEach((b, bi) => {
-        // Głupi ruch w lesie
-        if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2;
+        // --- LOGIKA AGRESYWNYCH CIENI (ZASADZKI) ---
+        if (b.isAmbushTarget && !player.isSafe) {
+            // Mroczne Cienie bezlitośnie śledzą gracza
+            b.angle = Math.atan2(player.y - b.y, player.x - b.x);
+        } else if (Math.random() < 0.05) {
+            // Zwykłe szlamy sobie błądzą
+            b.angle = Math.random() * Math.PI * 2;
+        }
+
         b.x += Math.cos(b.angle) * b.speed;
         b.y += Math.sin(b.angle) * b.speed;
         
-        // EFEKT KURZU POD STOPAMI BOTA
-        if (Math.random() > 0.9) spawnParticle(b.x, b.y + 20, 'rgba(100,100,100,0.5)', 'dust');
+        if (Math.random() > 0.9) {
+            spawnParticle(b.x, b.y + 20, 'rgba(100,100,100,0.5)', 'dust');
+        }
 
-        // Zawracanie na granicach strefy lasu (żeby nie uciekły do bazy)
-        if (b.x < 500 || b.x > 3500 || b.y > 2500 || b.y < 500) b.angle += Math.PI;
+        // Błądzące boty zawracają. Ambush bots ignorują granice lasu, żeby gonić gracza
+        if (!b.isAmbushTarget) {
+            if (b.x < 500 || b.x > 3500 || b.y > 2500 || b.y < 500) {
+                b.angle += Math.PI;
+            }
+        }
 
         let dist = Math.hypot(player.x - b.x, player.y - b.y);
         let bRadius = 25 * (1 + Math.pow(Math.max(0, b.score - 1), 0.45) * 0.15);
 
-        // Zjadanie botów lub śmierć gracza
         if (!player.isSafe) {
             if (dist < playerRadius && player.score > b.score * 1.15) {
                 player.score += Math.floor(b.score * 0.5);
-                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY ZJEDZENIU
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); 
                 killLogs.push({ text: `Zabiłeś ${b.name}!`, time: 150 });
-                bots[bi] = spawnLocalBot('slime');
+                
+                // Jeśli zabijesz Cień z zasadzki, nie respi się on jako szlam, po prostu znika
+                if (b.isAmbushTarget) {
+                    bots.splice(bi, 1);
+                } else {
+                    bots[bi] = spawnLocalBot('slime');
+                }
                 checkQuestProgress();
             } else if (dist < bRadius && b.score > player.score * 1.15) {
-                // KARA ZA ŚMIERĆ W KAMPANII
-                spawnParticle(player.x, player.y, '#ff0000', 'blood'); // KREW PRZY ŚMIERCI
-                player.score = Math.floor(player.score * 0.8); // Traci 20%
-                player.x = 2000; player.y = 3800; // Powrót do bazy
+                spawnParticle(player.x, player.y, '#ff0000', 'blood'); 
+                player.score = Math.floor(player.score * 0.8); 
+                player.x = 2000;
+                player.y = 3800; 
                 killLogs.push({ text: `Zginąłeś! Tracisz masę i wracasz do bazy.`, time: 200 });
-                player.tutorialText = "MIDAS: Bolało? Mówiłem, żebyś uważał. Idź jeszcze raz, tylko tym razem unikaj tych wielkich.";
+                player.tutorialText = "MIDAS: Bolało? Odetchnij głęboko, wypuść powietrze i spróbuj ponownie. Bądź uważniejszy.";
+                
+                // Resetujemy zasadzki, jeśli gracz padł w jej trakcie
+                bots = bots.filter(bot => !bot.isAmbushTarget);
             }
         }
     });
 
-    // Lot pocisków (Mieczy)
     for (let i = projectiles.length - 1; i >= 0; i--) {
         let p = projectiles[i];
         p.x += p.dx * p.speed;
         p.y += p.dy * p.speed;
         p.life--;
 
-        // Trafienie w bota
         bots.forEach((b) => {
             if (p.ownerId !== b.id && Math.hypot(p.x - b.x, p.y - b.y) < 30) {
                 b.score = Math.max(1, b.score - p.damage);
-                spawnParticle(b.x, b.y, '#ff0000', 'blood'); // KREW PRZY TRAFIENIU
+                spawnParticle(b.x, b.y, '#ff0000', 'blood'); 
                 damageTexts.push({ x: b.x, y: b.y, val: p.damage, color: '#fff', life: 1, vx: 0, vy: -2 });
-                if (!p.isPiercing) p.life = 0; 
+                if (!p.isPiercing) {
+                    p.life = 0; 
+                }
             }
         });
 
-        if (p.life <= 0) projectiles.splice(i, 1);
+        if (p.life <= 0) {
+            projectiles.splice(i, 1);
+        }
     }
     
-    // Aktualizacja systemu cząsteczek
     updateParticles();
 
-    // Kamera podąża za graczem
-    camera.x = player.x - canvas.width / 2; camera.y = player.y - canvas.height / 2;
+    camera.x = player.x - canvas.width / 2;
+    camera.y = player.y - canvas.height / 2;
 }
 
 // --- GŁÓWNA PĘTLA GRY ---
 function gameLoop(currentTime) {
     const deltaTime = currentTime - lastFrameTime;
-    if (deltaTime < frameDuration) { requestAnimationFrame(gameLoop); return; }
+    if (deltaTime < frameDuration) {
+        requestAnimationFrame(gameLoop);
+        return;
+    }
     lastFrameTime = currentTime - (deltaTime % frameDuration);
 
     if (gameState === 'PLAYING') {
@@ -426,9 +481,12 @@ function gameLoop(currentTime) {
     // 1. CZYSZCZENIE EKRANU - VIBE NOIR (Głęboka Czerń)
     ctx.setTransform(1, 0, 0, 1, 0, 0); 
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#050505'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-    let vWidth = canvas.width / globalScale; let vHeight = canvas.height / globalScale;
+    let vWidth = canvas.width / globalScale;
+    let vHeight = canvas.height / globalScale;
     let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
 
     // 2. RYSOWANIE MAPY
@@ -437,8 +495,10 @@ function gameLoop(currentTime) {
     ctx.scale(globalScale, globalScale);
     ctx.translate(-vWidth / 2, -vHeight / 2);
     
-    ctx.fillStyle = '#050505'; ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(-vCamera.x, -vCamera.y, WORLD_SIZE, WORLD_SIZE); 
     drawForestMap(ctx, vCamera, vWidth, vHeight);
+    
     ctx.restore();
 
     // 3. RYSOWANIE OBIEKTÓW
@@ -447,47 +507,45 @@ function gameLoop(currentTime) {
     ctx.scale(globalScale, globalScale);
     ctx.translate(-player.x, -player.y); 
 
-    // Granice Mapy (Białe Neonowe)
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
     
-    // --- WROTA (Północ) - NOWA JASKINIA ---
     let isGateGlowing = (currentQuest === 10 || currentQuest === 15);
     drawCaveEntrance(DOOR_POS.x, DOOR_POS.y, isGateGlowing);
 
-    // --- BAZA WYPADOWA KAMPANII ---
-    
-    // Chata Midasa 
     drawHut(2000, 3800, 150); 
     
-    // Zwiadowca w obozie (Po lewej stronie) z drzewem
     drawDeadTree(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y);
     if (imgZwiadowca.complete) {
         ctx.drawImage(imgZwiadowca, NPC_ZWIADOWCA.x - 40, NPC_ZWIADOWCA.y - 40, 80, 80);
         
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y + 35, 30, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
         
-        ctx.fillStyle = '#ffffff'; 
-        ctx.font = 'bold 14px Arial'; 
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText("Zwiadowca", NPC_ZWIADOWCA.x, NPC_ZWIADOWCA.y - 50);
     }
 
-    // Kowal w obozie (Po prawej stronie) z otoczeniem
     drawBlacksmithArea(NPC_KOWAL.x, NPC_KOWAL.y);
     if (imgKowal.complete) {
         ctx.drawImage(imgKowal, NPC_KOWAL.x - 40, NPC_KOWAL.y - 40, 80, 80);
         
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath(); ctx.ellipse(NPC_KOWAL.x, NPC_KOWAL.y + 35, 30, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath();
+        ctx.ellipse(NPC_KOWAL.x, NPC_KOWAL.y + 35, 30, 10, 0, 0, Math.PI * 2);
+        ctx.fill();
         
-        ctx.fillStyle = '#e67e22'; 
-        ctx.font = 'bold 14px Arial'; 
+        ctx.fillStyle = '#e67e22';
+        ctx.font = 'bold 14px Arial';
         ctx.textAlign = 'center';
         ctx.fillText("Kowal", NPC_KOWAL.x, NPC_KOWAL.y - 50);
     }
     
-    // CZĄSTECZKI (Kurz pod postaciami)
     particles.forEach(p => {
         ctx.globalAlpha = p.life;
         ctx.fillStyle = p.color;
@@ -497,37 +555,62 @@ function gameLoop(currentTime) {
     });
     ctx.globalAlpha = 1.0;
 
-    foods.forEach(f => { ctx.fillStyle = '#ffffff'; ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, Math.PI * 2); ctx.fill(); });
+    foods.forEach(f => {
+        ctx.fillStyle = '#ffffff';
+        ctx.beginPath();
+        ctx.arc(f.x, f.y, 6, 0, Math.PI * 2);
+        ctx.fill();
+    });
     
     projectiles.forEach(p => {
         let rot = Math.atan2(p.dy, p.dx) + (Date.now() / 100); 
         drawSwordModel(p, p.x, p.y, rot, 0.8, 1);
     });
 
-    bots.forEach(b => { drawStickman(b, b.x, b.y, getScale(b.score), false, null); });
+    bots.forEach(b => {
+        drawStickman(b, b.x, b.y, getScale(b.score), false, null);
+    });
     
     if (player) {
         player.weaponPath = paths.weapon || 'none';
         drawStickman(player, player.x, player.y, getScale(player.score), player.isSafe, null);
     }
 
-    // Damage texts
     for (let i = damageTexts.length - 1; i >= 0; i--) {
-        let dt = damageTexts[i]; dt.x += dt.vx; dt.y += dt.vy; dt.life -= 0.02; 
-        ctx.save(); ctx.globalAlpha = Math.max(0, dt.life); ctx.fillStyle = dt.color; ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
-        ctx.font = `bold ${20 + (1 - dt.life) * 15}px 'Permanent Marker', Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.strokeText(`-${dt.val}`, dt.x, dt.y); ctx.fillText(`-${dt.val}`, dt.x, dt.y); ctx.restore();
-        if (dt.life <= 0) damageTexts.splice(i, 1);
+        let dt = damageTexts[i];
+        dt.x += dt.vx;
+        dt.y += dt.vy;
+        dt.life -= 0.02; 
+        
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, dt.life);
+        ctx.fillStyle = dt.color;
+        ctx.strokeStyle = '#000';
+        ctx.lineWidth = 3;
+        ctx.font = `bold ${20 + (1 - dt.life) * 15}px 'Permanent Marker', Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.strokeText(`-${dt.val}`, dt.x, dt.y);
+        ctx.fillText(`-${dt.val}`, dt.x, dt.y);
+        ctx.restore();
+        
+        if (dt.life <= 0) {
+            damageTexts.splice(i, 1);
+        }
     }
     ctx.restore(); 
 
-    // --- UI Z DYNAMICZNYM MÓWCĄ (VIBE NOIR) ---
     if (gameState === 'PLAYING' && player && player.isTutorialActive) {
         ctx.save();
-        let tutorialX = 20; let tutorialY = canvas.height - 200; 
-        ctx.fillStyle = currentQuest === 21 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(10, 10, 10, 0.95)'; // Ciemne tło
+        let tutorialX = 20;
+        let tutorialY = canvas.height - 200; 
+        
+        ctx.fillStyle = currentQuest === 21 ? 'rgba(46, 204, 113, 0.95)' : 'rgba(10, 10, 10, 0.95)';
         ctx.fillRect(tutorialX, tutorialY, 380, 110);
-        ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(tutorialX, tutorialY, 380, 110); // Biała ramka
+        
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(tutorialX, tutorialY, 380, 110);
         
         let speakerName = "MIDAS";
         let rawText = player.tutorialText || "";
@@ -552,42 +635,61 @@ function gameLoop(currentTime) {
             ctx.drawImage(imgZwiadowca, tutorialX + 10, tutorialY + 15, 80, 80);
         }
 
-        ctx.fillStyle = '#ffffff'; ctx.font = "bold 16px 'Permanent Marker', Arial"; ctx.textAlign = 'left';
+        ctx.fillStyle = '#ffffff';
+        ctx.font = "bold 16px 'Permanent Marker', Arial";
+        ctx.textAlign = 'left';
         ctx.fillText(speakerName + ":", tutorialX + 110, tutorialY + 25);
-        ctx.fillStyle = '#dddddd'; ctx.font = '13px Arial';
         
-        if (displayText) { window.wrapText(ctx, displayText, tutorialX + 110, tutorialY + 50, 250, 18); }
+        ctx.fillStyle = '#dddddd';
+        ctx.font = '13px Arial';
         
-        ctx.fillStyle = '#aaaaaa'; ctx.font = 'bold 10px Arial'; ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
+        if (displayText) {
+            window.wrapText(ctx, displayText, tutorialX + 110, tutorialY + 50, 250, 18);
+        }
+        
+        ctx.fillStyle = '#aaaaaa';
+        ctx.font = 'bold 10px Arial';
+        ctx.fillText("[H] - Ukryj podpowiedź", tutorialX + 110, tutorialY + 100);
         ctx.restore();
     }
 
-    // --- DYNAMICZNY TYTUŁ AKTU W PRAWYM ROGU (VIBE NOIR) ---
-    ctx.fillStyle = 'rgba(10, 10, 10, 0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 80);
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 80);
-    ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; 
+    ctx.fillStyle = 'rgba(10, 10, 10, 0.8)';
+    ctx.fillRect(canvas.width - 280, 10, 270, 80);
+    
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(canvas.width - 280, 10, 270, 80);
+    
+    ctx.fillStyle = '#f1c40f';
+    ctx.font = 'bold 16px Arial'; 
     
     let actName = "📜 AKT 1: RUINY";
     if (currentMapType === 'campaign_2') actName = "📜 AKT 2: DOLINA CIENI";
     if (currentMapType === 'campaign_3') actName = "📜 AKT 3: PUSTKOWIA KRÓLÓW";
     
     ctx.fillText(actName, canvas.width - 265, 30);
-    ctx.fillStyle = '#ffffff'; ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
+    
+    ctx.fillStyle = '#ffffff';
+    ctx.fillText(`Masa: ${Math.floor(player.score)}`, canvas.width - 265, 55);
     ctx.fillText(`Etap Fabuły: ${currentQuest}/21`, canvas.width - 265, 75);
 
     if (killLogs.length > 0) {
-        ctx.save(); ctx.font = 'bold 14px Arial'; ctx.textAlign = 'right';
+        ctx.save();
+        ctx.font = 'bold 14px Arial';
+        ctx.textAlign = 'right';
         for (let i = 0; i < killLogs.length; i++) {
-            let log = killLogs[i]; ctx.fillStyle = `rgba(241, 196, 15, ${log.time / 50})`; 
-            ctx.fillText(log.text, canvas.width - 20, 170 + (i * 22)); log.time--;
+            let log = killLogs[i];
+            ctx.fillStyle = `rgba(241, 196, 15, ${log.time / 50})`; 
+            ctx.fillText(log.text, canvas.width - 20, 170 + (i * 22));
+            log.time--;
         }
-        ctx.restore(); killLogs = killLogs.filter(l => l.time > 0);
+        ctx.restore();
+        killLogs = killLogs.filter(l => l.time > 0);
     }
 
     requestAnimationFrame(gameLoop);
 }
 
-// --- FUNKCJA RYSOWANIA CHATY (Baza Midasa) - VIBE NOIR ---
 function drawHut(x, y, size) {
     ctx.save();
     
@@ -598,7 +700,7 @@ function drawHut(x, y, size) {
     ctx.fill();
 
     // 2. Główne ściany (Line Art Noir)
-    ctx.fillStyle = '#050505'; 
+    ctx.fillStyle = '#050505';
     ctx.fillRect(x - size/2, y - size/2, size, size);
     
     // 3. Zarys desek (Mroczny / Neon)
@@ -606,22 +708,22 @@ function drawHut(x, y, size) {
     ctx.lineWidth = 2;
     ctx.strokeRect(x - size/2, y - size/2, size, size);
     ctx.beginPath();
-    ctx.moveTo(x - size/2, y); 
+    ctx.moveTo(x - size/2, y);
     ctx.lineTo(x + size/2, y);
     ctx.stroke();
 
     // 4. Dach
-    ctx.fillStyle = '#111111'; 
+    ctx.fillStyle = '#111111';
     ctx.beginPath();
-    ctx.moveTo(x - size/2 - 20, y - size/2); 
-    ctx.lineTo(x, y - size/2 - size * 0.6);  
+    ctx.moveTo(x - size/2 - 20, y - size/2);
+    ctx.lineTo(x, y - size/2 - size * 0.6);
     ctx.lineTo(x + size/2 + 20, y - size/2); 
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
 
     // 5. Drzwi
-    ctx.fillStyle = '#050505'; 
+    ctx.fillStyle = '#050505';
     let doorWidth = size * 0.35;
     let doorHeight = size * 0.55;
     ctx.fillRect(x - doorWidth/2, y + size/2 - doorHeight, doorWidth, doorHeight);
@@ -629,36 +731,60 @@ function drawHut(x, y, size) {
     
     // 6. Złoty detal Midasa
     ctx.fillStyle = '#F1C40F';
-    if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#F1C40F'; }
+    if (!window.isMobile) {
+        ctx.shadowBlur = 10;
+        ctx.shadowColor = '#F1C40F';
+    }
     ctx.beginPath();
     ctx.arc(x, y - size/2 + 15, 6, 0, Math.PI*2);
     ctx.fill();
     ctx.shadowBlur = 0;
-
+    
     ctx.restore();
 }
 
-// --- DODATKOWE ELEMENTY OTOCZENIA (VIBE NOIR) ---
 function drawDeadTree(x, y) {
     ctx.save();
-    ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-    ctx.beginPath(); 
-    ctx.moveTo(x, y); ctx.lineTo(x, y - 80); 
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 4;
+    ctx.lineCap = 'round';
+    
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x, y - 80);
     ctx.lineTo(x - 30, y - 120); 
-    ctx.moveTo(x, y - 50); ctx.lineTo(x + 40, y - 100); 
+    ctx.moveTo(x, y - 50);
+    ctx.lineTo(x + 40, y - 100);
     ctx.stroke();
+    
     ctx.restore();
 }
 
 function drawBlacksmithArea(x, y) {
     ctx.save();
-    ctx.fillStyle = '#050505'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(x + 40, y - 10, 30, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.arc(x + 35, y - 5, 20, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.fillStyle = '#050505';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     
-    ctx.beginPath(); ctx.ellipse(x - 45, y + 25, 25, 12, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(x + 40, y - 10, 30, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
     
-    if (Math.random() > 0.5) spawnParticle(x - 45 + (Math.random()*10-5), y + 15, 'rgba(255, 100, 0, 0.8)', 'fire');
+    ctx.beginPath();
+    ctx.arc(x + 35, y - 5, 20, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    
+    ctx.beginPath();
+    ctx.ellipse(x - 45, y + 25, 25, 12, 0, 0, Math.PI*2);
+    ctx.fill();
+    ctx.stroke();
+    
+    if (Math.random() > 0.5) {
+        spawnParticle(x - 45 + (Math.random()*10-5), y + 15, 'rgba(255, 100, 0, 0.8)', 'fire');
+    }
+    
     ctx.restore();
 }
 
@@ -666,9 +792,11 @@ function drawCaveEntrance(x, y, isGlowing) {
     ctx.save();
     
     // Zarys skał (jaskinia)
-    ctx.fillStyle = '#050505'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+    ctx.fillStyle = '#050505';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.arc(x, y + 50, 140, Math.PI, 0); 
+    ctx.arc(x, y + 50, 140, Math.PI, 0);
     ctx.lineTo(x + 140, y + 100);
     ctx.lineTo(x - 140, y + 100);
     ctx.fill();
@@ -676,7 +804,10 @@ function drawCaveEntrance(x, y, isGlowing) {
 
     // Wnętrze mroku (lub świecący portal)
     if (isGlowing) {
-        if (!window.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = '#3498db'; }
+        if (!window.isMobile) {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = '#3498db';
+        }
         ctx.fillStyle = '#3498db';
     } else {
         ctx.fillStyle = '#111111';
@@ -689,7 +820,7 @@ function drawCaveEntrance(x, y, isGlowing) {
     ctx.shadowBlur = 0;
 
     // Cząsteczki dla aktywnej jaskini
-    if(isGlowing && Math.random() > 0.5) {
+    if (isGlowing && Math.random() > 0.5) {
         spawnParticle(x + (Math.random() * 120 - 60), y + 50, 'rgba(52, 152, 219, 0.8)', 'fire');
     }
 

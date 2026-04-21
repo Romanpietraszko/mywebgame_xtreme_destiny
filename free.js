@@ -21,7 +21,11 @@ let startBirds = [];
 let windLines = [];
 let lastWindTrigger = 0;
 
-initMap(WORLD_SIZE);
+// NOWE ZMIENNE EFEKTÓW I ANTY-LAGA (Game Juice & LERP)
+let screenShake = 0;
+let lerpState = { players: {}, bots: {} };
+
+initMap(typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000);
 
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
@@ -58,7 +62,7 @@ let isServerLagging = false;
 
 let spawnCountdown = 10;
 let spawnCountdownTimer = null;
-let selectedSpawn = { x: WORLD_SIZE / 2, y: WORLD_SIZE / 2 };
+let selectedSpawn = { x: (typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000) / 2, y: (typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000) / 2 };
 let gameStartTime = 0;
 const GAME_TIME_LIMIT_MS = 15 * 60 * 1000; 
 
@@ -137,7 +141,7 @@ window.addEventListener('mousedown', (e) => {
         let mapY = canvas.height / 2 - mapSize / 2 + 20; 
         
         if (mouseX >= mapX && mouseX <= mapX + mapSize && mouseY >= mapY && mouseY <= mapY + mapSize) {
-            let mapScale = WORLD_SIZE / mapSize;
+            let mapScale = (typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000) / mapSize;
             selectedSpawn.x = (mouseX - mapX) * mapScale;
             selectedSpawn.y = (mouseY - mapY) * mapScale;
         }
@@ -171,6 +175,7 @@ window.addEventListener('mousedown', (e) => {
         }
         else if (e.button === 0) {
             socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+            screenShake = Math.max(screenShake, 3); // Delikatny odrzut przy strzale
         }
     }
     
@@ -211,6 +216,7 @@ window.addEventListener('mouseup', (e) => {
 window.addEventListener('mobile-attack', () => {
     if (gameState === 'PLAYING' && player && !player.isSafe) {
         socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+        screenShake = Math.max(screenShake, 3);
     }
 });
 
@@ -235,13 +241,17 @@ window.onkeydown = (e) => {
 
         if (e.code === 'KeyM') isMapOpen = true;
 
-        if (e.code === 'KeyE') socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+        if (e.code === 'KeyE') {
+            socket.emit('throwSword', { x: player.x, y: player.y, dx: lastMoveDir.x, dy: lastMoveDir.y });
+            screenShake = Math.max(screenShake, 3);
+        }
         
         if (e.code === 'KeyR' && paths.weapon === 'winter') {
             const now = Date.now();
             if (now - lastWinterUseClient >= 15000) { 
                 lastWinterUseClient = now; 
                 socket.emit('throwWinterSword');
+                screenShake = Math.max(screenShake, 8); // Mocniejszy wstrząs przy specjalnej
             }
         }
 
@@ -250,6 +260,7 @@ window.onkeydown = (e) => {
             if (now - lastDashUseClient >= 3000) { 
                 lastDashUseClient = now; 
                 socket.emit('dash', lastMoveDir);
+                screenShake = Math.max(screenShake, 10); // Odrzut ekranu przy zrywie
             }
         }
 
@@ -383,6 +394,7 @@ function finalizeSpawn() {
 
 function showGameOverScreen(finalScore, reasonText) {
     gameState = 'GAMEOVER';
+    screenShake = 20; // Trzęsienie ekranu przy śmierci
     
     document.getElementById('ui-layer').style.display = 'flex';
     document.getElementById('step-1').style.display = 'none';
@@ -503,6 +515,11 @@ socket.on('damageText', (data) => {
         deathMarkers.push({ x: data.x, y: data.y, life: 1.0 });
     }
 
+    // Jeśli gracz obrywa blisko środka ekranu - trzęsienie
+    if (player && Math.hypot(player.x - data.x, player.y - data.y) < 50) {
+        screenShake = Math.max(screenShake, data.val > 20 ? 15 : 6);
+    }
+
     let particleColor = data.color === '#ff4757' ? '#c0392b' : (data.color === '#e67e22' ? '#f39c12' : '#ffffff');
     let count = data.val > 20 ? 12 : 6; 
     
@@ -535,20 +552,24 @@ socket.on('serverTick', (data) => {
 
     if (!data) return; 
 
+    // Integracja Guardiana do sanityzacji
     if (data.foods) {
-        foods = Object.values(data.foods);
+        foods = window.Guardian ? window.Guardian.safeArray(Object.values(data.foods)) : Object.values(data.foods);
     }
     
-    bots = data.bots ? Object.values(data.bots) : []; 
-    projectiles = data.projectiles ? Object.values(data.projectiles) : [];
-    loots = data.loots ? Object.values(data.loots) : [];              
+    bots = data.bots ? (window.Guardian ? window.Guardian.safeArray(Object.values(data.bots)) : Object.values(data.bots)) : []; 
+    projectiles = data.projectiles ? (window.Guardian ? window.Guardian.safeArray(Object.values(data.projectiles)) : Object.values(data.projectiles)) : [];
+    loots = data.loots ? (window.Guardian ? window.Guardian.safeArray(Object.values(data.loots)) : Object.values(data.loots)) : [];              
     
     currentEvent = data.activeEvent || null;        
     eventTimeLeft = data.eventTimeLeft || 0;
     
     if (data.castles) {
-        let nonCastles = safeZones.filter(z => z.type !== 'castle');
+        let nonCastles = safeZones.filter(z => z.type !== 'castle' && z.type !== 'epic_castle');
         let serverCastles = data.castles.map(c => { c.type = 'castle'; c.team = c.owner; return c; });
+        
+        // Jeśli jesteśmy na FreeMode, serwerowe zamki (te do przejmowania z boku) możemy ignorować wizualnie 
+        // lub zaktualizować tylko te, które chcemy. Jeśli Epic Castle ma być z serwera - musi tam być.
         safeZones.length = 0;
         safeZones.push(...nonCastles, ...serverCastles);
     }
@@ -671,7 +692,8 @@ function update() {
         }
     }
     
-    if (player.x <= 0 || player.x >= WORLD_SIZE || player.y <= 0 || player.y >= WORLD_SIZE) {
+    let wSize = typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000;
+    if (player.x <= 0 || player.x >= wSize || player.y <= 0 || player.y >= wSize) {
         socket.emit('playerMovement', { x: -100, y: -100, score: player.score, isSafe: false, isShielding: false });
     } else {
         player.isSafe = typeof safeZones !== 'undefined' && safeZones.some(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
@@ -722,34 +744,32 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
     ctx.textAlign = 'center';
     ctx.fillText(isTactical ? "SYSTEM ZRZUTU: WYBIERZ SEKTOR" : "RADAR", mapX + mapSize / 2, mapY - 12);
 
-    let mapScale = mapSize / WORLD_SIZE;
+    let mapScale = mapSize / (typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000);
 
     // Bazy / Zamki (Line-Art Neon z engine.js)
     if (typeof safeZones !== 'undefined') {
         safeZones.forEach(z => {
             ctx.beginPath();
             ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, z.radius * mapScale, 0, Math.PI * 2);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.05)';
+            ctx.fillStyle = z.type === 'epic_castle' ? 'rgba(241, 196, 15, 0.2)' : 'rgba(255, 255, 255, 0.05)';
             ctx.fill();
-            ctx.strokeStyle = '#ffffff';
+            ctx.strokeStyle = z.type === 'epic_castle' ? '#f1c40f' : '#ffffff';
             ctx.lineWidth = 2;
-            if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
+            if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.strokeStyle; }
             ctx.stroke();
             ctx.shadowBlur = 0;
 
-            // Kropka w środku zamku
-            ctx.fillStyle = '#ffffff';
+            ctx.fillStyle = ctx.strokeStyle;
             ctx.beginPath(); ctx.arc(mapX + z.x * mapScale, mapY + z.y * mapScale, 2, 0, Math.PI*2); ctx.fill();
         });
     }
 
-    // Czerwone Markery (Zagrożenia - dawne krzyżyki)
     if (isTactical) {
         let hazards = [ {x: 1500, y: 1500}, {x: 2500, y: 1800}, {x: 3200, y: 3000}, {x: 800, y: 3500} ];
         hazards.forEach(h => {
             ctx.save();
             ctx.translate(mapX + h.x * mapScale, mapY + h.y * mapScale);
-            ctx.strokeStyle = '#ff0000'; // Neon Red
+            ctx.strokeStyle = '#ff0000'; 
             if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ff0000'; }
             ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(-5, -5); ctx.lineTo(5, 5); ctx.moveTo(5, -5); ctx.lineTo(-5, 5); ctx.stroke();
@@ -757,20 +777,17 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         });
     }
 
-    // Twój punkt zrzutu (Interaktywny - Gracz może go przesuwać myszką)
     if (gameState === 'SPAWN_SELECTION') {
         let sx = mapX + selectedSpawn.x * mapScale;
         let sy = mapY + selectedSpawn.y * mapScale;
 
-        // Pulsująca zielona aura punktu zrzutu
-        let pulse = (Math.sin(Date.now() / 150) + 1) / 2; // Od 0 do 1
+        let pulse = (Math.sin(Date.now() / 150) + 1) / 2; 
 
         ctx.beginPath();
         ctx.arc(sx, sy, 8 + pulse * 4, 0, Math.PI * 2);
         ctx.fillStyle = `rgba(46, 204, 113, ${0.3 + pulse * 0.4})`;
         ctx.fill();
 
-        // Środek wskaźnika
         ctx.beginPath();
         ctx.arc(sx, sy, 4, 0, Math.PI * 2);
         ctx.fillStyle = '#2ecc71';
@@ -778,7 +795,6 @@ function drawRadarMap(ctx, mapX, mapY, mapSize, isTactical) {
         ctx.fill();
         ctx.shadowBlur = 0;
 
-        // Celownik (Krzyżyk taktyczny) wokół zrzutu
         ctx.strokeStyle = '#ffffff';
         ctx.lineWidth = 1.5;
         ctx.beginPath(); ctx.moveTo(sx - 12, sy); ctx.lineTo(sx - 4, sy); ctx.stroke();
@@ -808,14 +824,12 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0);
         ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-        // --- KOSMICZNA OTCHŁAŃ (Zamiast pliku tłolas.png) ---
         let grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
-        grad.addColorStop(0, '#020205'); // Głęboki kosmos
+        grad.addColorStop(0, '#020205'); 
         grad.addColorStop(1, '#0a0a0a');
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-        // Subtelne przemieszczające się gwiazdy w tle
         ctx.fillStyle = '#ffffff';
         for(let i=0; i<100; i++) {
             let sx = (Math.sin(i*123) * 10000 + Date.now()*0.02) % canvas.width;
@@ -841,18 +855,16 @@ function gameLoop(currentTime) {
         let mapX = canvas.width / 2 - mapSize / 2;
         let mapY = canvas.height / 2 - mapSize / 2 + 20;
 
-        // Rysowanie nowej interaktywnej mapy
         drawRadarMap(ctx, mapX, mapY, mapSize, true);
 
-        // Neonowy przycisk Startu
-        ctx.fillStyle = '#e67e22'; // Pomarańczowy neon
+        ctx.fillStyle = '#e67e22'; 
         ctx.font = "bold 45px 'Courier New', monospace";
         if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#e67e22'; }
         ctx.fillText(`[ START ZA: ${spawnCountdown}s ]`, canvas.width / 2, mapY + mapSize + 60);
         ctx.shadowBlur = 0;
 
         const tempName = document.getElementById('playerName') ? document.getElementById('playerName').value || "Gracz" : "Gracz";
-        ctx.fillStyle = '#2ecc71'; // Zielony status
+        ctx.fillStyle = '#2ecc71'; 
         ctx.font = "bold 16px 'Courier New', monospace";
         ctx.fillText(`STATUS: W GOTOWOŚCI | OCZEKUJĄCY GRACZ: ${tempName}`, canvas.width / 2, mapY + mapSize + 95);
 
@@ -923,15 +935,21 @@ function gameLoop(currentTime) {
         ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.clearRect(0, 0, canvas.width, canvas.height);
         
-        // Vibe Noir: GŁĘBOKA CZERŃ zamiast białego tła
         ctx.fillStyle = '#050505'; 
         ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.save();
+        // APLIKACJA SCREEN SHAKE! (Game Juice)
+        if (typeof screenShake !== 'undefined' && screenShake > 0) {
+            ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+            screenShake *= 0.9;
+            if (screenShake < 0.5) screenShake = 0;
+        }
 
         let vWidth = canvas.width / globalScale;
         let vHeight = canvas.height / globalScale;
         let vCamera = { x: player.x - vWidth / 2, y: player.y - vHeight / 2 };
 
-        ctx.save();
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-vWidth / 2, -vHeight / 2);
@@ -942,11 +960,14 @@ function gameLoop(currentTime) {
         ctx.restore();
 
         ctx.save();
+        if (typeof screenShake !== 'undefined' && screenShake > 0) {
+            ctx.translate((Math.random() - 0.5) * screenShake, (Math.random() - 0.5) * screenShake);
+        }
         ctx.translate(canvas.width / 2, canvas.height / 2);
         ctx.scale(globalScale, globalScale);
         ctx.translate(-player.x, -player.y); 
 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; // Białe podmuchy wiatru
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; 
         ctx.lineWidth = 1.5;
         ctx.lineCap = 'round';
         ctx.beginPath();
@@ -958,7 +979,7 @@ function gameLoop(currentTime) {
         ctx.stroke();
 
         foods.forEach(f => {
-            ctx.fillStyle = '#ffffff'; // Masa świeci na biało
+            ctx.fillStyle = '#ffffff'; 
             if (!window.isMobile) { ctx.shadowBlur = 5; ctx.shadowColor = '#ffffff'; }
             ctx.beginPath(); 
             ctx.arc(f.x, f.y, 6, 0, Math.PI * 2); 
@@ -969,9 +990,9 @@ function gameLoop(currentTime) {
         loots.forEach(l => {
             ctx.save();
             ctx.translate(l.x, l.y);
-            ctx.fillStyle = '#050505'; // Czarne skrzynki
+            ctx.fillStyle = '#050505'; 
             ctx.fillRect(-12, -10, 24, 20); 
-            ctx.strokeStyle = '#ffffff'; // Biała neonowa ramka
+            ctx.strokeStyle = '#ffffff'; 
             if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#ffffff'; }
             ctx.lineWidth = 2; 
             ctx.strokeRect(-12, -10, 24, 20); 
@@ -1019,7 +1040,7 @@ function gameLoop(currentTime) {
 
         if (draggedBotId && player) {
             ctx.save();
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; // Biała smycz
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)'; 
             ctx.lineWidth = 2; 
             ctx.setLineDash([5, 5]);
             
@@ -1046,18 +1067,32 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
+        // --- LERP & RYSOWANIE BOTÓW ---
         bots.forEach(b => {
+            if (!lerpState.bots[b.id]) lerpState.bots[b.id] = { x: b.x, y: b.y };
+            lerpState.bots[b.id].x = window.Guardian && window.Guardian.lerp ? window.Guardian.lerp(lerpState.bots[b.id].x, b.x, 0.3) : b.x;
+            lerpState.bots[b.id].y = window.Guardian && window.Guardian.lerp ? window.Guardian.lerp(lerpState.bots[b.id].y, b.y, 0.3) : b.y;
+            b.displayX = lerpState.bots[b.id].x;
+            b.displayY = lerpState.bots[b.id].y;
+
             if (b.isSafe && (!player || !player.isSafe)) return;
             if (isServerLagging) b.isMoving = false;
             b.weaponPath = b.paths ? b.paths.weapon : 'none';
-            drawStickman(b, b.x, b.y, getScale(b.score), false, currentKingId); 
+            drawStickman(b, b.displayX, b.displayY, getScale(b.score), false, currentKingId); 
         });
 
+        // --- LERP & RYSOWANIE INNYCH GRACZY ---
         Object.values(otherPlayers).forEach(p => {
+            if (!lerpState.players[p.id]) lerpState.players[p.id] = { x: p.x, y: p.y };
+            lerpState.players[p.id].x = window.Guardian && window.Guardian.lerp ? window.Guardian.lerp(lerpState.players[p.id].x, p.x, 0.3) : p.x;
+            lerpState.players[p.id].y = window.Guardian && window.Guardian.lerp ? window.Guardian.lerp(lerpState.players[p.id].y, p.y, 0.3) : p.y;
+            p.displayX = lerpState.players[p.id].x;
+            p.displayY = lerpState.players[p.id].y;
+
             if (p.isSafe && (!player || !player.isSafe)) return;
             if (isServerLagging) p.isMoving = false;
             p.weaponPath = p.paths ? p.paths.weapon : 'none';
-            drawStickman(p, p.x, p.y, getScale(p.score), p.isSafe, currentKingId);
+            drawStickman(p, p.displayX, p.displayY, getScale(p.score), p.isSafe, currentKingId);
         });
         
         if (player && gameState !== 'GAMEOVER') {
@@ -1123,7 +1158,7 @@ function gameLoop(currentTime) {
         if (currentEvent === 'TOXIC_RAIN') {
             ctx.save();
             ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 2; ctx.beginPath(); // Jasne smugi deszczu
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 2; ctx.beginPath(); 
             let timeOffset = Date.now() / 5;
             for(let i = 0; i < 150; i++) {
                 let rx = (Math.random() * canvas.width + timeOffset) % canvas.width;
@@ -1137,7 +1172,7 @@ function gameLoop(currentTime) {
             ctx.fillStyle = 'rgba(52, 152, 219, 0.15)'; 
             ctx.fillRect(0, 0, canvas.width, canvas.height);
             
-            ctx.fillStyle = '#ffffff'; // Biały śnieg na czarnym tle
+            ctx.fillStyle = '#ffffff'; 
             ctx.beginPath();
             let timeOffset = Date.now() / 15;
             for(let i = 0; i < 200; i++) {
@@ -1156,7 +1191,6 @@ function gameLoop(currentTime) {
             let tutorialX = canvas.width - tutorialWidth - 20; 
             let tutorialY = canvas.height - 230; 
             
-            // Ciemne tło dla tutoriala
             ctx.fillStyle = 'rgba(10, 10, 10, 0.95)'; 
             ctx.fillRect(tutorialX, tutorialY, tutorialWidth, 110);
             ctx.strokeStyle = '#ffffff'; 
@@ -1190,7 +1224,6 @@ function gameLoop(currentTime) {
 
         if (gameState !== 'GAMEOVER') {
             
-            // Ciemny Panel Rankingu
             ctx.fillStyle = 'rgba(10, 10, 10, 0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140);
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(canvas.width - 280, 10, 270, 140);
             
@@ -1227,7 +1260,6 @@ function gameLoop(currentTime) {
             
             let timerY = (currentEvent === null) ? 80 : 110;
 
-            // Ciemny Panel Timera
             ctx.save();
             ctx.fillStyle = '#050505';
             ctx.fillRect(timerX, timerY, timerW, timerH);
@@ -1456,7 +1488,6 @@ function gameLoop(currentTime) {
                         let levelText = lvl >= 20 ? `(Lv. MAX)` : `(Lv. ${lvl}/20)`;
                         let titleColor = '#ffffff';
                         
-                        // Mroczny motyw w HTML (Neon/Noir)
                         html += `<div style="border: 2px solid #ffffff; padding: 6px; margin-bottom: 6px; background: #050505; color: #ffffff; box-shadow: 2px 2px 0px #ffffff;">
                                     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
                                         <span style="font-weight: bold; font-size: 13px; text-transform: uppercase;">
@@ -1487,11 +1518,18 @@ function gameLoop(currentTime) {
 
             // --- ZAKTUALIZOWANA LOGIKA POKAZYWANIA PEŁNOEKRANOWEGO ZAMKU ---
             if (player.isSafe && !wasSafe) {
-                const shop = document.getElementById('castle-shop'); 
-                if (shop) {
-                    shop.style.display = 'flex';
-                    const massDisplay = document.getElementById('shop-player-mass');
-                    if (massDisplay) massDisplay.innerText = Math.floor(player.score);
+                // Sprawdzamy czy to Epicki Zamek na środku mapy
+                let isEpic = typeof safeZones !== 'undefined' && safeZones.some(z => z.type === 'epic_castle' && Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
+                
+                if (isEpic) {
+                    killLogs.push({ text: "⚡ WKROCZYŁEŚ DO RDZENIA! WALCZ O TRON!", time: 300 });
+                } else {
+                    const shop = document.getElementById('castle-shop'); 
+                    if (shop) {
+                        shop.style.display = 'flex';
+                        const massDisplay = document.getElementById('shop-player-mass');
+                        if (massDisplay) massDisplay.innerText = Math.floor(player.score);
+                    }
                 }
             } else if (!player.isSafe && wasSafe) {
                 const shop = document.getElementById('castle-shop'); 
@@ -1513,7 +1551,7 @@ function gameLoop(currentTime) {
         }
 
         if (gameState === 'PAUSED' && !document.getElementById('gacha-modal').style.display.includes('flex')) {
-            ctx.fillStyle = 'rgba(5, 5, 5, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height); // Ciemny pauza screen
+            ctx.fillStyle = 'rgba(5, 5, 5, 0.85)'; ctx.fillRect(0, 0, canvas.width, canvas.height); 
             ctx.fillStyle = '#ffffff'; ctx.font = "bold 40px 'Permanent Marker', Arial"; ctx.textAlign = 'center';
             ctx.fillText("PAUZA", canvas.width / 2, canvas.height / 2 - 30);
             
@@ -1530,23 +1568,18 @@ function gameLoop(currentTime) {
 window.leaveCastle = () => {
     if (!player) return;
     
-    // Szukamy zamku, w którym obecnie jesteśmy
     let currentCastle = safeZones.find(z => Math.hypot(player.x - z.x, player.y - z.y) < z.radius);
     
     if (currentCastle) {
-        // Obliczamy kąt w stronę środka mapy (żeby wyjść przez bramę)
         let angle = Math.atan2(2000 - currentCastle.y, 2000 - currentCastle.x);
         
-        // Przesuwamy gracza tuż za obręb strefy ochronnej (+50 pikseli zapasu)
         player.x = currentCastle.x + Math.cos(angle) * (currentCastle.radius + 50);
         player.y = currentCastle.y + Math.sin(angle) * (currentCastle.radius + 50);
         
-        // Wyłączamy status bezpieczeństwa i zamykamy sklep
         player.isSafe = false;
         const shop = document.getElementById('castle-shop');
         if (shop) shop.style.display = 'none';
         
-        // Aktualizujemy pozycję na serwerze od razu
         if (!isServerLagging) {
             socket.emit('playerMovement', { 
                 x: player.x, 
