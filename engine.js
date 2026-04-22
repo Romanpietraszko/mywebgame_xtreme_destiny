@@ -5,6 +5,38 @@
 // --- NOWOŚĆ: WYKRYWANIE TELEFONÓW (Do zapobiegania lagom) ---
 window.isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
+// ==========================================
+// 🚀 GLOBALNY OPTYMALIZATOR (Zabezpieczenie anty-crashowe)
+// Zdefiniowany na samej górze, by map.js i free.js mogły z niego od razu korzystać!
+// ==========================================
+window.MapOptimizer = window.MapOptimizer || {
+    isVisible: function(x, y, radius, camera, canvasWidth, canvasHeight) {
+        const buffer = 150; 
+        return !(
+            x + radius + buffer < camera.x || 
+            x - radius - buffer > camera.x + canvasWidth || 
+            y + radius + buffer < camera.y || 
+            y - radius - buffer > camera.y + canvasHeight
+        );
+    },
+    applyGlow: function(ctx, blurAmount, color) {
+        if (!window.isMobile && (!window.Guardian || !window.Guardian.lowFPS)) {
+            ctx.shadowBlur = blurAmount;
+            ctx.shadowColor = color;
+        } else {
+            ctx.shadowBlur = 0; 
+        }
+    },
+    resetGlow: function(ctx) {
+        ctx.shadowBlur = 0;
+    },
+    cleanUpMemory: function() {
+        if (window.Guardian && window.Guardian.limitArray) {
+            if (typeof particles !== 'undefined') window.Guardian.limitArray(particles, 150); 
+        }
+    }
+};
+
 const canvas = document.getElementById('gameCanvas');
 const ctx = canvas.getContext('2d');
 const WORLD_SIZE = 4000;
