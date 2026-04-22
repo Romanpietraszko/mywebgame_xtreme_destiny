@@ -18,9 +18,12 @@ let lastWindTrigger = 0;
 // EFEKTY I ANTY-LAG (Game Juice & LERP)
 let screenShake = 0;
 let lerpState = { players: {}, bots: {} };
+let entityLerp = {}; // <--- POPRAWKA 1: Dodana brakująca zmienna LERP
 
 // INICJALIZACJA MAPY Z MAP.JS
-initMap(typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000, 'FREE');
+window.addEventListener('load', () => {
+    initMap(typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000, 'FREE');
+}); // <--- POPRAWKA 2: Bezpieczne ładowanie mapy dopiero, gdy pliki są gotowe
 
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
@@ -387,9 +390,9 @@ socket.on('init', (data) => {
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 
 socket.on('skillUpdated', (data) => {
-    if(!data || !data.skills) return; 
-    playerSkills = data.skills; 
-    skillPoints = data.points; 
+    if(!data) return; // <--- POPRAWKA 3: Bezpieczeństwo przed uszkodzonym pakietem skilli
+    playerSkills = data.skills || { speed: 0, strength: 0, weapon: 0 }; 
+    skillPoints = data.points || 0; 
     paths = data.paths || paths; 
     window.weaponPath = paths.weapon;
 });
@@ -479,8 +482,11 @@ socket.on('serverTick', (data) => {
     
     // AKTUALIZACJA KRZAKÓW (Do mechaniki Stealth)
     let activeBushes = [];
-    if (data.bushes && data.bushes.length > 0) activeBushes = window.Guardian.safeArray(data.bushes);
-    else if (typeof mapData !== 'undefined' && mapData.bushes) activeBushes = mapData.bushes;
+    if (data.bushes && Array.isArray(data.bushes) && data.bushes.length > 0) {
+        activeBushes = window.Guardian ? window.Guardian.safeArray(data.bushes) : data.bushes;
+    } else if (typeof mapData !== 'undefined' && Array.isArray(mapData.bushes)) {
+        activeBushes = mapData.bushes;
+    } // <--- POPRAWKA 4: Bezpieczne pobieranie krzaków z upewnieniem, że to tablica
 
     if (data.bots) {
         bots = window.Guardian ? window.Guardian.safeArray(Object.values(data.bots)) : Object.values(data.bots); 
@@ -842,7 +848,7 @@ function gameLoop(currentTime) {
 
         // --- RYSOWANIE ENTITIES Z MECHANIKĄ UKRYCIA (STEALTH) ---
         allEntities.forEach(e => {
-            if (e.isSafe) return; 
+            if (!e || e.isSafe) return; // <--- POPRAWKA 5: Upewnienie się, że element 'e' istnieje
 
             if (e.id && e.id !== myId && entityLerp[e.id]) {
                 let le = entityLerp[e.id];
