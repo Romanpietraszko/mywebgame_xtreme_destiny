@@ -23,18 +23,22 @@
         }
     })();
     </script>
-    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&display=swap" rel="stylesheet">
+    
+    <link href="https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    
     <style>
         body {
             margin: 0;
             padding: 0;
             overflow: hidden;
-            background-color: #2c3e50; 
+            background-color: #050505; /* Mroczne tło */
             background-image: url('tłolas.png');
             background-size: cover;
             background-position: center;
             background-repeat: no-repeat;
             background-attachment: fixed;
+            font-family: 'Rajdhani', sans-serif; /* Nowa główna czcionka */
+            color: #ffffff;
         }
         
         canvas {
@@ -46,7 +50,7 @@
         #ui-layer {
             position: absolute;
             inset: 0;
-            background: rgba(0, 0, 0, 0.4); 
+            background: rgba(0, 0, 0, 0.6); 
             display: flex;
             justify-content: center;
             align-items: center; 
@@ -55,86 +59,201 @@
             padding: 20px 0; 
         }
 
+        /* --- DARK MODE LOBBY --- */
         #menu {
             position: relative;
             z-index: 10; 
-            background: rgba(255, 255, 255, 0.85); 
+            background: rgba(10, 10, 15, 0.9); /* Ciemne szkło */
             padding: 30px;
             border-radius: 15px;
-            box-shadow: 0 0 30px rgba(0, 0, 0, 0.5); 
+            box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), 0 0 15px rgba(52, 152, 219, 0.2); 
             text-align: center;
             width: 90%;          
-            max-width: 450px;    
+            max-width: 480px;    
             margin: auto;        
-            border: 3px solid #111111; 
+            border: 2px solid #3498db; /* Neonowa ramka */
         }
 
-        #menu h1 { font-family: 'Permanent Marker', cursive; font-size: clamp(35px, 8vw, 55px); margin-top: 0; margin-bottom: 5px; letter-spacing: 2px; color: #2c3e50; transform: rotate(-2deg); }
-        .paint-x { color: #e74c3c; } .paint-d { color: #3498db; } 
-        #menu p.subtitle { font-size: clamp(12px, 3.5vw, 16px); color: #555; margin-bottom: 15px; font-weight: bold; }
-        .tutorial-box { background: rgba(0, 0, 0, 0.05); padding: 12px; border-radius: 10px; margin-bottom: 15px; font-size: 12px; text-align: left; line-height: 1.4; border-left: 4px solid #f1c40f; color: #333; }
-
-        .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #333; text-align: left; font-size: 14px; }
-        #playerName { width: 100%; padding: 12px; font-size: 16px; border: 2px solid #111; border-radius: 10px; margin-bottom: 10px; box-sizing: border-box; }
+        #menu h1 { 
+            font-family: 'Permanent Marker', cursive; 
+            font-size: clamp(32px, 7vw, 48px); 
+            margin-top: 0; 
+            margin-bottom: 5px; 
+            letter-spacing: 2px; 
+            color: #ffffff; 
+            transform: rotate(-2deg); 
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        /* Kolorowanie poszczególnych liter X i D */
+        .paint-x { color: #3498db; text-shadow: 0 0 15px #3498db; } /* Niebieski Neon */
+        .paint-d { color: #e74c3c; text-shadow: 0 0 15px #e74c3c; } /* Czerwony Neon */
         
-        .main-btn { background: #27ae60; color: white; border: 2px solid #111; padding: 16px; width: 100%; border-radius: 12px; font-size: clamp(14px, 4vw, 18px); font-weight: bold; cursor: pointer; transition: 0.2s; box-shadow: 0 4px 0px #111; margin-bottom: 10px; box-sizing: border-box;}
-        .main-btn:active { transform: translateY(4px); box-shadow: none; }
+        #menu p.subtitle { font-size: clamp(14px, 3.5vw, 18px); color: #aaaaaa; margin-bottom: 20px; font-weight: bold; text-transform: uppercase; letter-spacing: 1px;}
+        
+        .tutorial-box { 
+            background: rgba(255, 255, 255, 0.05); 
+            padding: 15px; 
+            border-radius: 10px; 
+            margin-bottom: 20px; 
+            font-size: 14px; 
+            text-align: left; 
+            line-height: 1.5; 
+            border-left: 4px solid #f1c40f; 
+            color: #dddddd; 
+        }
+
+        .input-group label { display: block; font-weight: bold; margin-bottom: 8px; color: #cccccc; text-align: left; font-size: 16px; text-transform: uppercase; }
+        
+        #playerName { 
+            width: 100%; 
+            padding: 15px; 
+            font-family: 'Rajdhani', sans-serif;
+            font-size: 20px; 
+            font-weight: bold;
+            background: #050505; 
+            color: #ffffff;
+            border: 2px solid #444; 
+            border-radius: 10px; 
+            margin-bottom: 15px; 
+            box-sizing: border-box; 
+            transition: 0.3s;
+            text-align: center;
+            letter-spacing: 2px;
+        }
+        #playerName:focus {
+            border-color: #e74c3c;
+            outline: none;
+            box-shadow: 0 0 15px rgba(231, 76, 60, 0.4);
+        }
+        
+        .main-btn { 
+            background: #050505; 
+            color: #ffffff; 
+            border: 2px solid #3498db; 
+            padding: 16px; 
+            width: 100%; 
+            border-radius: 12px; 
+            font-family: 'Rajdhani', sans-serif;
+            font-size: clamp(16px, 4vw, 20px); 
+            font-weight: bold; 
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            cursor: pointer; 
+            transition: 0.3s; 
+            box-shadow: 0 0 10px rgba(52, 152, 219, 0.2); 
+            margin-bottom: 10px; 
+            box-sizing: border-box;
+        }
+        .main-btn:hover { background: #3498db; color: #050505; box-shadow: 0 0 20px rgba(52, 152, 219, 0.6); transform: translateY(-2px); }
+        .main-btn:active { transform: translateY(2px); box-shadow: none; }
 
         .control-grid { display: flex; gap: 10px; justify-content: space-between; margin-bottom: 15px; flex-wrap: wrap;}
-        .control-card { flex: 1; min-width: 80px; border: 2px solid #111; border-radius: 10px; padding: 15px 5px; cursor: pointer; background: #fff; transition: 0.2s; box-sizing: border-box; box-shadow: 0 3px 0 #111;}
-        .control-card:hover { background: #f0f0f0; transform: translateY(-2px); }
-        .control-card:active { transform: translateY(3px); box-shadow: none; }
-        .keys-preview { font-size: clamp(14px, 3vw, 18px); font-weight: bold; color: #111; margin-bottom: 5px; }
-        .control-card span { font-size: 11px; color: #555; font-weight: bold; display: block;}
+        .control-card { 
+            flex: 1; 
+            min-width: 80px; 
+            border: 2px solid #444; 
+            border-radius: 10px; 
+            padding: 15px 5px; 
+            cursor: pointer; 
+            background: rgba(0, 0, 0, 0.6); 
+            transition: 0.2s; 
+            box-sizing: border-box;
+            box-shadow: 0 4px 0 #111;
+        }
+        .control-card:hover { background: rgba(52, 152, 219, 0.1); border-color: #3498db; transform: translateY(-2px); }
+        .control-card:active { transform: translateY(2px); box-shadow: none; }
+        .keys-preview { font-size: clamp(16px, 3vw, 20px); font-weight: bold; color: #ffffff; margin-bottom: 5px; }
+        .control-card span { font-size: 12px; color: #aaaaaa; font-weight: bold; display: block; text-transform: uppercase;}
 
         .char-grid { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin-bottom: 15px; }
         .char-grid::-webkit-scrollbar { height: 6px; }
-        .char-grid::-webkit-scrollbar-thumb { background: #111; border-radius: 10px; }
-        .char-card { flex: 0 0 auto; width: 100px; background: #fff; border: 2px solid #111; border-radius: 10px; padding: 10px; cursor: pointer; transition: 0.3s; text-align: center; scroll-snap-align: center; box-shadow: 0 3px 0 #111; }
-        .char-card.selected { border-color: #2ecc71; background: #eafaf1; }
-        .char-card.locked { filter: grayscale(100%); opacity: 0.7; border-color: #95a5a6; cursor: not-allowed; box-shadow: none; }
-        .char-card h4 { margin: 0 0 5px 0; font-size: 13px; color: #2c3e50; font-family: 'Permanent Marker', cursive; }
-        .char-card p { margin: 0; font-size: 10px; color: #7f8c8d; font-weight: bold; }
-        .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; }
+        .char-grid::-webkit-scrollbar-thumb { background: #3498db; border-radius: 10px; }
+        .char-card { 
+            flex: 0 0 auto; 
+            width: 110px; 
+            background: rgba(0, 0, 0, 0.6); 
+            border: 2px solid #444; 
+            border-radius: 10px; 
+            padding: 10px; 
+            cursor: pointer; 
+            transition: 0.3s; 
+            text-align: center; 
+            scroll-snap-align: center; 
+            box-shadow: 0 4px 0 #111; 
+        }
+        .char-card.selected { border-color: #2ecc71; background: rgba(46, 204, 113, 0.15); box-shadow: 0 0 15px rgba(46, 204, 113, 0.3); }
+        .char-card.locked { filter: grayscale(100%); opacity: 0.5; border-color: #222; cursor: not-allowed; box-shadow: none; }
+        .char-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #ffffff; font-family: 'Permanent Marker', cursive; letter-spacing: 1px;}
+        .char-card p { margin: 0; font-size: 11px; color: #aaaaaa; font-weight: bold; }
+        .char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2));}
 
-        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(255, 255, 255, 0.95); padding: 10px; border: 2px solid #111; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(17,17,17,0.2); width: 250px; z-index: 90; }
-        .sp-label { font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;}
+        #step-2 h3, #step-3 h3, #step-4 h3 { color: #ffffff; text-transform: uppercase; letter-spacing: 1px; font-size: 18px;}
+
+        #skill-menu { position: fixed; left: 10px; bottom: 10px; background: rgba(10, 10, 12, 0.95); padding: 10px; border: 2px solid #333; display: none; flex-direction: column; gap: 6px; box-shadow: 4px 4px 0px rgba(0,0,0,0.8); width: 250px; z-index: 90; }
+        .sp-label { font-weight: bold; color: #fff; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #555; padding-bottom: 5px;}
 
         #mobile-controls { display: none; position: absolute; inset: 0; pointer-events: none; z-index: 80; }
         #joystick-zone { position: absolute; left: 0; top: 0; width: 50vw; height: 100vh; pointer-events: auto; }
-        #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(17,17,17,0.5); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
-        #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(17, 17, 17, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
+        #joystick-base { position: absolute; width: 100px; height: 100px; background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.5); border-radius: 50%; display: none; transform: translate(-50%, -50%); }
+        #joystick-stick { position: absolute; width: 40px; height: 40px; background: rgba(255, 255, 255, 0.7); border-radius: 50%; top: 50%; left: 50%; transform: translate(-50%, -50%); box-shadow: 0 0 10px rgba(0,0,0,0.5); }
         #action-buttons { position: absolute; right: 20px; bottom: 20px; pointer-events: auto; display: flex; gap: 15px; align-items: flex-end; }
-        .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(255, 255, 255, 0.8); border: 2px solid #111; color: #111; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; box-shadow: 2px 2px 0 #111;}
-        .m-btn:active { background: rgba(200, 200, 200, 0.8); transform: translate(2px, 2px); box-shadow: none;}
-        #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(255, 255, 255, 0.9); }
+        .m-btn { width: 60px; height: 60px; border-radius: 50%; background: rgba(10, 10, 12, 0.8); border: 2px solid #fff; color: #fff; font-size: 24px; display: flex; justify-content: center; align-items: center; user-select: none; box-shadow: 0 0 10px rgba(255,255,255,0.2);}
+        .m-btn:active { background: rgba(255, 255, 255, 0.2); transform: translate(2px, 2px); box-shadow: none;}
+        #btn-m-attack { width: 80px; height: 80px; font-size: 32px; background: rgba(10, 10, 12, 0.9); }
         
         #university-logo { position: fixed; top: 15px; left: 15px; z-index: 1000; }
-        #university-logo img { height: clamp(40px, 8vw, 60px); filter: drop-shadow(2px 2px 0px rgba(17,17,17,0.5)); transition: transform 0.2s; }
+        #university-logo img { height: clamp(40px, 8vw, 60px); filter: drop-shadow(2px 2px 0px rgba(0,0,0,0.8)); transition: transform 0.2s; }
         #university-logo img:hover { transform: scale(1.1); }
 
         @media (max-height: 600px) { #ui-layer { align-items: flex-start; } }
 
         @keyframes floatChest { 0% { transform: translateY(0px); } 50% { transform: translateY(-10px); } 100% { transform: translateY(0px); } }
         @keyframes shakeChest { 0% { transform: translateX(0); } 25% { transform: translateX(-15px) rotate(-10deg); } 50% { transform: translateX(15px) rotate(10deg); } 75% { transform: translateX(-15px) rotate(-10deg); } 100% { transform: translateX(0); } }
-        @keyframes glowReward { 0% { text-shadow: 0 0 10px #111, 0 0 20px #111; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #111, 0 0 50px #111; transform: scale(1.2); opacity: 1;} }
+        @keyframes glowReward { 0% { text-shadow: 0 0 10px #111, 0 0 20px #111; transform: scale(0.5); opacity: 0;} 100% { text-shadow: 0 0 30px #fff, 0 0 50px #3498db; transform: scale(1.2); opacity: 1;} }
         @keyframes pulseInfo { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+
+        /* --- STYL PODGLĄDU GESTÓW (CYBER-RĘKAWICA) --- */
+        #input_video { 
+            display: none !important; /* Ukrywamy surowe wideo z pokoju */
+        } 
+        
+        #gesture_canvas {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 120px;
+            border: 2px solid rgba(0, 206, 201, 0.5); /* Neonowa ramka cyjan */
+            border-radius: 10px;
+            z-index: 1000;
+            transform: scaleX(-1); /* Lustrzane odbicie - kluczowe dla sterowania! */
+            background: rgba(10, 10, 15, 0.9); /* Ciemne tło, zero widoku pokoju */
+            box-shadow: 0 0 15px rgba(0, 206, 201, 0.2);
+            display: none; /* Pokazuje się tylko jak włączysz gesty */
+        }
+
+        /* --- EFEKT UKRYCIA W KRZAKACH --- */
+        .hidden-in-bush {
+            opacity: 0.5 !important;
+            transition: opacity 0.3s ease;
+        }
     </style>
 </head>
 <body>
 
     <video id="input_video" style="display:none;" autoplay playsinline></video>
+    <canvas id="gesture_canvas" width="320" height="240"></canvas>
 
     <a href="https://www.wsi.edu.pl/" target="_blank" id="university-logo">
         <img src="logo.svg" alt="WSIZ Logo">
     </a>
 
-    <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(255,255,255,0.9); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
-        <h2 id="gacha-title" style="color:#111; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px;">Niespodzianka!</h2>
+    <div id="gacha-modal" style="display:none; position:fixed; inset:0; background:rgba(10,10,12,0.95); z-index:999; justify-content:center; align-items:center; flex-direction:column; text-align:center;">
+        <h2 id="gacha-title" style="color:#fff; font-family:'Permanent Marker', cursive; font-size:clamp(30px, 6vw, 45px); margin-bottom:30px; text-shadow: 0 0 15px rgba(255,255,255,0.5);">Niespodzianka!</h2>
         <div id="gacha-chest" style="font-size:120px; cursor:pointer; user-select:none; animation: floatChest 2s infinite;">🎁</div>
-        <p id="gacha-hint" style="color:#555; margin-top:10px; font-weight:bold;">Kliknij, aby otworzyć...</p>
-        <div id="gacha-reward" style="display:none; color:#111; font-size:32px; font-family:'Permanent Marker', cursive; margin-top:20px;"></div>
-        <button id="gacha-close" class="main-btn" style="display:none; width:auto; padding: 15px 40px; margin-top:40px; background:#fff; color:#111;">Zabierz Nagrodę</button>
+        <p id="gacha-hint" style="color:#aaa; margin-top:10px; font-weight:bold; font-family:'Rajdhani', sans-serif; text-transform:uppercase;">Kliknij, aby otworzyć...</p>
+        <div id="gacha-reward" style="display:none; color:#fff; font-size:32px; font-family:'Permanent Marker', cursive; margin-top:20px;"></div>
+        <button id="gacha-close" class="main-btn" style="display:none; width:auto; padding: 15px 40px; margin-top:40px; border-color: #2ecc71;">Zabierz Nagrodę</button>
     </div>
 
     <div id="mobile-controls">
@@ -148,11 +267,11 @@
 
     <div id="ui-layer">
         <div id="menu">
-            <h1>Xtreme Destiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
+            <h1><span class="paint-x">X</span>treme <span class="paint-d">D</span>estiny (<span class="paint-x">X</span><span class="paint-d">D</span>)</h1>
             <p class="subtitle">Walcz, baw się i ulepszaj sprzęt na arenie!</p>
 
             <div class="tutorial-box">
-                <b>📜 Szybki poradnik:</b><br>
+                <b>📜 SZYBKI PORADNIK:</b><br>
                 🟠 Zbieraj kropki i żółte skrzynki, by rosnąć.<br>
                 ⚔️ <b>Atakuj mieczem (LPM)</b> innych graczy.<br>
                 ⚡ Wbij <b>5 poziom (100 masy)</b> by odblokować klasy.<br>
@@ -162,27 +281,27 @@
             <div id="step-1">
                 <div class="input-group">
                     <label for="playerName">Twój Nick:</label>
-                    <input type="text" id="playerName" placeholder="Wpisz nick..." maxlength="12" autofocus>
+                    <input type="text" id="playerName" placeholder="WPISZ NICK..." maxlength="12" autofocus>
                 </div>
                 
                 <input type="color" id="playerColor" value="#ff4444" style="display: none;">
                 
-                <button id="nextBtn" class="main-btn" style="background: #111; color: white;">DALEJ</button>
+                <button id="nextBtn" class="main-btn" style="border-color: #e74c3c;">DALEJ</button>
             </div>
 
             <div id="step-2" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz Tryb Gry:</h3>
+                <h3>Wybierz Tryb Gry:</h3>
                 <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px;">
-                    <button class="main-btn" onclick="selectMode('CAMPAIGN')" style="background: #fff; color: #111;">👑 KAMPANIA: Od zera do Króla (RPG)</button>
-                    <button class="main-btn" onclick="selectMode('FREE')" style="background: #fff; color: #111;">🔥 Każdy na każdego (Multiplayer)</button>
-                    <button class="main-btn" onclick="selectMode('PvP')" style="background: #fff; color: #111;">⚔️ Wojna Drużyn (PvP)</button>
-                    <button class="main-btn" onclick="selectMode('TRAINING')" style="background: #fff; color: #111;">🤖 Trening Drużynowy (PvE)</button>
+                    <button class="main-btn" onclick="selectMode('CAMPAIGN')">👑 KAMPANIA: Od zera do Króla (RPG)</button>
+                    <button class="main-btn" onclick="selectMode('FREE')" style="border-color: #e74c3c;">🔥 Każdy na każdego (Multiplayer)</button>
+                    <button class="main-btn" onclick="selectMode('PvP')" style="border-color: #9b59b6;">⚔️ Wojna Drużyn (PvP)</button>
+                    <button class="main-btn" onclick="selectMode('TRAINING')" style="border-color: #2ecc71;">🤖 Trening Drużynowy (PvE)</button>
                 </div>
-                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+                <button onclick="document.getElementById('step-2').style.display='none'; document.getElementById('step-1').style.display='block';" style="background:none; border:none; color:#888; cursor:pointer; text-decoration:underline; font-family:'Rajdhani', sans-serif; font-size:16px; font-weight:bold;">Powrót</button>
             </div>
 
             <div id="step-3" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz sterowanie:</h3>
+                <h3>Wybierz sterowanie:</h3>
                 <div class="control-grid">
                     <div class="control-card" onclick="launchGame('WASD')">
                         <div class="keys-preview">WASD</div>
@@ -201,14 +320,14 @@
                         <span>Gesty (Kamera)</span>
                     </div>
                 </div>
-                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline;">Powrót</button>
+                <button onclick="document.getElementById('step-3').style.display='none'; document.getElementById('step-2').style.display='block';" style="background:none; border:none; color:#888; cursor:pointer; text-decoration:underline; font-family:'Rajdhani', sans-serif; font-size:16px; font-weight:bold;">Powrót</button>
             </div>
 
             <div id="step-4" style="display: none;">
-                <h3 style="color: #333; margin-bottom: 15px; font-size: 16px;">Wybierz swoją Klasę:</h3>
+                <h3>Wybierz swoją Klasę:</h3>
                 <div class="char-grid">
                     <div class="char-card selected" id="char-standard" onclick="selectSkin('standard')">
-                        <img src="xtreme-destiny-postac.png" alt="Standard">
+                        <img src="xtreme-destiny-postac(1).png" alt="Standard">
                         <h4>Standard</h4>
                         <p>+2% zysku Masy</p>
                     </div>
@@ -224,24 +343,24 @@
                         <div id="arystokrata-progress" style="font-size: 10px; color: #e74c3c; margin-top: 5px; font-weight: bold;">Fragmenty: 0/3</div>
                     </div>
                 </div>
-                <button onclick="launchGameFinal()" class="main-btn" style="background: #111; color: white;">WEJDŹ NA ARENĘ</button>
-                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#666; cursor:pointer; text-decoration:underline; margin-top: 10px;">Powrót</button>
+                <button onclick="launchGameFinal()" class="main-btn" style="border-color: #2ecc71;">WEJDŹ NA ARENĘ</button>
+                <button onclick="document.getElementById('step-4').style.display='none'; document.getElementById('step-3').style.display='block';" style="background:none; border:none; color:#888; cursor:pointer; text-decoration:underline; font-family:'Rajdhani', sans-serif; font-size:16px; font-weight:bold; margin-top: 10px;">Powrót</button>
             </div>
 
-            <div id="game-info" style="margin-top: 20px;">
-                <small>[MYSZKA/DOTYK/KAMERA] Celowanie i Strzał | [1, 2, 3, 4] Zmiana broni | [Q] Tarcza (50 pkt)</small>
+            <div id="game-info" style="margin-top: 20px; color:#888; font-size: 12px; font-weight: bold;">
+                <small>[MYSZKA/DOTYK/KAMERA] Celowanie i Strzał | [1, 2] Zmiana broni | [Q] Tarcza (50 pkt)</small>
             </div>
         </div>
     </div>
 
     <div id="skill-menu">
-        <div class="sp-label" style="font-weight: bold; color: #111; text-align: center; margin-bottom: 5px; font-size: 14px; text-transform: uppercase; border-bottom: 2px dashed #111; padding-bottom: 5px;">
-            Punkty Umiejętności: <span id="sp-count" style="color:#fff; background:#111; padding: 2px 8px; border-radius: 4px;">0</span>
+        <div class="sp-label">
+            Punkty Umiejętności: <span id="sp-count" style="color:#050505; background:#fff; padding: 2px 8px; border-radius: 4px;">0</span>
         </div>
         <div id="skills-container"></div>
     </div>
     
-    <div id="castle-shop" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 5, 0.7); backdrop-filter: blur(15px); z-index: 1000; color: #fff; font-family: 'Courier New', monospace; flex-direction: row; box-sizing: border-box;">
+    <div id="castle-shop" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(5, 5, 5, 0.9); backdrop-filter: blur(15px); z-index: 1000; color: #fff; font-family: 'Courier New', monospace; flex-direction: row; box-sizing: border-box;">
 
         <div style="flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; border-right: 2px dashed rgba(255, 255, 255, 0.2); background: linear-gradient(90deg, rgba(0,0,0,0.8) 0%, rgba(0,0,0,0) 100%);">
             <img src="straznik-postac.png" style="max-width: 85%; max-height: 40vh; object-fit: contain; filter: drop-shadow(0 0 25px rgba(255, 255, 255, 0.2)); margin-bottom: 10px;">
@@ -280,15 +399,15 @@
         </div>
     </div>
 
-    <div id="btn-inventory" style="position: fixed; right: 20px; bottom: 100px; width: 50px; height: 50px; background: #fff; border: 3px solid #111; border-radius: 10px; font-size: 24px; display: none; justify-content: center; align-items: center; cursor: pointer; z-index: 90; box-shadow: 2px 2px 0 #111;">🎒</div>
+    <div id="btn-inventory" style="position: fixed; right: 20px; bottom: 100px; width: 50px; height: 50px; background: #111; color: #fff; border: 3px solid #fff; border-radius: 10px; font-size: 24px; display: none; justify-content: center; align-items: center; cursor: pointer; z-index: 90; box-shadow: 0 0 10px rgba(255,255,255,0.3);">🎒</div>
 
-    <div id="inventory-ui" style="position: fixed; right: 80px; bottom: 100px; background: rgba(255,255,255,0.95); border: 3px solid #111; padding: 10px; border-radius: 10px; box-shadow: 4px 4px 0 rgba(17,17,17,0.2); z-index: 90; width: 160px; display: none; flex-direction: column;">
-        <h3 style="margin: 0 0 10px 0; text-align: center; font-family: 'Permanent Marker', cursive; font-size: 16px; border-bottom: 2px dashed #111; color: #111;">Ekwipunek</h3>
+    <div id="inventory-ui" style="position: fixed; right: 80px; bottom: 100px; background: rgba(10,10,12,0.95); border: 3px solid #fff; padding: 10px; border-radius: 10px; box-shadow: 0 0 15px rgba(255,255,255,0.2); z-index: 90; width: 160px; display: none; flex-direction: column;">
+        <h3 style="margin: 0 0 10px 0; text-align: center; font-family: 'Permanent Marker', cursive; font-size: 16px; border-bottom: 2px dashed #fff; color: #fff;">Ekwipunek</h3>
         
         <div id="inventory-slots" style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; min-height: 50px;">
             </div>
         
-        <p style="font-size: 10px; text-align: center; margin: 10px 0 0 0; color: #555; font-weight: bold;">[Drag & Drop]<br>Przeciągnij broń na ekran, by jej użyć.</p>
+        <p style="font-size: 10px; text-align: center; margin: 10px 0 0 0; color: #aaa; font-weight: bold; font-family: 'Rajdhani', sans-serif; text-transform: uppercase;">[Drag & Drop]<br>Przeciągnij broń na ekran, by jej użyć.</p>
     </div>
 
     <canvas id="gameCanvas"></canvas>
@@ -323,7 +442,7 @@
         }
         updateMenuUI();
 
-        next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = 'red'; alert("Wpisz swój nick, aby kontynuować!"); } };
+        next.onclick = () => { if (nameInput.value.trim().length > 0) { s1.style.display = 'none'; s2.style.display = 'block'; } else { nameInput.style.borderColor = '#e74c3c'; alert("Wpisz swój nick, aby kontynuować!"); } };
         nameInput.addEventListener("keypress", (e) => { if (e.key === "Enter") next.click(); });
         window.selectMode = (mode) => { chosenMode = mode; s2.style.display = 'none'; s3.style.display = 'block'; };
         
@@ -356,7 +475,7 @@
             }
 
             let loadingDiv = document.getElementById('loading-step');
-            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#111; font-family: \'Permanent Marker\', cursive;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
+            if (!loadingDiv) { loadingDiv = document.createElement('div'); loadingDiv.id = 'loading-step'; loadingDiv.innerHTML = '<h2 style="color:#fff; font-family: \'Permanent Marker\', cursive; text-shadow: 0 0 15px #3498db;">Ładowanie areny...</h2>'; document.getElementById('menu').appendChild(loadingDiv); }
             loadingDiv.style.display = 'block';
 
             let scriptSrc = 'free.js';
@@ -515,8 +634,23 @@
         }
 
         function initGestureControls() {
+            // Bezpieczeństwo - sprawdzamy dostęp do kamery
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                alert("⚠️ BŁĄD: Przeglądarka zablokowała dostęp do kamery.\nAby grać gestami, uruchom grę przez localhost lub z użyciem protokołu HTTPS.");
+                document.getElementById('step-4').style.display = 'none';
+                document.getElementById('step-3').style.display = 'block';
+                return;
+            }
+
             const videoElement = document.getElementById('input_video');
-            let lastGestureTime = 0;
+            const gestureCanvas = document.getElementById('gesture_canvas');
+            const canvasCtx = gestureCanvas.getContext('2d');
+            
+            // Pokazujemy tylko holograficzny radar, wideo zostaje ukryte
+            gestureCanvas.style.display = 'block'; 
+            
+            let lastDashTime = 0;
+            let lastAttackTime = 0;
 
             const hands = new Hands({locateFile: (file) => {
               return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
@@ -525,29 +659,64 @@
             hands.setOptions({
               maxNumHands: 1,             
               modelComplexity: 1,
-              minDetectionConfidence: 0.6,
-              minTrackingConfidence: 0.6
+              minDetectionConfidence: 0.7,
+              minTrackingConfidence: 0.7
             });
 
             hands.onResults((results) => {
+                // Czyszczenie radaru co klatkę (rysujemy na czysto)
+                canvasCtx.save();
+                canvasCtx.clearRect(0, 0, gestureCanvas.width, gestureCanvas.height);
+
                 if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    const landmarks = results.multiHandLandmarks[0];
+                    gestureCanvas.style.borderColor = '#00cec9'; // Morski kolor = widzi dłoń
                     
-                    // --- ZRYW (Uszczypnięcie) ---
+                    const landmarks = results.multiHandLandmarks[0];
+                    const now = Date.now();
+                    
+                    // --- MAGIA VIBE NOIR: RYSOWANIE CYBER-RĘKAWICY ---
+                    // Rysuje neonowe linie łączące palce (cyjan)
+                    drawConnectors(canvasCtx, landmarks, HAND_CONNECTIONS, {color: '#00cec9', lineWidth: 4});
+                    // Rysuje stawy/punkty zgięcia (czerwień)
+                    drawLandmarks(canvasCtx, landmarks, {color: '#e74c3c', lineWidth: 1, radius: 3});
+
+                    // Pobieranie końcówek palców do logiki gry
+                    const wrist = landmarks[0];
                     const thumbTip = landmarks[4];
                     const indexTip = landmarks[8];
-                    const dist = Math.hypot(thumbTip.x - indexTip.x, thumbTip.y - indexTip.y);
+                    const middleTip = landmarks[12];
+                    const getDist = (p1, p2) => Math.hypot(p1.x - p2.x, p1.y - p2.y);
 
-                    if (dist < 0.05) { 
-                        const now = Date.now();
-                        if (now - lastGestureTime > 3000) { 
-                            lastGestureTime = now;
-                            window.dispatchEvent(new KeyboardEvent('keydown', {'code': 'ShiftLeft'}));
-                            window.dispatchEvent(new KeyboardEvent('keyup', {'code': 'ShiftLeft'}));
+                    // 1. ATAK (Wskazujący + Kciuk)
+                    if (getDist(thumbTip, indexTip) < 0.05) { 
+                        if (now - lastAttackTime > 300) { 
+                            lastAttackTime = now;
+                            window.dispatchEvent(new KeyboardEvent('keydown', {'code': 'KeyE'}));
+                            setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', {'code': 'KeyE'})), 50);
+                            
+                            // Wizualny bajer: radar mruga na czerwono przy strzale
+                            gestureCanvas.style.background = 'rgba(231, 76, 60, 0.4)';
+                            setTimeout(() => gestureCanvas.style.background = 'rgba(10, 10, 15, 0.9)', 100);
                         }
                     }
 
-                    // --- RUCH POSTACI (Joystick) ---
+                    // 2. ZRYW / DASH (Środkowy + Kciuk)
+                    if (getDist(thumbTip, middleTip) < 0.05) { 
+                        if (now - lastDashTime > 3000) { 
+                            lastDashTime = now;
+                            window.dispatchEvent(new KeyboardEvent('keydown', {'code': 'ShiftLeft'}));
+                            setTimeout(() => window.dispatchEvent(new KeyboardEvent('keyup', {'code': 'ShiftLeft'})), 50);
+                        }
+                    }
+
+                    // 3. TARCZA (Zaciśnięta pięść - palce blisko nadgarstka)
+                    if (getDist(indexTip, wrist) < 0.3 && getDist(middleTip, wrist) < 0.3) {
+                        triggerKey('KeyQ', true);
+                    } else {
+                        triggerKey('KeyQ', false);
+                    }
+
+                    // 4. RUCH (Wirtualny Joystick)
                     const handX = landmarks[9].x; 
                     const handY = landmarks[9].y; 
 
@@ -557,22 +726,34 @@
                     triggerKey('KeyD', handX < 0.4); 
 
                 } else {
-                    // Brak dłoni = stój
-                    triggerKey('KeyW', false);
-                    triggerKey('KeyS', false);
-                    triggerKey('KeyA', false);
-                    triggerKey('KeyD', false);
+                    // Brak dłoni - Zgubił sygnał
+                    gestureCanvas.style.borderColor = '#e74c3c'; 
+                    canvasCtx.fillStyle = '#e74c3c';
+                    canvasCtx.font = "bold 18px 'Rajdhani', sans-serif";
+                    canvasCtx.textAlign = "center";
+                    canvasCtx.fillText("BRAK SYGNAŁU DŁONI", gestureCanvas.width / 2, gestureCanvas.height / 2);
+
+                    triggerKey('KeyW', false); triggerKey('KeyS', false);
+                    triggerKey('KeyA', false); triggerKey('KeyD', false);
+                    triggerKey('KeyQ', false);
                 }
+                canvasCtx.restore();
             });
 
             const camera = new Camera(videoElement, {
               onFrame: async () => {
                 await hands.send({image: videoElement});
               },
-              width: 640,
-              height: 480
+              width: 320, 
+              height: 240
             });
-            camera.start();
+            
+            camera.start().catch(err => {
+                console.error("Błąd kamery:", err);
+                alert("⚠️ Nie można uruchomić kamery. Upewnij się, że udzieliłeś uprawnień w przeglądarce!");
+                document.getElementById('step-4').style.display = 'none';
+                document.getElementById('step-3').style.display = 'block';
+            });
         }
     </script>
 </body>

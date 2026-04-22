@@ -81,37 +81,76 @@ let currentKingId = null;
 
 const TEAM_COLORS = { 'N': '#3498db', 'S': '#e74c3c', 'E': '#f1c40f', 'W': '#2ecc71' };
 
-// ZAMKI - SĄ UŻYWANE DO FIZYKI!
-let castles = [
-    { id: '1', team: '', x: 1000, y: 1000, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: '' },
-    { id: '2', team: '', x: 3000, y: 3000, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: '' },
-    { id: '3', team: '', x: 1000, y: 3000, radius: 250, color: TEAM_COLORS['E'], captureProgress: 0, owner: '' },
-    { id: '4', team: '', x: 3000, y: 1000, radius: 250, color: TEAM_COLORS['W'], captureProgress: 0, owner: '' }
-];
+// --- NOWOŚĆ: SYSTEM TRYBÓW SERWERA ---
+let CURRENT_SERVER_MODE = 'FREE'; // Tryb domyślny
+let epicCastleKing = null;
+let castles = [];
 
-// --- NOWOŚĆ: SILNIK FIZYKI MURÓW DLA SERWERA ---
-function canCrossCastleWall(oldX, oldY, newX, newY) {
-    for (let c of castles) {
-        let distNow = Math.hypot(oldX - c.x, oldY - c.y);
-        let distNext = Math.hypot(newX - c.x, newY - c.y);
-        
-        // Most zawsze patrzy na środek mapy (2000, 2000)
-        let bridgeAngle = Math.atan2(2000 - c.y, 2000 - c.x);
-        let moveAngle = Math.atan2(newY - c.y, newX - c.x);
-        
-        let angleDiff = Math.abs(moveAngle - bridgeAngle);
-        angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
-
-        let isCrossingWall = (distNow >= c.radius && distNext < c.radius) || 
-                             (distNow <= c.radius && distNext > c.radius);
-        let isOnWallLine = Math.abs(distNext - c.radius) < 10;
-
-        // Jeśli przechodzi przez mur i NIE jest na moście
-        if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
-            return false; // Ściana!
-        }
+function setServerMode(mode) {
+    CURRENT_SERVER_MODE = mode;
+    if (mode === 'TEAMS') {
+        // 4 Zamki frakcyjne na rogach
+        castles = [
+            { id: '1', type: 'castle', team: 'N', x: 1000, y: 1000, radius: 250, color: TEAM_COLORS['N'], captureProgress: 0, owner: 'N' },
+            { id: '2', type: 'castle', team: 'S', x: 3000, y: 3000, radius: 250, color: TEAM_COLORS['S'], captureProgress: 0, owner: 'S' },
+            { id: '3', type: 'castle', team: 'E', x: 1000, y: 3000, radius: 250, color: TEAM_COLORS['E'], captureProgress: 0, owner: 'E' },
+            { id: '4', type: 'castle', team: 'W', x: 3000, y: 1000, radius: 250, color: TEAM_COLORS['W'], captureProgress: 0, owner: 'W' }
+        ];
+    } else {
+        // Tryb FREE - Tylko jeden Epicki Zamek do logiki, nie wysyłamy go klientowi
+        castles = [];
     }
-    return true; // Droga wolna
+    console.log(`[SYSTEM] Tryb serwera ustawiony na: ${CURRENT_SERVER_MODE}`);
+}
+setServerMode('FREE'); // Startowo
+
+// --- ZAKTUALIZOWANA FIZYKA MURÓW DLA OBU TRYBÓW ---
+function canCrossCastleWall(oldX, oldY, newX, newY) {
+    if (CURRENT_SERVER_MODE === 'FREE') {
+        // Fizyka dla jednego Epickiego Zamku na środku z 4 mostami
+        let cx = WORLD_SIZE / 2;
+        let cy = WORLD_SIZE / 2;
+        let radius = 350; // Promień zewnętrznych murów
+
+        let distNow = Math.hypot(oldX - cx, oldY - cy);
+        let distNext = Math.hypot(newX - cx, newY - cy);
+
+        let isCrossingWall = (distNow >= radius && distNext < radius) || 
+                             (distNow <= radius && distNext > radius);
+        let isOnWallLine = Math.abs(distNext - radius) < 10;
+
+        if (isCrossingWall || isOnWallLine) {
+            let moveAngle = Math.atan2(newY - cy, newX - cx);
+            // Normalizujemy kąt do wartości 0 - 90 stopni (co każdy most)
+            let angleMod = (moveAngle + Math.PI * 2) % (Math.PI / 2);
+            let isOnBridge = (angleMod < 0.35 || angleMod > (Math.PI / 2) - 0.35);
+            
+            if (!isOnBridge) return false; // Ściana!
+        }
+        return true;
+    } else {
+        // Fizyka dla 4 Zamków z trybu Teams
+        for (let c of castles) {
+            let distNow = Math.hypot(oldX - c.x, oldY - c.y);
+            let distNext = Math.hypot(newX - c.x, newY - c.y);
+            
+            // Most zawsze patrzy na środek mapy
+            let bridgeAngle = Math.atan2(WORLD_SIZE/2 - c.y, WORLD_SIZE/2 - c.x);
+            let moveAngle = Math.atan2(newY - c.y, newX - c.x);
+            
+            let angleDiff = Math.abs(moveAngle - bridgeAngle);
+            angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
+
+            let isCrossingWall = (distNow >= c.radius && distNext < c.radius) || 
+                                 (distNow <= c.radius && distNext > c.radius);
+            let isOnWallLine = Math.abs(distNext - c.radius) < 10;
+
+            if ((isCrossingWall || isOnWallLine) && angleDiff > 0.35) {
+                return false; // Ściana!
+            }
+        }
+        return true; 
+    }
 }
 
 const weaponStats = {
@@ -141,6 +180,7 @@ async function killPlayer(pId) {
             currentKingId = null; 
             activeEvent = null;   
         }
+        if (pId === epicCastleKing) epicCastleKing = null;
 
         console.log(`[ŚMIERĆ] Gracz ${p.name} zginął! Odpytuję AI...`);
         const finalMass = Math.floor(p.score || 0);
@@ -217,6 +257,9 @@ io.on('connection', (socket) => {
     socket.on('joinGame', (data) => {
         if (!data || typeof data !== 'object') return;
 
+        // Jeśli to pierwszy gracz na serwerze, ustawiamy tryb FREE
+        if (Object.keys(players).length === 0) setServerMode('FREE');
+
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
         let massGainMult = skinType === 'arystokrata' ? 1.15 : 1.0; 
@@ -235,7 +278,9 @@ io.on('connection', (socket) => {
             isRecruiting: false, formation: 0, moveAngle: 0, team: null,
             isTutorialActive: true, tutorialFlags: { m15: false, m50: false, m100: false }, tutorialText: ""
         };
-        socket.emit('init', { id: socket.id, castles: castles, bushes: bushes });
+        
+        // Nie wysyłamy castles, zamek EpicCastle obsługiwany jest po stronie klienta (map.js)
+        socket.emit('init', { id: socket.id, bushes: bushes });
 
         let msg = getTutorialMessage(data.name, `join_${skinType}`);
         players[socket.id].tutorialText = msg;
@@ -244,6 +289,9 @@ io.on('connection', (socket) => {
 
     socket.on('joinTeamGame', (data) => {
         if (!data || typeof data !== 'object') return;
+
+        // Jeśli to pierwszy gracz na serwerze, ustawiamy tryb TEAMS
+        if (Object.keys(players).length === 0) setServerMode('TEAMS');
 
         const skinType = data.skin || 'standard';
         let baseSpeed = skinType === 'ninja' ? 5.5 : (skinType === 'arystokrata' ? 4.8 : 5);
@@ -498,6 +546,7 @@ io.on('connection', (socket) => {
         const p = players[socket.id];
         if (p) {
             console.log(`[WYLOGOWANIE] Gracz >> ${p.name} << opuścił serwer.`);
+            if (p.id === epicCastleKing) epicCastleKing = null;
             delete players[socket.id];
         }
     });
@@ -537,37 +586,64 @@ setInterval(() => {
         }
     }
 
-    Object.values(players).forEach(p => { if (p.team && !p.isSafe) p.isSafe = false; }); 
+    if (CURRENT_SERVER_MODE === 'TEAMS') {
+        Object.values(players).forEach(p => { if (p.team && !p.isSafe) p.isSafe = false; }); 
 
-    castles.forEach(c => {
-        let defenders = 0, attackers = 0, attackingTeam = null;
-        Object.values(players).forEach(p => {
-            if (!p.team) return; 
-            if (Math.hypot(p.x - c.x, p.y - c.y) < c.radius) {
-                if (p.team === c.owner) { defenders++; p.isSafe = true; } 
-                else {
-                    attackers++; attackingTeam = p.team;
-                    if (eventTickCounter % 30 === 0 && !p.isSafe) {
-                        let burnDamage = Math.max(2, Math.floor(p.score * 0.05)); 
-                        p.score -= burnDamage;
-                        if (p.score <= 1) killPlayer(p.id); 
+        castles.forEach(c => {
+            let defenders = 0, attackers = 0, attackingTeam = null;
+            Object.values(players).forEach(p => {
+                if (!p.team) return; 
+                if (Math.hypot(p.x - c.x, p.y - c.y) < c.radius) {
+                    if (p.team === c.owner) { defenders++; p.isSafe = true; } 
+                    else {
+                        attackers++; attackingTeam = p.team;
+                        if (eventTickCounter % 30 === 0 && !p.isSafe) {
+                            let burnDamage = Math.max(2, Math.floor(p.score * 0.05)); 
+                            p.score -= burnDamage;
+                            if (p.score <= 1) killPlayer(p.id); 
+                        }
                     }
+                }
+            });
+
+            if (eventTickCounter % 30 === 0) {
+                if (attackers > defenders && c.owner !== attackingTeam) {
+                    c.captureProgress += 3.4;
+                    if (c.captureProgress >= 100) {
+                        c.owner = attackingTeam; c.color = TEAM_COLORS[attackingTeam]; c.captureProgress = 0;
+                        io.emit('killEvent', { text: `🚩 Zamek ${c.id} zdobyty przez drużynę ${attackingTeam}!` });
+                    }
+                } else if (c.captureProgress > 0) {
+                    c.captureProgress = Math.max(0, c.captureProgress - 3.4); 
                 }
             }
         });
-
-        if (eventTickCounter % 30 === 0) {
-            if (attackers > defenders && c.owner !== attackingTeam) {
-                c.captureProgress += 3.4;
-                if (c.captureProgress >= 100) {
-                    c.owner = attackingTeam; c.color = TEAM_COLORS[attackingTeam]; c.captureProgress = 0;
-                    io.emit('killEvent', { text: `🚩 Zamek ${c.id} zdobyty przez drużynę ${attackingTeam}!` });
-                }
-            } else if (c.captureProgress > 0) {
-                c.captureProgress = Math.max(0, c.captureProgress - 3.4); 
+    } else if (CURRENT_SERVER_MODE === 'FREE') {
+        // --- LOGIKA KOTL (Król Wzgórza) DLA TRYBU FREE ---
+        let playersInCore = [];
+        Object.values(players).forEach(p => {
+            // Sprawdzamy graczy stojących na centralnym Rdzeniu (promień 80)
+            if (Math.hypot(p.x - WORLD_SIZE/2, p.y - WORLD_SIZE/2) < 80) {
+                playersInCore.push(p);
             }
+        });
+
+        if (playersInCore.length > 0) {
+            // Sortujemy po masie - najcięższy wygrywa zacięcie na środku
+            playersInCore.sort((a, b) => b.score - a.score);
+            let king = playersInCore[0];
+            
+            if (eventTickCounter % 30 === 0) { // Co 1 sekundę
+                king.score += 5; // Szybki przyrost masy za odwagę!
+                if (epicCastleKing !== king.id) {
+                    epicCastleKing = king.id;
+                    io.emit('killEvent', { text: `👑 ${king.name} okupuje Rdzeń! (+5 masy/s)`, time: 200 });
+                }
+            }
+        } else {
+            epicCastleKing = null;
         }
-    });
+    }
 
     eventTimer++;
     if (eventTimer > 2700 && activeEvent === null) {
@@ -691,12 +767,10 @@ setInterval(() => {
                 let total = armies[b.ownerId].length;
                 let targetX = owner.x; let targetY = owner.y;
 
-                // Zawsze najpierw sprawdzamy, czy bot został ręcznie przeciągnięty myszką
                 if (b.isCustomPosition) {
                     targetX = owner.x + Math.cos(owner.moveAngle + b.angleOffset) * b.distOffset;
                     targetY = owner.y + Math.sin(owner.moveAngle + b.angleOffset) * b.distOffset;
                 } else {
-                    // Standardowe formacje dla reszty armii
                     if (owner.formation === 0) { 
                         let angleStep = (Math.PI * 2) / total; let currentAngle = (Date.now() / 1500) + (myIndex * angleStep); let radius = 70 + (total * 2); 
                         targetX = owner.x + Math.cos(currentAngle) * radius; targetY = owner.y + Math.sin(currentAngle) * radius;
@@ -709,7 +783,6 @@ setInterval(() => {
                         targetX = owner.x - Math.cos(owner.moveAngle) * 60 + Math.cos(owner.moveAngle + Math.PI/2) * offset;
                         targetY = owner.y - Math.sin(owner.moveAngle) * 60 + Math.sin(owner.moveAngle + Math.PI/2) * offset;
                     } else if (owner.formation === 3) {
-                        // Ktoś wcisnął formację 3, ale bot nie ma ręcznej pozycji - ustawiamy go w bezpiecznym kole
                         targetX = owner.x + Math.cos(owner.moveAngle + (myIndex * 0.5)) * 80;
                         targetY = owner.y + Math.sin(owner.moveAngle + (myIndex * 0.5)) * 80;
                     }
@@ -745,11 +818,9 @@ setInterval(() => {
             if (nextY < 0 || nextY > WORLD_SIZE) b.angle = -b.angle;
         }
 
-        // Zastosowanie fizyki dla botów
         if (canCrossCastleWall(b.x, b.y, nextX, nextY)) {
             b.x = nextX; b.y = nextY;
         } else {
-            // Bot uderzył w mur -> skręt w bok żeby obejść
             b.angle += Math.PI / 2; 
             b.x += Math.cos(b.angle) * 3;
             b.y += Math.sin(b.angle) * 3;
@@ -997,10 +1068,14 @@ setInterval(() => {
 
     let eventTimeLeft = Math.max(0, Math.floor((2700 - eventTimer) / 30));
     
+    // Budujemy payload - Castles wysyłamy TYLKO w trybie TEAMS
     let payload = {
         players, bots, projectiles, loots, 
-        activeEvent, eventTimeLeft, castles, meteorZones
+        activeEvent, eventTimeLeft, meteorZones
     };
+    if (CURRENT_SERVER_MODE === 'TEAMS') {
+        payload.castles = castles;
+    }
     
     if (dirtyFoods || tickCounter % 60 === 0) {
         payload.foods = foods;

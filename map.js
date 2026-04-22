@@ -1,28 +1,32 @@
 // ==========================================
-// MAP.JS - NOWOCZESNA ARCHITEKTURA KLASOWA (OOP)
+// MAP.JS - MEGA UPDATE: VIBE NOIR & MOBA
 // ==========================================
 
 // --- SYSTEM MOTYWÓW WIZUALNYCH ---
 const MAP_THEMES = {
-    'FREE': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff' },
-    'PvP': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff' }, // Lekko niebieskawy klimat wojny
-    'TRAINING': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff' },
+    'FREE': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff', glow: '#3498db' },
+    'PvP': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2980b9' },
+    'TRAINING': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2ecc71' },
     
     // AKT 1: Ruiny (Mroczny Las - Vibe Noir z neonowym zielonym zarysem)
-    'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff' },
+    'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff', glow: '#27ae60' },
     
     // AKT 2: Dolina Cieni (Głęboki mrok z fioletowym neonem)
-    'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff' },
+    'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff', glow: '#8e44ad' },
     
     // AKT 3: Pustkowia Królów (Czarna otchłań z krwistoczerwonymi akcentami)
-    'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff' }
+    'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff', glow: '#c0392b' }
 };
 
 let activeTheme = MAP_THEMES['FREE'];
 
 // Główne kontenery z danymi mapy
 const safeZones = []; 
-const mapData = { trees: [], roads: [], ponds: [], spots: [], rocks: [], grass: [], birds: [], lastBirdSpawn: 0 }; 
+const mapData = { 
+    trees: [], roads: [], ponds: [], spots: [], rocks: [], grass: [], 
+    bushes: [], camps: [], fireflies: [], // NOWE
+    birds: [], lastBirdSpawn: 0 
+}; 
 
 // =========================================================================
 // KLASA BAZOWA: MapGenerator (Wspólne narzędzia dla wszystkich trybów)
@@ -39,6 +43,9 @@ class MapGenerator {
         mapData.spots.length = 0;
         mapData.rocks.length = 0;
         mapData.grass.length = 0;
+        mapData.bushes.length = 0;
+        mapData.camps.length = 0;
+        mapData.fireflies.length = 0;
         mapData.birds.length = 0;
         mapData.lastBirdSpawn = Date.now();
         safeZones.length = 0;
@@ -51,8 +58,20 @@ class MapGenerator {
     addRoad(x, y, width, height) {
         mapData.roads.push({ x: x, y: y, width: width, height: height });
     }
+    
+    addCamp(x, y) { 
+        mapData.camps.push({x: x, y: y, radius: 80}); 
+    }
 
     populateWorld(config) {
+        const checkCollision = (px, py, r) => {
+            for(let road of mapData.roads) if (px > road.x - r - 10 && px < road.x + road.width + r + 10 && py > road.y - r - 10 && py < road.y + road.height + r + 10) return true;
+            for(let zone of safeZones) if (Math.hypot(px - zone.x, py - zone.y) < r + zone.radius + 20) return true;
+            for(let pond of mapData.ponds) if (Math.hypot(px - pond.x, py - pond.y) < r + pond.radius + 15) return true;
+            for(let camp of mapData.camps) if (Math.hypot(px - camp.x, py - camp.y) < r + camp.radius + 10) return true;
+            return false;
+        };
+
         // 1. Detale (Trawa, Nagrobki, Czaszki)
         for(let i = 0; i < config.numGrass; i++) {
             let type = config.grassTypes[Math.floor(Math.random() * config.grassTypes.length)];
@@ -85,33 +104,38 @@ class MapGenerator {
 
         // 4. Pułapki (Kałuże, Kratery, Kolce)
         for (let i = 0; i < config.numPonds; i++) {
-            const r = 30 + Math.random() * 40; 
-            let px, py, invalidPos;
-            do {
-                invalidPos = false; px = Math.random() * this.worldSize; py = Math.random() * this.worldSize;
-                for(let road of mapData.roads) { 
-                    if (px > road.x - r - 10 && px < road.x + road.width + r + 10 && py > road.y - r - 10 && py < road.y + road.height + r + 10) { invalidPos = true; break; } 
-                }
-                if (!invalidPos) { for(let zone of safeZones) { if (Math.hypot(px - zone.x, py - zone.y) < r + zone.radius + 15) { invalidPos = true; break; } } }
-                if (!invalidPos) { for(let pond of mapData.ponds) { if (Math.hypot(px - pond.x, py - pond.y) < r + pond.radius + 10) { invalidPos = true; break; } } }
-            } while(invalidPos);
-            
+            let r = 30 + Math.random() * 40, px, py;
+            do { px = Math.random() * this.worldSize; py = Math.random() * this.worldSize; } while(checkCollision(px, py, r));
             mapData.ponds.push({ x: px, y: py, radius: r, numPoints: 12 + Math.floor(Math.random() * 8), randomOffsetLimit: 0.15 + Math.random() * 0.1, type: config.pondType });
         }
 
         // 5. Przeszkody (Drzewa, Kolumny)
         for (let i = 0; i < config.numTrees; i++) {
-            const r = 25 + Math.random() * 20; 
-            let tx, ty, invalidPos;
-            do {
-                invalidPos = false; tx = Math.random() * this.worldSize; ty = Math.random() * this.worldSize;
-                
-                for(let zone of safeZones) { if (Math.hypot(tx - zone.x, ty - zone.y) < zone.radius + 50) { invalidPos = true; break; } }
-                if (!invalidPos) { for(let road of mapData.roads) { if (tx > road.x - r && tx < road.x + road.width + r && ty > road.y - r && ty < road.y + road.height + r) { invalidPos = true; break; } } }
-                if (!invalidPos) { for(let pond of mapData.ponds) { if (Math.hypot(tx - pond.x, ty - pond.y) < r + pond.radius + 5) { invalidPos = true; break; } } }
-            } while(invalidPos);
-            
+            let r = 25 + Math.random() * 20, tx, ty;
+            do { tx = Math.random() * this.worldSize; ty = Math.random() * this.worldSize; } while(checkCollision(tx, ty, r));
             mapData.trees.push({ x: tx, y: ty, radius: r, type: config.treeType });
+        }
+        
+        // 6. Krzaki (Bushes)
+        if (typeof bushes !== 'undefined' && bushes.length > 0) {
+            mapData.bushes = bushes; // Z serwera
+        } else {
+            let numBushes = config.numBushes || 40;
+            for (let i = 0; i < numBushes; i++) {
+                let r = 60 + Math.random() * 60, bx, by;
+                do { bx = Math.random() * this.worldSize; by = Math.random() * this.worldSize; } while(checkCollision(bx, by, r));
+                mapData.bushes.push({ x: bx, y: by, radius: r });
+            }
+        }
+
+        // 7. Świetliki (Tylko w lasach)
+        if (config.treeType === 'choinka') {
+            for(let i=0; i<80; i++) {
+                mapData.fireflies.push({ 
+                    x: Math.random() * this.worldSize, y: Math.random() * this.worldSize, 
+                    offset: Math.random() * Math.PI * 2, speed: 0.02 + Math.random() * 0.03, radius: 2 + Math.random() * 3 
+                });
+            }
         }
     }
 }
@@ -135,11 +159,16 @@ class FreeModeMap extends MapGenerator {
         this.addRoad(0, center - 100, center - 400, 200); // Zachód
         this.addRoad(center + 400, center - 100, center - 400, 200); // Wschód
 
+        // Obozowiska w rogach
+        this.addCamp(center - 800, center - 800); 
+        this.addCamp(center + 800, center + 800);
+
         this.populateWorld({
             numGrass: 400, grassTypes: ['grass'],
-            numSpots: 100, numRocks: 30,
-            numPonds: 25, pondType: 'puddle',
-            numTrees: 350, treeType: 'choinka'
+            numSpots: 100, numRocks: 40,
+            numPonds: 30, pondType: 'puddle',
+            numTrees: 400, treeType: 'choinka',
+            numBushes: 50
         });
     }
 }
@@ -158,24 +187,22 @@ class CampaignMap extends MapGenerator {
     }
 
     generateAct1() {
-        // Akt 1: Długa droga na północ z bazy
         this.addSafeZone(2000, 3800, 250, 'safezone');
-        this.addRoad(1880, 200, 240, 3600); // Główny trakt Pn-Pd
-        this.addRoad(500, 2000, 3000, 150); // Skrzyżowanie do zwiadowcy
+        this.addRoad(1880, 200, 240, 3600); 
+        this.addRoad(500, 2000, 3000, 150); 
+        this.addCamp(1000, 1000); this.addCamp(3000, 1000);
 
         this.populateWorld({
             numGrass: 600, grassTypes: ['grass'],
-            numSpots: 150, numRocks: 20,
-            numPonds: 15, pondType: 'puddle',
-            numTrees: 450, treeType: 'choinka'
+            numSpots: 150, numRocks: 30,
+            numPonds: 20, pondType: 'puddle',
+            numTrees: 450, treeType: 'choinka',
+            numBushes: 50
         });
     }
 
     generateAct2() {
-        // Akt 2: Labirynt Cieni
-        this.addSafeZone(2000, 2000, 300, 'safezone'); // Baza na środku
-        
-        // Poszarpane drogi we wszystkich kierunkach
+        this.addSafeZone(2000, 2000, 300, 'safezone'); 
         this.addRoad(0, 1880, 4000, 240);
         this.addRoad(1880, 0, 240, 4000);
         this.addRoad(800, 800, 2400, 150);
@@ -183,65 +210,87 @@ class CampaignMap extends MapGenerator {
 
         this.populateWorld({
             numGrass: 300, grassTypes: ['grave', 'sword'],
-            numSpots: 250, numRocks: 40,
-            numPonds: 45, pondType: 'crater', // Mnóstwo kraterów
-            numTrees: 250, treeType: 'dead_tree'
+            numSpots: 250, numRocks: 50,
+            numPonds: 45, pondType: 'crater', 
+            numTrees: 300, treeType: 'dead_tree',
+            numBushes: 20
         });
     }
 
     generateAct3() {
-        // Akt 3: Marsz Królów (Puste obrzeża, gęsty środek)
-        this.addSafeZone(2000, 3800, 150, 'safezone'); // Start
-        
-        // Droga Królewska prosto do finału
+        this.addSafeZone(2000, 3800, 150, 'safezone'); 
         this.addRoad(1800, 400, 400, 3400); 
-        this.addRoad(1000, 400, 2000, 200); // Podstawa Areny Bossa
+        this.addRoad(1000, 400, 2000, 200); 
 
         this.populateWorld({
             numGrass: 100, grassTypes: ['skull', 'crown'],
-            numSpots: 600, numRocks: 80,
-            numPonds: 60, pondType: 'spikes', // Kolce śmierci
-            numTrees: 350, treeType: 'column' // Antyczne Kolumny
+            numSpots: 600, numRocks: 100,
+            numPonds: 70, pondType: 'spikes', 
+            numTrees: 400, treeType: 'column',
+            numBushes: 10
         });
     }
 }
 
 // -------------------------------------------------------------------------
-// KLASA: TEAMS (Dla trybu teams.js - PvP i MOBA)
-// Dedykowana pod większą mapę (np. 6000x6000)
+// KLASA: TEAMS (Potężna rozbudowa MOBA - E-sportowa Arena)
 // -------------------------------------------------------------------------
 class TeamsMap extends MapGenerator {
     generate(modeType) {
-        this.clearData();
+        this.clearData(); 
         activeTheme = MAP_THEMES[modeType] || MAP_THEMES['PvP'];
         
-        let center = this.worldSize / 2;
+        let w = this.worldSize; 
+        let c = w / 2;
 
-        // 1. ARENA CENTRALNA
-        this.addRoad(center - 500, center - 500, 1000, 1000);
+        // --- 1. LINIE GŁÓWNE (LANES) ---
+        this.addRoad(c - 250, 0, 500, w); // MID Pion
+        this.addRoad(0, c - 250, w, 500); // MID Poziom
+        this.addRoad(150, 150, w-300, 300); // TOP Line
+        this.addRoad(150, w-450, w-300, 300); // BOT Line
+        this.addRoad(150, 150, 300, w-300); // LEFT Line
+        this.addRoad(w-450, 150, 300, w-300); // RIGHT Line
 
-        // 2. LINIE GŁÓWNE (Pion / Poziom) łączące bazy
-        this.addRoad(center - 200, 0, 400, this.worldSize);
-        this.addRoad(0, center - 200, this.worldSize, 400);
-
-        // 3. LINIE PRZEKĄTNE (Dla szybszych manewrów między bazami)
-        // Sztuczka z Canvas: rysujemy schodkowe drogi, bo obracanie prostokątów kolizyjnych jest trudne
-        for(let i = 800; i < this.worldSize - 800; i += 300) {
-            this.addRoad(i, i, 400, 400); // Skos \
-            this.addRoad(i, this.worldSize - i - 400, 400, 400); // Skos /
+        // --- 2. ARENA CENTRALNA ---
+        this.addRoad(c - 600, c - 600, 1200, 1200);
+        for(let i = 0; i < 8; i++) {
+            let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
+            mapData.rocks.push({x: c + Math.cos(angle)*650, y: c + Math.sin(angle)*650, radius: 50 + Math.random()*20});
         }
 
-        // UWAGA: Zamki są przesyłane z serwera w teams.js, więc nie dodajemy ich tutaj.
+        // --- 3. OBOZOWISKA (JUNGLE CAMPS) ---
+        this.addCamp(c - 800, c - 800); 
+        this.addCamp(c + 800, c + 800); 
+        this.addCamp(c - 800, c + 800); 
+        this.addCamp(c + 800, c - 800); 
 
+        // --- 4. UFORYFIKOWANE BAZY ---
+        let baseCoords = [{x: 1000, y: 1000}, {x: w-1000, y: 1000}, {x: 1000, y: w-1000}, {x: w-1000, y: w-1000}];
+        baseCoords.forEach(base => {
+            this.addRoad(base.x - 450, base.y - 450, 900, 900);
+            for(let i = 0; i < 16; i++) {
+                let angle = (i/16) * Math.PI * 2;
+                let tx = base.x + Math.cos(angle) * 350;
+                let ty = base.y + Math.sin(angle) * 350;
+                if (i % 4 !== 0) mapData.trees.push({x: tx, y: ty, radius: 45 + Math.random()*10, type: 'column'});
+            }
+            mapData.rocks.push({x: base.x - 200, y: base.y - 200, radius: 45});
+            mapData.rocks.push({x: base.x + 200, y: base.y + 200, radius: 45});
+        });
+
+        // --- 5. TWARDE PRZESZKODY W DŻUNGLI ---
+        for(let i=0; i<15; i++) {
+            let wx = 500 + Math.random() * (w - 1000), wy = 500 + Math.random() * (w - 1000);
+            if(Math.hypot(wx - c, wy - c) > 700) {
+                for(let k=0; k<3; k++) mapData.trees.push({x: wx + k*60, y: wy + k*20, radius: 35, type: 'column'});
+            }
+        }
+
+        // --- 6. WYPEŁNIENIE ŚWIATA ---
         this.populateWorld({
-            numGrass: 800, 
-            grassTypes: ['grass', 'sword', 'skull', 'grave'], // Pełne pobojowisko
-            numSpots: 200,
-            numRocks: 100, // Gigantyczne ilości kamieni do zasłaniania się przed ostrzałem
-            numPonds: 50, 
-            pondType: 'puddle', 
-            numTrees: 800, // Gęsta dżungla
-            treeType: 'choinka'
+            numGrass: 1500, grassTypes: ['grass', 'sword', 'skull', 'grave'], 
+            numSpots: 400, numRocks: 250, numPonds: 50, pondType: 'crater', 
+            numTrees: 1200, treeType: 'dead_tree', numBushes: 150 
         });
     }
 }
@@ -264,6 +313,42 @@ function initMap(worldSize, mapType = 'FREE') {
 // =========================================================================
 // FUNKCJE RYSOWANIA DETALI MAPY 
 // =========================================================================
+
+function drawCamp(ctx, camp) {
+    ctx.save(); ctx.translate(camp.x, camp.y);
+    ctx.fillStyle = 'rgba(20, 10, 5, 0.4)'; ctx.beginPath(); ctx.arc(0, 0, camp.radius, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
+    ctx.fillStyle = '#2c3e50'; ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2;
+    for(let i=0; i<3; i++) {
+        ctx.save(); ctx.rotate(i * (Math.PI*2/3)); ctx.translate(0, -camp.radius * 0.6);
+        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-20, 15); ctx.lineTo(20, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.restore();
+    }
+    ctx.fillStyle = '#8B4513'; ctx.fillRect(-15, -5, 30, 10); ctx.fillRect(-5, -15, 10, 30); 
+    let firePulse = (Math.sin(Date.now() / 150) + 1) / 2;
+    window.MapOptimizer.applyGlow(ctx, 30 + firePulse * 20, '#e67e22');
+    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(0, -25 - firePulse*10); ctx.lineTo(-15, 10); ctx.lineTo(15, 10); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(0, -15 - firePulse*5); ctx.lineTo(-8, 10); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill();
+    window.MapOptimizer.resetGlow(ctx);
+    ctx.restore();
+}
+
+function drawBush(ctx, bush) {
+    ctx.save(); ctx.translate(bush.x, bush.y);
+    ctx.fillStyle = 'rgba(5, 20, 10, 0.8)';
+    ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2;
+    let windOffset = Math.sin(Date.now() / 1000 + bush.x) * 0.05;
+    ctx.rotate(windOffset);
+    ctx.beginPath();
+    for (let i = 0; i < 12; i++) {
+        let angle = (i / 12) * Math.PI * 2; 
+        let currentR = bush.radius * (0.8 + Math.sin(i * 3) * 0.2); 
+        let px = Math.cos(angle) * currentR; let py = Math.sin(angle) * currentR;
+        if (i === 0) ctx.moveTo(px, py); else ctx.quadraticCurveTo(0, 0, px, py); 
+    }
+    ctx.closePath(); ctx.fill(); ctx.stroke();
+    ctx.restore();
+}
 
 function drawNotebookGrass(ctx, x, y) {
     ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
@@ -324,14 +409,21 @@ function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
 }
 
 function drawDeepCrater(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.fillStyle = '#111111'; ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 3; ctx.lineJoin = 'round';
+    ctx.save(); ctx.translate(x, y); 
+    let pulse = (Math.sin(Date.now()/500 + x) + 1) / 2;
+    window.MapOptimizer.applyGlow(ctx, 20 * pulse, activeTheme.glow);
+    
+    ctx.fillStyle = '#0a0a0a'; ctx.strokeStyle = activeTheme.glow; ctx.lineWidth = 3; ctx.lineJoin = 'round';
     ctx.beginPath();
     for(let i=0; i<12; i++) { let a = (i/12) * Math.PI * 2; let r = radius + Math.sin(a * 5 + x) * 10; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
     ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.lineWidth = 2;
+    window.MapOptimizer.resetGlow(ctx);
+
+    ctx.lineWidth = 2; ctx.strokeStyle = '#333';
     for(let i=0; i<4; i++) { let a = (i/4) * Math.PI * 2 + (x % 2); ctx.beginPath(); ctx.moveTo(Math.cos(a)*(radius-5), Math.sin(a)*(radius-5)); ctx.lineTo(Math.cos(a)*(radius+20), Math.sin(a)*(radius+20)); ctx.stroke(); }
-    ctx.fillStyle = '#000000'; ctx.beginPath();
-    for(let i=0; i<10; i++) { let a = (i/10) * Math.PI * 2; let r = radius * 0.6 + Math.cos(a * 7 + y) * 8; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
+    
+    ctx.fillStyle = `rgba(46, 204, 113, ${0.2 + pulse * 0.3})`; ctx.beginPath();
+    for(let i=0; i<10; i++) { let a = (i/10) * Math.PI * 2 + (Date.now()/2000); let r = radius * 0.6 + Math.cos(a * 7 + y) * 8; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
     ctx.closePath(); ctx.fill(); ctx.restore();
 }
 
@@ -375,7 +467,7 @@ function drawBrokenColumn(ctx, x, y, radius) {
 }
 
 // =========================================================================
-// 🏰 MONUMENTALNA TWIERDZA (Dla trybu FREE)
+// 🏰 MONUMENTALNA TWIERDZA
 // =========================================================================
 
 function drawEpicCastle(ctx, x, y, radius) {
@@ -563,7 +655,7 @@ function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
 }
 
 // =========================================================================
-// GŁÓWNA PĘTLA RYSOWANIA CAŁEGO ŚWIATA (Z SYSTEMEM ANTY-LAG)
+// GŁÓWNA PĘTLA RYSOWANIA CAŁEGO ŚWIATA (WSZYSTKO W JEDNYM MIEJSCU!)
 // =========================================================================
 
 function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
@@ -580,19 +672,13 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     ctx.lineWidth = 1; 
     ctx.strokeRect(-10, -10, wSize + 20, wSize + 20);
 
-    // --- 1. DROGI (Tylko widoczne) ---
+    // --- 1. DROGI ---
     ctx.fillStyle = activeTheme.road; 
     ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
     ctx.lineWidth = 2;
     for(let i = 0; i < mapData.roads.length; i++) {
         let road = mapData.roads[i];
-        
-        // Szybki culling dla dróg
-        if (road.x > camera.x + canvasWidth || road.x + road.width < camera.x ||
-            road.y > camera.y + canvasHeight || road.y + road.height < camera.y) {
-            continue;
-        }
-
+        if (!window.MapOptimizer.isVisible(road.x + road.width/2, road.y + road.height/2, Math.max(road.width, road.height)/2, camera, canvasWidth, canvasHeight)) continue;
         ctx.fillRect(road.x, road.y, road.width, road.height);
         ctx.setLineDash([15, 10]);
         ctx.strokeRect(road.x, road.y, road.width, road.height);
@@ -610,7 +696,6 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     for(let i = 0; i < mapData.grass.length; i++) {
         let g = mapData.grass[i];
         if (!window.MapOptimizer.isVisible(g.x, g.y, 10, camera, canvasWidth, canvasHeight)) continue;
-
         if (g.type === 'grave') drawGrave(ctx, g.x, g.y);
         else if (g.type === 'sword') drawSwordDetail(ctx, g.x, g.y);
         else if (g.type === 'skull') drawWastelandSkull(ctx, g.x, g.y);
@@ -623,59 +708,73 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
     for(let i = 0; i < mapData.spots.length; i++) {
         let s = mapData.spots[i];
         if (!window.MapOptimizer.isVisible(s.x, s.y, s.radius, camera, canvasWidth, canvasHeight)) continue;
+        window.MapOptimizer.applyGlow(ctx, 10, activeTheme.spotColor);
         ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill(); 
+        window.MapOptimizer.resetGlow(ctx);
     }
 
-    // --- 4. PUŁAPKI ---
+    // --- 4. PUŁAPKI & OBOZOWISKA ---
     for(let i = 0; i < mapData.ponds.length; i++) {
         let pond = mapData.ponds[i];
         if (!window.MapOptimizer.isVisible(pond.x, pond.y, pond.radius, camera, canvasWidth, canvasHeight)) continue;
-        
         if (pond.type === 'crater') drawDeepCrater(ctx, pond.x, pond.y, pond.radius);
         else if (pond.type === 'spikes') drawSpikesField(ctx, pond.x, pond.y, pond.radius);
         else drawNotebookPuddle(ctx, pond.x, pond.y, pond.radius, pond.numPoints, pond.randomOffsetLimit);
+    }
+
+    for(let i = 0; i < mapData.camps.length; i++) {
+        let camp = mapData.camps[i];
+        if (window.MapOptimizer.isVisible(camp.x, camp.y, camp.radius, camera, canvasWidth, canvasHeight)) drawCamp(ctx, camp);
     }
 
     // --- 5. BAZY I ZAMKI ---
     for (let i = 0; i < safeZones.length; i++) {
         let zone = safeZones[i];
         if (!window.MapOptimizer.isVisible(zone.x, zone.y, zone.radius, camera, canvasWidth, canvasHeight)) continue;
-            
         if (zone.type === 'epic_castle') drawEpicCastle(ctx, zone.x, zone.y, zone.radius);
         else if (zone.type === 'castle') drawCastle(ctx, zone.x, zone.y, zone.radius, zone.team);
         else drawSafeZone(ctx, zone.x, zone.y, zone.radius);
     }
 
-    // --- 6. GŁAZY ---
-    let visibleRocks = [];
+    // --- 6. GŁAZY & PRZESZKODY (Z-Sorting) ---
+    let visibleObstacles = [];
     for(let i = 0; i < mapData.rocks.length; i++) {
         let r = mapData.rocks[i];
-        if (window.MapOptimizer.isVisible(r.x, r.y, r.radius, camera, canvasWidth, canvasHeight)) {
-            visibleRocks.push(r);
-        }
+        if (window.MapOptimizer.isVisible(r.x, r.y, r.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(r);
     }
-    visibleRocks.sort((a, b) => a.y - b.y); 
-    for(let i = 0; i < visibleRocks.length; i++) {
-        drawNotebookRock(ctx, visibleRocks[i].x, visibleRocks[i].y, visibleRocks[i].radius);
-    }
-
-    // --- 7. PRZESZKODY (Drzewa) ---
-    let visibleTrees = [];
     for(let i = 0; i < mapData.trees.length; i++) {
         let tree = mapData.trees[i];
-        if (window.MapOptimizer.isVisible(tree.x, tree.y, tree.radius, camera, canvasWidth, canvasHeight)) {
-            visibleTrees.push(tree);
-        }
-    }
-    visibleTrees.sort((a, b) => a.y - b.y); 
-    for(let i = 0; i < visibleTrees.length; i++) {
-        let tree = visibleTrees[i];
-        if (tree.type === 'dead_tree') drawSpookyTree(ctx, tree.x, tree.y, tree.radius);
-        else if (tree.type === 'column') drawBrokenColumn(ctx, tree.x, tree.y, tree.radius);
-        else drawNotebookTree(ctx, tree.x, tree.y, tree.radius);
+        if (window.MapOptimizer.isVisible(tree.x, tree.y, tree.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(tree);
     }
 
-    // --- 8. PTAKI NA NIEBIE ---
+    visibleObstacles.sort((a, b) => a.y - b.y); 
+    
+    for(let i = 0; i < visibleObstacles.length; i++) {
+        let o = visibleObstacles[i];
+        if (o.type) { 
+            if (o.type === 'dead_tree') drawSpookyTree(ctx, o.x, o.y, o.radius);
+            else if (o.type === 'column') drawBrokenColumn(ctx, o.x, o.y, o.radius);
+            else drawNotebookTree(ctx, o.x, o.y, o.radius);
+        } else {
+            drawNotebookRock(ctx, o.x, o.y, o.radius);
+        }
+    }
+
+    // --- 7. KRZAKI (Mechanika Ukrycia) ---
+    let playerInBush = false;
+    for(let i = 0; i < mapData.bushes.length; i++) {
+        let bush = mapData.bushes[i];
+        if (window.MapOptimizer.isVisible(bush.x, bush.y, bush.radius, camera, canvasWidth, canvasHeight)) {
+            drawBush(ctx, bush);
+            if (typeof player !== 'undefined' && player && Math.hypot(player.x - bush.x, player.y - bush.y) < bush.radius) {
+                playerInBush = true;
+            }
+        }
+    }
+    if (playerInBush) document.body.classList.add('hidden-in-bush');
+    else document.body.classList.remove('hidden-in-bush');
+
+    // --- 8. PTAKI & ŚWIETLIKI NA NIEBIE ---
     let now = Date.now();
     if (now - mapData.lastBirdSpawn > 30000) { 
         mapData.lastBirdSpawn = now; let flock = [];
@@ -692,6 +791,22 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         });
         if (b.x > wSize + 500 || b.y < -200) mapData.birds.splice(i, 1); 
     }
+
+    ctx.fillStyle = activeTheme.glow;
+    window.MapOptimizer.applyGlow(ctx, 10, activeTheme.glow);
+    for (let i = 0; i < mapData.fireflies.length; i++) {
+        let f = mapData.fireflies[i];
+        f.x += Math.sin(now * f.speed + f.offset) * 2;
+        f.y -= 0.5; 
+        if (f.y < 0) f.y = wSize;
+        if (window.MapOptimizer.isVisible(f.x, f.y, f.radius, camera, canvasWidth, canvasHeight)) {
+            ctx.globalAlpha = Math.abs(Math.sin(now * f.speed));
+            ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2); ctx.fill();
+        }
+    }
+    ctx.globalAlpha = 1.0;
+    window.MapOptimizer.resetGlow(ctx);
+
     ctx.restore(); 
 
     // --- 9. EFEKTY POGODOWE (HUD) ---
@@ -716,50 +831,8 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // CZYSZCZENIE PAMIĘCI
     window.MapOptimizer.cleanUpMemory();
 }
-
-// ==========================================
-// 🚀 OPTYMALIZATOR MAPY (Zintegrowany z Guardian.js)
-// Zapobiega klatkowaniu i przegrzewaniu GPU
-// ==========================================
-window.MapOptimizer = {
-    // FRUSTUM CULLING
-    isVisible: function(x, y, radius, camera, canvasWidth, canvasHeight) {
-        const buffer = 100; 
-        return !(
-            x + radius + buffer < camera.x || 
-            x - radius - buffer > camera.x + canvasWidth || 
-            y + radius + buffer < camera.y || 
-            y - radius - buffer > camera.y + canvasHeight
-        );
-    },
-
-    // BEZPIECZNE NEONY (Adaptive Glow)
-    applyGlow: function(ctx, blurAmount, color) {
-        if (!window.isMobile && (!window.Guardian || !window.Guardian.lowFPS)) {
-            ctx.shadowBlur = blurAmount;
-            ctx.shadowColor = color;
-        } else {
-            ctx.shadowBlur = 0; 
-        }
-    },
-
-    resetGlow: function(ctx) {
-        ctx.shadowBlur = 0;
-    },
-
-    // SPRZĄTACZ PAMIĘCI
-    cleanUpMemory: function() {
-        if (window.Guardian && window.Guardian.limitArray) {
-            window.Guardian.limitArray(mapData.birds, 10); 
-            if (typeof particles !== 'undefined') {
-                window.Guardian.limitArray(particles, 150); 
-            }
-        }
-    }
-};
 
 // =========================================================================
 // FUNKCJE SYSTEMOWE

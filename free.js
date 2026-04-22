@@ -1013,29 +1013,81 @@ function gameLoop(currentTime) {
             let rot = p.isWinter ? Math.PI / 2 : Math.atan2(p.dy, p.dx);
             if(isNaN(rot)) rot = 0; 
             
+            // 1. USTALANIE KOLORU I BLASKU NA BAZIE NAZWY BRONI
+            let pColor = '#bdc3c7'; // Domyślny (Zwykła stal)
+            let pGlow = '#ffffff';  // Domyślny blask
+            
+            if (p.projType) {
+                if (p.projType.includes('golden')) { pColor = '#f1c40f'; pGlow = '#f39c12'; } // Złoty
+                else if (p.projType.includes('diamond')) { pColor = '#00cec9'; pGlow = '#81ecec'; } // Morski (Diamentowy)
+                else if (p.projType === 'crossbow' || p.projType === 'cleaver') { pColor = '#e74c3c'; pGlow = '#ff7675'; } // Czerwony (Epicki)
+                else if (p.projType === 'shotgun') { pColor = '#ff0000'; pGlow = '#ff4757'; } // Mityczny
+                else if (p.projType === 'chakram') { pColor = '#9b59b6'; pGlow = '#a29bfe'; } // Fioletowy
+                else if (p.projType === 'explosive_kunai') { pColor = '#ff9f43'; pGlow = '#ff6b6b'; } // Pomarańczowy
+            }
+
+            ctx.save();
+            // 2. APLIKACJA "GAME JUICE": Neonowy blask wokół lecącej broni!
+            if (!window.isMobile) {
+                // Diamentowa i mityczna broń świeci jeszcze mocniej!
+                ctx.shadowBlur = p.projType && (p.projType.includes('diamond') || p.projType === 'shotgun') ? 20 : 10; 
+                ctx.shadowColor = pGlow;
+            }
+
+            // 3. RYSOWANIE BRONI Z UWZGLĘDNIENIEM KOLORU
             if (p.projType === 'sword' || p.projType === 'winter' || !p.projType) {
                 rot += (Date.now() / 100); 
                 drawSwordModel(p, p.x, p.y, rot, 0.8, getTier(p.scoreAtThrow || 0, [15, 300, 700]));
-            } else if (p.projType.includes('bow')) {
-                ctx.save(); 
+            } 
+            else if (p.projType && (p.projType.includes('bow') || p.projType === 'crossbow' || p.projType === 'shotgun')) {
                 ctx.translate(p.x, p.y); 
                 ctx.rotate(rot); 
-                ctx.fillStyle = '#7f8c8d'; 
+                
+                // Trzon strzały w kolorze rzadkości
+                ctx.fillStyle = pColor; 
                 ctx.fillRect(-10,-1,20,2); 
-                ctx.fillStyle = '#e74c3c'; 
+                
+                // Kolor piórek
+                ctx.fillStyle = (p.projType === 'crossbow' || p.projType === 'shotgun') ? '#ff0000' : '#e74c3c'; 
                 ctx.fillRect(-10,-3,4,6); 
-                ctx.fillStyle = '#bdc3c7'; 
+                
+                // Grot zawsze jasny dla kontrastu
+                ctx.fillStyle = '#ffffff'; 
+                ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(15,0); ctx.lineTo(10,3); ctx.fill(); 
+            } 
+            else if (p.projType && (p.projType.includes('knife') || p.projType === 'cleaver')) {
+                ctx.translate(p.x, p.y); 
+                ctx.rotate(rot + Math.PI/2); 
+                
+                // Rękojeść
+                ctx.fillStyle = '#111'; 
+                ctx.fillRect(-2, 0, 4, 10); 
+                
+                // Ostrze w kolorze rzadkości
+                ctx.fillStyle = pColor; 
                 ctx.beginPath(); 
-                ctx.moveTo(10,-3); 
-                ctx.lineTo(15,0); 
-                ctx.lineTo(10,3); 
-                ctx.fill(); 
-                ctx.restore();
-            } else if (p.projType.includes('knife') || p.projType === 'cleaver') {
-                drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8);
-            } else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') {
-                drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2);
+                if (p.projType === 'cleaver') {
+                    ctx.fillRect(-6, -15, 12, 15); // Masywny, szeroki tasak
+                } else {
+                    ctx.moveTo(-4, 0); ctx.lineTo(0, -18); ctx.lineTo(4, 0); ctx.fill(); // Ostry nóż
+                }
+            } 
+            else if (p.projType && (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai')) {
+                ctx.translate(p.x, p.y); 
+                ctx.rotate(rot + (Date.now()/20)); // Szybki obrót wokół własnej osi
+                
+                if (p.projType === 'chakram') {
+                    ctx.beginPath(); ctx.arc(0,0,12,0,Math.PI*2); ctx.lineWidth=4; ctx.strokeStyle=pColor; ctx.stroke();
+                } else if (p.projType === 'explosive_kunai') {
+                    ctx.fillStyle = pColor; ctx.fillRect(-2, -12, 4, 24); 
+                    ctx.fillStyle = '#e74c3c'; ctx.fillRect(-5,-3,10,6); // Czerwony ładunek wybuchowy na środku
+                } else {
+                    ctx.fillStyle = pColor;
+                    ctx.beginPath(); ctx.moveTo(0, -12); ctx.lineTo(3, -3); ctx.lineTo(12, 0); ctx.lineTo(3, 3);
+                    ctx.lineTo(0, 12); ctx.lineTo(-3, 3); ctx.lineTo(-12, 0); ctx.lineTo(-3, -3); ctx.fill();
+                }
             }
+            ctx.restore();
         });
 
         if (draggedBotId && player) {

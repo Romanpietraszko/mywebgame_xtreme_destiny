@@ -1,5 +1,5 @@
 // ==========================================
-// TEAMS.JS - Wojna Frakcji (RTS & PvP) - ZDEBUGOWANA KONSOLA & LERP
+// TEAMS.JS - Wojna Frakcji (RTS & PvP) - MEGA UPDATE MOBA
 // ==========================================
 
 // --- 🛡️ AUTO-DEBUGGER (Ochrona przed crashem pętli) ---
@@ -15,7 +15,7 @@ window.socket = io( /crazygames|1001juegos|poki|github/.test(window.location.hos
 
 // --- ZMIENNE STANU ---
 let player, otherPlayers = {}, foods = [], bots = [], projectiles = [], loots = [];
-let castles = [], bushes = [], meteorZones = [];
+let castles = [], bushes = [], meteorZones = [], jungleCamps = []; // NOWOŚĆ: Dżungla i Krzaki
 let currentEvent = null, eventTimeLeft = 0;
 let controlType = 'WASD', gameState = 'MENU', myId = null;
 
@@ -50,7 +50,7 @@ const TEAM_EMOJIS = { 'N': '🥶 Północ', 'S': '😈 Południe', 'E': '👺 Ws
 
 let isDebugMode = false;
 
-initMap(WORLD_SIZE); 
+initMap(WORLD_SIZE, 'PvP'); // Inicjalizacja dużej mapy MOBA
 
 window.addEventListener('contextmenu', e => e.preventDefault());
 
@@ -227,7 +227,8 @@ window.startGame = (control, mode) => {
             inventory: { bow: 0, knife: 0, shuriken: 0 }, 
             activeWeapon: 'sword', isRecruiting: false, formation: 0,
             isTutorialActive: true, tutorialText: "Oczekuję na wytyczne taktyczne...",
-            skin: window.playerSkin, moveAngle: 0, isMoving: false
+            skin: window.playerSkin, moveAngle: 0, isMoving: false,
+            inBush: false // NOWOŚĆ: Śledzenie ukrycia gracza
         };
         
         socket.emit('joinTeamGame', { name: name, mode: gameMode, skin: player.skin, requestedTeam: requestedTeam });
@@ -282,7 +283,6 @@ socket.on('gameOver', (data) => {
     gameState = 'GAMEOVER';
     if (data && data.message) finalDeathMessage = data.message;
     
-    // --- 🛡️ POPRAWKA EKRANU GAME OVER (Ukrywanie białego Menu) ---
     document.getElementById('ui-layer').style.display = 'none';
     document.getElementById('skill-menu').style.display = 'none';
     const shop = document.getElementById('castle-shop'); if (shop) shop.style.display = 'none';
@@ -312,7 +312,6 @@ socket.on('gameOver', (data) => {
 });
 
 socket.on('serverTick', (data) => {
-    // --- 🛡️ POPRAWKA MIGAJĄCEGO JEDZENIA I LERPa ---
     if (data.foods !== undefined) foods = window.Guardian.safeArray(data.foods);
     
     if (data.bots !== undefined) {
@@ -320,12 +319,21 @@ socket.on('serverTick', (data) => {
         bots.forEach(b => {
             if (!entityLerp[b.id]) entityLerp[b.id] = { x: b.x, y: b.y };
             entityLerp[b.id].tx = b.x; entityLerp[b.id].ty = b.y;
+            // NOWOŚĆ: Śledzenie czy bot jest w krzaku
+            b.inBush = bushes.some(bush => Math.hypot(b.x - bush.x, b.y - bush.y) < bush.radius);
         });
     }
 
     if (data.projectiles !== undefined) projectiles = window.Guardian.safeArray(data.projectiles); 
     if (data.loots !== undefined) loots = window.Guardian.safeArray(data.loots);             
-    if (data.bushes !== undefined) bushes = window.Guardian.safeArray(data.bushes); 
+    
+    // Odbieranie krzaków i obozowisk z serwera (lub korzystanie z wygenerowanych przez map.js)
+    if (data.bushes !== undefined && data.bushes.length > 0) bushes = window.Guardian.safeArray(data.bushes); 
+    else if (typeof mapData !== 'undefined' && mapData.bushes) bushes = mapData.bushes;
+
+    if (data.camps !== undefined && data.camps.length > 0) jungleCamps = window.Guardian.safeArray(data.camps); 
+    else if (typeof mapData !== 'undefined' && mapData.camps) jungleCamps = mapData.camps;
+
     if (data.meteorZones !== undefined) meteorZones = window.Guardian.safeArray(data.meteorZones);
     
     currentEvent = data.activeEvent; eventTimeLeft = data.eventTimeLeft || 0; 
@@ -340,6 +348,7 @@ socket.on('serverTick', (data) => {
         if (p.id === myId) return; 
         if (!entityLerp[p.id]) entityLerp[p.id] = { x: p.x, y: p.y };
         entityLerp[p.id].tx = p.x; entityLerp[p.id].ty = p.y;
+        p.inBush = bushes.some(bush => Math.hypot(p.x - bush.x, p.y - bush.y) < bush.radius);
     });
 
     if (myId && otherPlayers[myId] && player) {
@@ -359,6 +368,9 @@ socket.on('serverTick', (data) => {
         if (sSelf.formation !== undefined) player.formation = sSelf.formation;
         if (sSelf.isRecruiting !== undefined) player.isRecruiting = sSelf.isRecruiting;
         if (sSelf.skin) player.skin = sSelf.skin; 
+        
+        // NOWOŚĆ: Śledzenie czy MY jesteśmy w krzaku (przydaje się do LERP'a i styli)
+        player.inBush = bushes.some(bush => Math.hypot(player.x - bush.x, player.y - bush.y) < bush.radius);
         
         const shopUI = document.getElementById('castle-shop'); 
         if (shopUI) shopUI.style.display = player.isSafe ? 'flex' : 'none';
@@ -404,7 +416,9 @@ function update() {
         let speed = 5 + ((playerSkills.speed || 0) * 0.5);
         if (player.skin === 'ninja') speed *= 1.05; 
         if (currentEvent === 'BLIZZARD' && paths.speed !== 'lightweight') speed *= 0.4; 
-        if (bushes.some(b => Math.hypot(player.x - b.x, player.y - b.y) < b.radius)) speed *= 0.5;
+        
+        // Zarośla spowalniają, dając ukrycie kosztem prędkości
+        if (player.inBush) speed *= 0.6;
 
         if (!isNaN(moveAngle) && !isNaN(speed)) {
             if(isNaN(player.x)) player.x = 2000;
@@ -459,6 +473,7 @@ function update() {
     }
 }
 
+// --- NOWOŚĆ: BAZY (MROK & MOBA) ---
 function drawStarBase(ctx, z) {
     ctx.save();
     ctx.translate(z.x, z.y);
@@ -478,9 +493,9 @@ function drawStarBase(ctx, z) {
 
     ctx.save();
     ctx.rotate(bridgeAngle);
-    ctx.fillStyle = 'rgba(46, 204, 113, 0.4)'; 
+    ctx.fillStyle = z.owner === player.team ? 'rgba(46, 204, 113, 0.4)' : 'rgba(231, 76, 60, 0.4)'; 
     ctx.fillRect(z.radius - 15, -30, 30, 60);
-    ctx.strokeStyle = '#2ecc71';
+    ctx.strokeStyle = z.owner === player.team ? '#2ecc71' : '#e74c3c';
     ctx.strokeRect(z.radius - 15, -30, 30, 60);
     ctx.restore();
     
@@ -493,9 +508,16 @@ function drawStarBase(ctx, z) {
     ctx.fillStyle = z.color; ctx.fill();
 
     ctx.rotate(-Date.now() / 1000); 
-    let dispName = TEAM_EMOJIS[z.team] || z.team || "BAZA";
+    let dispName = TEAM_EMOJIS[z.team] || z.team || "NEUTRAL";
     ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(dispName, 0, -5);
+
+    // NOWOŚĆ: Pasek HP bazy / Przejmowanie
+    if (z.captureProgress !== undefined && z.captureProgress < 100) {
+        ctx.fillStyle = 'black'; ctx.fillRect(-50, -z.radius - 30, 100, 15);
+        ctx.fillStyle = z.owner === player.team ? '#2ecc71' : '#e74c3c'; 
+        ctx.fillRect(-48, -z.radius - 28, (z.captureProgress / 100) * 96, 11);
+    }
 
     ctx.restore();
 }
@@ -536,13 +558,19 @@ function gameLoop(currentTime) {
         ctx.scale(globalScale, globalScale);
         ctx.translate(-vCamera.x - (vWidth / 2), -vCamera.y - (vHeight / 2));
         
-        ctx.fillStyle = '#1c2833'; ctx.fillRect(vCamera.x, vCamera.y, vWidth, vHeight); 
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; ctx.lineWidth = 2; const TILE_SIZE = 100;
-        const offsetX = Math.floor(vCamera.x / TILE_SIZE) * TILE_SIZE; const offsetY = Math.floor(vCamera.y / TILE_SIZE) * TILE_SIZE;
-        ctx.beginPath();
-        for(let x = offsetX; x < vCamera.x + vWidth; x += TILE_SIZE) { ctx.moveTo(x, vCamera.y); ctx.lineTo(x, vCamera.y + vHeight); }
-        for(let y = offsetY; y < vCamera.y + vHeight; y += TILE_SIZE) { ctx.moveTo(vCamera.x, y); ctx.lineTo(vCamera.x + vWidth, y); }
-        ctx.stroke();
+        // --- 🛡️ RYSOWANIE MAPY (Korzysta z map.js, rysuje drogi, krzaki i środowisko) ---
+        if (typeof drawForestMap === 'function') {
+            drawForestMap(ctx, vCamera, vWidth, vHeight);
+        } else {
+            // Zabezpieczenie jeśli map.js zawiedzie
+            ctx.fillStyle = '#1c2833'; ctx.fillRect(vCamera.x, vCamera.y, vWidth, vHeight); 
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)'; ctx.lineWidth = 2; const TILE_SIZE = 100;
+            const offsetX = Math.floor(vCamera.x / TILE_SIZE) * TILE_SIZE; const offsetY = Math.floor(vCamera.y / TILE_SIZE) * TILE_SIZE;
+            ctx.beginPath();
+            for(let x = offsetX; x < vCamera.x + vWidth; x += TILE_SIZE) { ctx.moveTo(x, vCamera.y); ctx.lineTo(x, vCamera.y + vHeight); }
+            for(let y = offsetY; y < vCamera.y + vHeight; y += TILE_SIZE) { ctx.moveTo(vCamera.x, y); ctx.lineTo(vCamera.x + vWidth, y); }
+            ctx.stroke();
+        }
         ctx.restore();
 
         ctx.save();
@@ -552,16 +580,7 @@ function gameLoop(currentTime) {
 
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 10; ctx.strokeRect(0, 0, WORLD_SIZE, WORLD_SIZE);
         
-        castles.forEach(c => {
-            drawStarBase(ctx, c);
-            if (c.captureProgress > 0) {
-                ctx.fillStyle = 'black'; ctx.fillRect(c.x - 50, c.y - c.radius - 30, 100, 15);
-                ctx.fillStyle = c.captureProgress >= 100 ? '#e74c3c' : '#f1c40f'; 
-                ctx.fillRect(c.x - 48, c.y - c.radius - 28, (c.captureProgress / 100) * 96, 11);
-                ctx.fillStyle = '#fff'; ctx.font = 'bold 10px Arial'; ctx.textAlign = 'center';
-                ctx.fillText(c.captureProgress >= 100 ? "PRZEJĘTO!" : "OBLĘŻENIE...", c.x, c.y - c.radius - 20);
-            }
-        });
+        castles.forEach(c => drawStarBase(ctx, c));
         
         foods.forEach(f => { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(f.x, f.y, 8, 0, Math.PI * 2); ctx.fill(); });
         loots.forEach(l => { 
@@ -580,8 +599,8 @@ function gameLoop(currentTime) {
                 ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(rot); 
                 ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-10,-1,20,2); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10,-3,4,6); 
                 ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(10,-3); ctx.lineTo(15,0); ctx.lineTo(10,3); ctx.fill(); ctx.restore();
-            } else if (p.projType.includes('knife') || p.projType === 'cleaver') { drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8); } 
-            else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') { drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2); }
+            } else if (p.projType.includes('knife') || p.projType === 'cleaver') { drawKnifeModel(p.x, p.y, rot + Math.PI/2, 0.8, p.projType); } 
+            else if (p.projType.includes('shuriken') || p.projType === 'chakram' || p.projType === 'explosive_kunai') { drawShurikenModel(p.x, p.y, rot + (Date.now()/20), 1.2, p.projType); }
         });
 
         if (draggedBotId && player) {
@@ -593,6 +612,7 @@ function gameLoop(currentTime) {
             ctx.restore();
         }
 
+        // --- 🛡️ RYSOWANIE ENTITIES Z MECHANIKĄ UKRYCIA (STEALTH) ---
         allEntities.forEach(e => {
             if (e.isSafe) return; 
 
@@ -604,16 +624,26 @@ function gameLoop(currentTime) {
                 e.y = le.y;
             }
             
-            let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
-            e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
-            e.isMoving = !!e.isMoving; e.skin = e.skin || 'standard'; e.weaponPath = e.paths ? e.paths.weapon : (e === player ? paths.weapon : 'none');
+            // LOGIKA NIEWIDZIALNOŚCI W KRZAKACH
+            let isHidden = e.inBush && (!player || !player.inBush) && (e.team !== player.team);
+            
+            // Rysujemy tylko, jeśli nie jest wrogiem w krzaku
+            if (!isHidden) {
+                let renderMass = e.score; if (isNaN(renderMass) || renderMass == null || renderMass < 1) renderMass = 5;
+                e.moveAngle = (typeof e.moveAngle === 'number' && !isNaN(e.moveAngle)) ? e.moveAngle : 0;
+                e.isMoving = !!e.isMoving; e.skin = e.skin || 'standard'; e.weaponPath = e.paths ? e.paths.weapon : (e === player ? paths.weapon : 'none');
 
-            if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
-            else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
-            
-            drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
-            
-            // --- 🛡️ ZMIANA: USUNIĘTO RYSOWANIE UTRUDNIAJĄCEJ LITERY NA POSTACI ---
+                if (e.team) { e.color = TEAM_COLORS[e.team] || '#fff'; } 
+                else if (!e.team && e.name && e.name.includes("Bot")) { e.color = '#7f8c8d'; }
+                else if (e.name === 'Elitarny Golem') { e.color = '#8e44ad'; } // Jungle Mob
+                
+                // Jeśli my jesteśmy w krzaku (lub nasz sojusznik), stajemy się lekko przezroczyści
+                if (e.inBush) ctx.globalAlpha = 0.6;
+                
+                drawStickman(e, e.x, e.y, getScale(renderMass), false, currentKingId); 
+                
+                ctx.globalAlpha = 1.0;
+            }
         });
 
         if (particles.length > 300) particles.shift();
@@ -630,11 +660,6 @@ function gameLoop(currentTime) {
             ctx.strokeText(`-${dt.val}`, dt.x, dt.y); ctx.fillText(`-${dt.val}`, dt.x, dt.y); ctx.restore();
             if (dt.life <= 0) damageTexts.splice(i, 1);
         }
-
-        bushes.forEach(b => {
-            ctx.globalAlpha = 0.85; ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2); ctx.fill();
-            ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(b.x - b.radius/3, b.y - b.radius/3, b.radius/2, 0, Math.PI*2); ctx.fill(); ctx.globalAlpha = 1.0;
-        });
 
         meteorZones.forEach(m => {
             ctx.fillStyle = 'rgba(231, 76, 60, 0.2)'; ctx.beginPath(); ctx.arc(m.x, m.y, m.radius, 0, Math.PI * 2); ctx.fill();
@@ -675,16 +700,17 @@ function gameLoop(currentTime) {
 
         if (isDebugMode && player) {
             ctx.save();
-            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 140);
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.75)'; ctx.fillRect(10, 200, 240, 160);
             ctx.fillStyle = '#2ecc71'; ctx.font = '13px monospace'; ctx.textAlign = 'left'; ctx.textBaseline = 'top';
             ctx.fillText(`=== DEBUG MODE (F3) ===`, 20, 210);
             ctx.fillStyle = '#ecf0f1';
             ctx.fillText(`X: ${player.x.toFixed(1)}  Y: ${player.y.toFixed(1)}`, 20, 235);
             ctx.fillText(`Masa (Score): ${player.score}`, 20, 255);
             ctx.fillText(`Speed: ${(5 + (playerSkills.speed||0) * 0.5).toFixed(2)}`, 20, 275);
-            ctx.fillText(`Skin: ${player.skin}`, 20, 295);
+            ctx.fillText(`Ukrycie (Krzaki): ${player.inBush ? 'TAK' : 'NIE'}`, 20, 295);
+            ctx.fillText(`Skin: ${player.skin}`, 20, 315);
             ctx.fillStyle = (Date.now() - lastServerTickTime) > 100 ? '#e74c3c' : '#2ecc71';
-            ctx.fillText(`Ping/Lag: ${Date.now() - lastServerTickTime} ms`, 20, 315);
+            ctx.fillText(`Ping/Lag: ${Date.now() - lastServerTickTime} ms`, 20, 335);
             ctx.restore();
         }
 
@@ -699,6 +725,22 @@ function gameLoop(currentTime) {
         }
 
         if (gameState !== 'GAMEOVER') {
+            // --- 🛡️ NOWOŚĆ: PASEK PRZEJMOWANIA BAZY ---
+            let currentCastle = castles.find(c => Math.hypot(player.x - c.x, player.y - c.y) < c.radius);
+            if (currentCastle && currentCastle.owner !== player.team) {
+                let pWidth = 400; let pHeight = 30;
+                let px = canvas.width/2 - pWidth/2; let py = 120;
+                
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.8)'; ctx.fillRect(px, py, pWidth, pHeight);
+                ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(px, py, pWidth, pHeight);
+                
+                ctx.fillStyle = '#3498db'; 
+                ctx.fillRect(px, py, (currentCastle.captureProgress / 100) * pWidth, pHeight);
+                
+                ctx.fillStyle = '#ffffff'; ctx.font = "bold 18px 'Rajdhani', sans-serif"; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText(`PRZEJMOWANIE BAZY: ${Math.floor(currentCastle.captureProgress)}%`, canvas.width/2, py + 15);
+            }
+
             ctx.fillStyle = 'rgba(0,0,0,0.8)'; ctx.fillRect(canvas.width - 280, 10, 270, 140); ctx.fillStyle = '#f1c40f'; ctx.font = 'bold 16px Arial'; ctx.fillText("🏆 WYNIKI FRAKCJI", canvas.width - 265, 30);
             topEntities.forEach((p, i) => {
                 let yPos = 55 + i * 20; let displayScore = isNaN(p.score) ? 5 : Math.floor(p.score);

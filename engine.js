@@ -1,5 +1,5 @@
 // ==========================================
-// ENGINE.JS - Silnik graficzny i narzędzia
+// ENGINE.JS - Silnik graficzny i narzędzia (Vibe Noir Edition)
 // ==========================================
 
 // --- NOWOŚĆ: WYKRYWANIE TELEFONÓW (Do zapobiegania lagom) ---
@@ -18,7 +18,7 @@ const skins = {
     arystokrata: new Image(),
     midas: new Image()
 };
-skins.standard.src = 'xtreme-destiny-postac.png'; 
+skins.standard.src = 'xtreme-destiny-postac(1).png'; 
 skins.ninja.src = 'ninja-transparent.png';
 skins.arystokrata.src = 'postac-bez-tla.png';
 skins.midas.src = 'xtreme-destiny-midas.png';
@@ -38,28 +38,73 @@ function getScale(s) {
     return 1 + Math.pow(Math.max(0, s - 1), 0.45) * 0.15;
 }
 
-// --- RYSOWANIE GRAFIKI ---
+// --- NOWOŚĆ: SYSTEM KOLOROWANIA BRONI (Dopasowany do rzadkości) ---
+function getWeaponColor(type) {
+    let pColor = '#bdc3c7'; let pGlow = '#ffffff';
+    if (type) {
+        if (type.includes('golden')) { pColor = '#f1c40f'; pGlow = '#f39c12'; }
+        else if (type.includes('diamond')) { pColor = '#00cec9'; pGlow = '#81ecec'; }
+        else if (type === 'crossbow' || type.includes('hunting') || type === 'cleaver') { pColor = '#e74c3c'; pGlow = '#ff7675'; }
+        else if (type === 'shotgun') { pColor = '#ff0000'; pGlow = '#ff4757'; }
+        else if (type === 'chakram') { pColor = '#9b59b6'; pGlow = '#a29bfe'; }
+        else if (type === 'explosive_kunai') { pColor = '#ff9f43'; pGlow = '#ff6b6b'; }
+    }
+    return { color: pColor, glow: pGlow };
+}
 
-function drawBowModel(x, y, angle, sc) {
+// --- RYSOWANIE GRAFIKI BRONI W RĘKU ---
+
+function drawBowModel(x, y, angle, sc, type) {
+    let colors = getWeaponColor(type);
     ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round';
+    
+    ctx.strokeStyle = colors.color; 
+    ctx.lineWidth = 3 * sc; ctx.lineCap = 'round';
+    if (!window.isMobile) { ctx.shadowBlur = 10 * sc; ctx.shadowColor = colors.glow; }
+    
     ctx.beginPath(); ctx.arc(0, 0, 15 * sc, -Math.PI/2, Math.PI/2); ctx.stroke();
+    
+    ctx.shadowBlur = 0;
     ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc;
     ctx.beginPath(); ctx.moveTo(0, -15 * sc); ctx.lineTo(0, 15 * sc); ctx.stroke();
     ctx.restore();
 }
 
-function drawKnifeModel(x, y, angle, sc) {
+function drawKnifeModel(x, y, angle, sc, type) {
+    let colors = getWeaponColor(type);
     ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(15*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill();
-    ctx.fillStyle = '#2c3e50'; ctx.fillRect(-5*sc, -2*sc, 5*sc, 4*sc);
+    
+    if (!window.isMobile) { ctx.shadowBlur = 10 * sc; ctx.shadowColor = colors.glow; }
+    ctx.fillStyle = colors.color; 
+    
+    ctx.beginPath(); 
+    if (type === 'cleaver') {
+        ctx.fillRect(0, -10*sc, 15*sc, 20*sc); // Tasak
+    } else {
+        ctx.moveTo(0, -2*sc); ctx.lineTo(15*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); // Zwykły nóż
+    }
+    
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = '#111111'; ctx.fillRect(-5*sc, -2*sc, 5*sc, 4*sc);
     ctx.restore();
 }
 
-function drawShurikenModel(x, y, angle, sc) {
+function drawShurikenModel(x, y, angle, sc, type) {
+    let colors = getWeaponColor(type);
     ctx.save(); ctx.translate(x, y); ctx.rotate(angle);
-    ctx.fillStyle = '#34495e';
-    for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(6*sc, -2*sc); ctx.lineTo(12*sc, 0); ctx.lineTo(6*sc, 2*sc); ctx.fill(); ctx.rotate(Math.PI/2); }
+    
+    if (!window.isMobile) { ctx.shadowBlur = 15 * sc; ctx.shadowColor = colors.glow; }
+    
+    if (type === 'chakram') {
+        ctx.beginPath(); ctx.arc(0,0, 8*sc, 0, Math.PI*2); ctx.lineWidth = 3*sc; ctx.strokeStyle = colors.color; ctx.stroke();
+    } else {
+        ctx.fillStyle = colors.color;
+        for(let i=0; i<4; i++) { 
+            ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(6*sc, -2*sc); ctx.lineTo(12*sc, 0); ctx.lineTo(6*sc, 2*sc); ctx.fill(); ctx.rotate(Math.PI/2); 
+        }
+    }
+    
+    ctx.shadowBlur = 0;
     ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 2*sc, 0, Math.PI*2); ctx.fill();
     ctx.restore();
 }
@@ -83,16 +128,18 @@ function drawSwordModel(p, x, y, angle, sc, tier = 1) {
         return;
     }
 
-    let bladeColor = tier === 3 ? '#f1c40f' : (tier === 2 ? '#e74c3c' : '#bdc3c7');
+    // Używamy tego samego systemu kolorów co dla pocisków
+    let colors = getWeaponColor(p ? p.projType : 'sword');
+    let bladeColor = tier === 3 ? '#f1c40f' : (tier === 2 ? '#e74c3c' : colors.color);
     let glow = 'transparent';
     
     if (!window.isMobile) {
         if (p && p.isPiercing) {
             glow = 'rgba(255, 255, 255, 0.8)'; 
             ctx.shadowBlur = 15 * sc;
-        } else if (tier >= 2) {
-            glow = tier === 3 ? 'rgba(241, 196, 15, 0.5)' : 'rgba(231, 76, 60, 0.3)';
-            ctx.shadowBlur = 10 * sc;
+        } else if (tier >= 2 || colors.glow !== '#ffffff') {
+            glow = tier === 3 ? 'rgba(241, 196, 15, 0.5)' : (tier === 2 ? 'rgba(231, 76, 60, 0.3)' : colors.glow);
+            ctx.shadowBlur = 15 * sc;
         }
         ctx.shadowColor = glow;
     }
@@ -108,7 +155,8 @@ function drawSwordModel(p, x, y, angle, sc, tier = 1) {
     }
     ctx.lineTo(0, 2 * sc); ctx.fill();
 
-    ctx.fillStyle = tier === 3 ? '#e67e22' : '#2c3e50';
+    ctx.shadowBlur = 0; // Reset cienia dla rękojeści
+    ctx.fillStyle = tier === 3 ? '#e67e22' : '#111111';
     let guardWidth = tier >= 2 ? 26 : 20;
     ctx.fillRect(4 * sc, -(guardWidth/2) * sc, 4 * sc, guardWidth * sc);
     if (tier === 3) {
@@ -174,8 +222,8 @@ function drawDynamicArmor(e, x, y, sc, tier) {
     let gemColor = null;
 
     if (skinType === 'ninja') {
-        baseColor = '#2c3e50'; 
-        trimColor = '#e74c3c'; 
+        baseColor = '#111111'; 
+        trimColor = '#3498db'; // Niebieski neon dla ninja
     } else if (skinType === 'arystokrata') {
         baseColor = '#f1c40f'; 
         trimColor = '#e67e22'; 
@@ -191,7 +239,9 @@ function drawDynamicArmor(e, x, y, sc, tier) {
         if (skinType === 'ninja') {
             ctx.fillStyle = baseColor;
             ctx.beginPath(); ctx.moveTo(-6*sc, -12*sc); ctx.lineTo(6*sc, -12*sc); ctx.lineTo(10*sc, 15*sc); ctx.lineTo(0, 22*sc); ctx.lineTo(-10*sc, 15*sc); ctx.fill();
-            ctx.strokeStyle = trimColor; ctx.lineWidth = 2*sc; ctx.stroke();
+            ctx.strokeStyle = trimColor; ctx.lineWidth = 2*sc; 
+            if (!window.isMobile) { ctx.shadowBlur = 5; ctx.shadowColor = trimColor; }
+            ctx.stroke();
         } else {
             ctx.fillStyle = baseColor;
             ctx.beginPath(); ctx.arc(0, 0, 14 * sc, 0, Math.PI * 2); ctx.fill();
@@ -227,8 +277,8 @@ function drawDynamicArmor(e, x, y, sc, tier) {
         ctx.translate(0, -45 * sc + floatY);
         
         if (skinType === 'ninja') {
-            ctx.fillStyle = '#e74c3c';
-            if (!window.isMobile) { ctx.shadowColor = '#c0392b'; ctx.shadowBlur = 15; }
+            ctx.fillStyle = '#3498db';
+            if (!window.isMobile) { ctx.shadowColor = '#3498db'; ctx.shadowBlur = 15; }
             ctx.beginPath(); ctx.moveTo(0, -15*sc); ctx.lineTo(10*sc, 5*sc); ctx.lineTo(-10*sc, 5*sc); ctx.fill();
             ctx.beginPath(); ctx.moveTo(0, 10*sc); ctx.lineTo(5*sc, 20*sc); ctx.lineTo(-5*sc, 20*sc); ctx.fill();
         } else {
@@ -249,12 +299,51 @@ function drawDynamicArmor(e, x, y, sc, tier) {
 function drawStickman(e, x, y, sc, safe, kingId) {
     if (safe) return; 
 
+    let eId = e.id || e.name || 'unknown'; 
+    if (!visualStates[eId]) visualStates[eId] = { lastScore: e.score || 0, eatTimer: 0, trail: [], lastX: x, lastY: y };
+    
+    // --- NOWOŚĆ: SYSTEM SMUG (TRAILS) DLA EFEKTU PĘDU ---
+    if (Math.hypot(x - visualStates[eId].lastX, y - visualStates[eId].lastY) > 1) {
+        visualStates[eId].trail.push({x: x, y: y});
+        let maxLen = e.skin === 'ninja' ? 12 : 5; // Ninja ma dłuuuuugi ogon
+        if (visualStates[eId].trail.length > maxLen) visualStates[eId].trail.shift();
+    } else {
+        if (visualStates[eId].trail.length > 0) visualStates[eId].trail.shift();
+    }
+    visualStates[eId].lastX = x;
+    visualStates[eId].lastY = y;
+
     ctx.save(); 
+
+    // RYSOWANIE SMUGI (Pod postacią)
+    if (visualStates[eId].trail.length > 1) {
+        ctx.save();
+        ctx.beginPath();
+        // Przesunięcie lekko w dół, żeby smuga ciągnęła się za nogami/ciałem
+        ctx.moveTo(visualStates[eId].trail[0].x, visualStates[eId].trail[0].y + 10 * sc);
+        for(let i = 1; i < visualStates[eId].trail.length; i++) {
+            ctx.lineTo(visualStates[eId].trail[i].x, visualStates[eId].trail[i].y + 10 * sc);
+        }
+        
+        let isHumanObj = (typeof player !== 'undefined' && e === player) || (e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
+        let trailColorBase = e.skin === 'ninja' ? 'rgba(52, 152, 219, ' : (isHumanObj ? 'rgba(255, 255, 255, ' : 'rgba(231, 76, 60, ');
+        
+        ctx.strokeStyle = trailColorBase + '0.2)';
+        ctx.lineWidth = 30 * sc;
+        ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+        if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.strokeStyle; }
+        ctx.stroke();
+        
+        ctx.strokeStyle = trailColorBase + '0.5)';
+        ctx.lineWidth = 15 * sc;
+        ctx.stroke();
+        ctx.restore();
+    }
 
     // BLOB SHADOW
     if (!window.isMobile) {
         ctx.save();
-        ctx.fillStyle = 'rgba(0, 0, 0, 0.35)'; 
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.5)'; 
         ctx.beginPath();
         ctx.ellipse(x + 5 * sc, y + 25 * sc, 20 * sc, 8 * sc, 0, 0, Math.PI * 2);
         ctx.fill();
@@ -294,7 +383,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     const swordTier = getTier(score, [15, 300, 700]); 
     const bootTier = getTier(skills.speed, [3, 6, 9]);
 
-    let isHuman = isPlayer || (e.id && e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
+    let isHuman = isPlayer || (e.name && !e.name.toLowerCase().includes('bot') && e.name !== 'Wojownik');
 
     let wpnX = isHuman ? 28 : 18;
     let wpnY = isHuman ? 18 : 10;
@@ -302,7 +391,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     // --- NOGI I BUTY (Rysowane z tyłu) ---
     if (!isHuman) {
         ctx.save();
-        ctx.strokeStyle = e.color || '#000'; 
+        ctx.strokeStyle = '#050505'; // Nogi botów są teraz czarne by pasować do Vibe Noir
         ctx.lineWidth = 11 * sc; 
         ctx.lineCap = 'round'; ctx.lineJoin = 'round';
         ctx.beginPath(); 
@@ -315,7 +404,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
         if (score >= 200) { 
             const legTier = getTier(score, [200, 500, 900]); 
-            ctx.strokeStyle = legTier === 3 ? '#f1c40f' : (legTier === 2 ? '#3498db' : '#95a5a6'); 
+            ctx.strokeStyle = legTier === 3 ? '#f1c40f' : (legTier === 2 ? '#3498db' : '#e74c3c'); // Czerwone paski u bosa
             ctx.lineWidth = 8 * sc; ctx.lineCap = 'round';
             ctx.beginPath(); ctx.moveTo(x - 5 * sc, y + 16 * sc); ctx.lineTo(x - 11 * sc, y + 27 * sc); 
             ctx.moveTo(x + 5 * sc, y + 16 * sc); ctx.lineTo(x + 11 * sc, y + 27 * sc); 
@@ -323,7 +412,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
 
         if (score >= 350) { 
-            ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#34495e'); 
+            ctx.fillStyle = bootTier === 3 ? '#f1c40f' : (bootTier === 2 ? '#e74c3c' : '#111111'); 
             ctx.beginPath(); ctx.roundRect(x - 16 * sc, y + 26 * sc, 12 * sc, 8 * sc, 4); ctx.fill(); 
             ctx.beginPath(); ctx.roundRect(x + 4 * sc, y + 26 * sc, 12 * sc, 8 * sc, 4); ctx.fill(); 
             if (bootTier >= 2) { 
@@ -344,21 +433,19 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     // BRONIE Z PLECAKA RYSOWANE Z TYŁU!
     // ==========================================
     if (inv.bow > 0 || inv.golden_bow || inv.diamond_bow || inv.crossbow || inv.shotgun) { ctx.save(); ctx.translate(x - 5 * sc, y + 2 * sc); ctx.rotate(-Math.PI / 6); ctx.fillStyle = '#4a235a'; ctx.fillRect(-5 * sc, -12 * sc, 10 * sc, 24 * sc); ctx.fillStyle = '#bdc3c7'; ctx.fillRect(-3 * sc, -18 * sc, 2 * sc, 6 * sc); ctx.fillRect(1 * sc, -16 * sc, 2 * sc, 4 * sc); ctx.fillStyle = '#e74c3c'; ctx.fillRect(-4 * sc, -20 * sc, 4 * sc, 2 * sc); ctx.fillRect(0 * sc, -18 * sc, 4 * sc, 2 * sc); if (!actWpn.includes('bow') && actWpn !== 'crossbow' && actWpn !== 'shotgun') { ctx.strokeStyle = '#8e44ad'; ctx.lineWidth = 3 * sc; ctx.lineCap = 'round'; ctx.beginPath(); ctx.arc(0, 0, 16 * sc, -Math.PI/2, Math.PI/2); ctx.stroke(); ctx.strokeStyle = '#bdc3c7'; ctx.lineWidth = 1 * sc; ctx.beginPath(); ctx.moveTo(0, -16 * sc); ctx.lineTo(0, 16 * sc); ctx.stroke(); } ctx.restore(); }
-    if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#2c3e50'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
+    if ((inv.knife || inv.golden_knife || inv.diamond_knife || inv.hunting_knife || inv.cleaver) && !actWpn.includes('knife') && actWpn !== 'cleaver') { ctx.save(); ctx.translate(x + 12 * sc, y + 14 * sc); ctx.rotate(Math.PI / 4); ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.moveTo(0, -2*sc); ctx.lineTo(14*sc, 0); ctx.lineTo(0, 2*sc); ctx.fill(); ctx.fillStyle = '#111'; ctx.fillRect(-4*sc, -2*sc, 4*sc, 4*sc); ctx.restore(); }
     if ((inv.shuriken || inv.golden_shuriken || inv.diamond_shuriken || inv.chakram || inv.explosive_kunai) && !actWpn.includes('shuriken') && actWpn !== 'chakram' && actWpn !== 'explosive_kunai') { ctx.save(); ctx.translate(x - 10 * sc, y + 18 * sc); ctx.fillStyle = '#34495e'; for(let i=0; i<4; i++) { ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(3.5*sc, -1.5*sc); ctx.lineTo(7*sc, 0); ctx.lineTo(3.5*sc, 1.5*sc); ctx.fill(); ctx.rotate(Math.PI/2); } ctx.fillStyle = '#bdc3c7'; ctx.beginPath(); ctx.arc(0,0, 1.5*sc, 0, Math.PI*2); ctx.fill(); ctx.restore(); }
     
     // Pancerz korpusu
     if (armorTier > 0) drawProArmor(x, y + 4 * sc, sc, armorTier, skills.strength); 
 
-    let eId = e.id || e.name || 'unknown'; 
-    if (!visualStates[eId]) visualStates[eId] = { lastScore: score, eatTimer: 0 };
     if (score > visualStates[eId].lastScore) { visualStates[eId].eatTimer = 15; visualStates[eId].lastScore = score; } 
     if (score < visualStates[eId].lastScore) { visualStates[eId].lastScore = score; } 
     if (visualStates[eId].eatTimer > 0) visualStates[eId].eatTimer--;
 
     ctx.save();
     
-    // --- GŁÓWNE CIAŁO POSTACI (VIBE NOIR Z TWOIMI GRAFIKAMI) ---
+    // --- GŁÓWNE CIAŁO POSTACI ---
     if (isHuman) {
         const spriteSize = 60 * sc; 
         let timeOffset = Date.now() + e.x; 
@@ -374,21 +461,16 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         if (e.skin === 'ninja') currentSkinImg = skins.ninja;
         else if (e.skin === 'arystokrata') currentSkinImg = skins.arystokrata;
         
-        // --- DODAJEMY POTĘŻNĄ BIAŁĄ AURĘ POD TWOJĄ GRAFIKĄ ---
         if (!window.isMobile) {
-            ctx.shadowBlur = 35 * sc;
-            ctx.shadowColor = '#ffffff'; 
+            ctx.shadowBlur = 20 * sc;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.6)'; 
         }
         
-        // Rysujemy Twoją autorską postać z Figmy
         ctx.drawImage(currentSkinImg, -spriteSize / 2, -spriteSize / 2, spriteSize, spriteSize);
-        
-        // Resetujemy cień, żeby inne rzeczy nie świeciły
         ctx.shadowBlur = 0; 
         
-        // PAS TAKTYCZNY NA BRONIE (Dla Humana)
         if (score >= 20) {
-            ctx.fillStyle = '#2c3e50'; 
+            ctx.fillStyle = '#111111'; 
             ctx.fillRect(-15 * sc, 16 * sc, 30 * sc, 5 * sc); 
             ctx.fillStyle = '#f1c40f'; 
             ctx.fillRect(-3 * sc, 15 * sc, 6 * sc, 7 * sc); 
@@ -398,39 +480,45 @@ function drawStickman(e, x, y, sc, safe, kingId) {
 
         if (visualStates[eId].eatTimer > 0) {
             ctx.rotate(-wobble); ctx.scale(1/breatheX, 1/breatheY);
-            ctx.fillStyle = '#ffffff'; // Zmiana tła emotki na białe
+            ctx.fillStyle = '#ffffff'; 
             ctx.beginPath(); ctx.arc(25 * sc, -25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
             ctx.strokeStyle = '#050505'; ctx.lineWidth = 2; ctx.stroke();
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', 25 * sc, -25 * sc);
         }
     } else {
-        // --- BOTY I BOSSOWIE ---
-        let isBoss = score >= 200; // System wykrywania potężnych botów
+        // --- NOWOŚĆ: NEONOWE CYBER-BOTY ---
+        let isBoss = score >= 200; 
         
         if (isBoss) {
-            // Boss: Czarna bryła, biała obwódka i czerwone oczy
-            if (!window.isMobile) { ctx.shadowBlur = 15 * sc; ctx.shadowColor = '#ff0000'; }
-            ctx.fillStyle = '#050505';
+            if (!window.isMobile) { ctx.shadowBlur = 25 * sc; ctx.shadowColor = '#ff0000'; }
+            ctx.fillStyle = '#050505'; // Czarne, puste ciało
             ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2 * sc; ctx.stroke();
-            ctx.shadowBlur = 0; // Reset cienia po narysowaniu obwódki
             
-            ctx.fillStyle = '#ff0000';
-            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = '#ff0000'; // Czerwona neonowa ramka
+            ctx.lineWidth = 3 * sc; ctx.stroke();
+            ctx.shadowBlur = 0; 
+            
+            ctx.fillStyle = '#ff0000'; // Skośne, wściekłe czerwone oczy
+            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 4 * sc, 2 * sc, Math.PI/8, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 4 * sc, 2 * sc, -Math.PI/8, 0, Math.PI * 2); ctx.fill();
         } else {
-            // Zwykły Bot: Biała zjawa
-            ctx.fillStyle = '#ffffff';
+            let botNeonColor = e.color || '#00cec9'; // Domyślnie cyjan
+            if (!window.isMobile) { ctx.shadowBlur = 15 * sc; ctx.shadowColor = botNeonColor; }
+            
+            ctx.fillStyle = '#050505'; // Puste w środku
             ctx.beginPath(); ctx.arc(x, y, 22 * sc, 0, Math.PI * 2); ctx.fill();
             
-            ctx.fillStyle = '#050505'; // Czarne oczy
-            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
-            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3.5 * sc, 5.5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = botNeonColor; // Obwódka w kolorze drużyny/bota
+            ctx.lineWidth = 2 * sc; ctx.stroke();
+            ctx.shadowBlur = 0;
+            
+            ctx.fillStyle = botNeonColor; // Świecące oczy
+            ctx.beginPath(); ctx.ellipse(x - 7 * sc, y - 5 * sc, 3 * sc, 5 * sc, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(x + 7 * sc, y - 5 * sc, 3 * sc, 5 * sc, 0, 0, Math.PI * 2); ctx.fill();
         }
         
-        // PAS TAKTYCZNY (Dla Botów AI)
         if (score >= 20) {
-            ctx.fillStyle = '#2c3e50'; 
+            ctx.fillStyle = '#111'; 
             ctx.fillRect(x - 15 * sc, y + 16 * sc, 30 * sc, 5 * sc); 
             ctx.fillStyle = '#f1c40f'; 
             ctx.fillRect(x - 3 * sc, y + 15 * sc, 6 * sc, 7 * sc); 
@@ -441,8 +529,8 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
 
         if (visualStates[eId].eatTimer > 0) {
-            ctx.fillStyle = 'white'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
-            ctx.strokeStyle = '#ccc'; ctx.lineWidth = 1; ctx.stroke();
+            ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(x + 25 * sc, y - 25 * sc, 18 * sc, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = e.color || '#00cec9'; ctx.lineWidth = 2; ctx.stroke();
             ctx.font = `${22 * sc}px Arial`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText('🤤', x + 25 * sc, y - 25 * sc);
         }
     }
@@ -452,7 +540,7 @@ function drawStickman(e, x, y, sc, safe, kingId) {
     // --- RYSOWANIE AKTYWNEJ BRONI I TARCZY (Z przodu postaci) ---
     if (e.isShielding) { 
         ctx.save(); ctx.strokeStyle = '#3498db'; ctx.lineWidth = 6 * sc; 
-        if (!window.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#3498db'; }
+        if (!window.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#3498db'; }
         ctx.beginPath(); 
         let shieldAngle = isPlayer ? Math.atan2(moveDir.y, moveDir.x) : 0; 
         ctx.arc(x, y, 40 * sc, shieldAngle - 0.9, shieldAngle + 0.9); ctx.stroke(); ctx.restore(); 
@@ -462,13 +550,14 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         let weaponAngle = isPlayer ? Math.atan2(moveDir.y, moveDir.x) + 0.5 : 0.5; 
         let handX = x + wpnX * sc, handY = y + wpnY * sc; 
         
+        // Zastosowanie nowych modeli broni z kolorami!
         if (actWpn === 'sword' && score >= 15) { 
             e.isPiercing = isPlayer ? (typeof weaponPath !== 'undefined' ? weaponPath === 'piercing' : false) : false; 
             drawSwordModel(e, handX, handY, weaponAngle, sc, swordTier || 1); 
         } 
-        else if (actWpn.includes('bow') || actWpn === 'crossbow' || actWpn === 'shotgun') { drawBowModel(handX, handY, weaponAngle, sc); } 
-        else if (actWpn.includes('knife') || actWpn === 'cleaver') { drawKnifeModel(handX, handY, weaponAngle, sc); } 
-        else if (actWpn.includes('shuriken') || actWpn === 'chakram' || actWpn === 'explosive_kunai') { drawShurikenModel(handX, handY, weaponAngle, sc); }
+        else if (actWpn.includes('bow') || actWpn === 'crossbow' || actWpn === 'shotgun') { drawBowModel(handX, handY, weaponAngle, sc, actWpn); } 
+        else if (actWpn.includes('knife') || actWpn === 'cleaver') { drawKnifeModel(handX, handY, weaponAngle, sc, actWpn); } 
+        else if (actWpn.includes('shuriken') || actWpn === 'chakram' || actWpn === 'explosive_kunai') { drawShurikenModel(handX, handY, weaponAngle, sc, actWpn); }
         
         if (isPlayer && typeof gameState !== 'undefined' && gameState === 'PLAYING') { 
             ctx.strokeStyle = 'rgba(231, 76, 60, 0.6)'; ctx.lineWidth = 2; ctx.beginPath(); 
@@ -477,13 +566,12 @@ function drawStickman(e, x, y, sc, safe, kingId) {
         }
     }
 
-    // --- NOWOŚĆ: VIBE NOIR TEKST ---
-    ctx.font = `bold ${13 * sc}px 'Courier New', monospace`; 
+    // --- VIBE NOIR TEKST ---
+    ctx.font = `bold ${14 * sc}px 'Rajdhani', sans-serif`; 
     ctx.textAlign = 'center';
     let displayScore = Math.floor(score);
     let textToShow = (e.name !== 'Wojownik') ? `${e.name || "Bot"} [${displayScore}]` : `[${displayScore}]`;
     
-    // Gracze mają czysty biały tekst, boty lekko szary
     ctx.fillStyle = isHuman ? '#ffffff' : '#aaaaaa'; 
     ctx.fillText(textToShow, x, y - 65 * sc); 
     
