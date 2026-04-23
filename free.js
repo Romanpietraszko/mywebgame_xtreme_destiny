@@ -18,12 +18,10 @@ let lastWindTrigger = 0;
 // EFEKTY I ANTY-LAG (Game Juice & LERP)
 let screenShake = 0;
 let lerpState = { players: {}, bots: {} };
-let entityLerp = {}; // <--- POPRAWKA 1: Dodana brakująca zmienna LERP
+let entityLerp = {}; // <--- ZABEZPIECZENIE LERP
 
-// INICJALIZACJA MAPY Z MAP.JS
-window.addEventListener('load', () => {
-    initMap(typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000, 'FREE');
-}); // <--- POPRAWKA 2: Bezpieczne ładowanie mapy dopiero, gdy pliki są gotowe
+// INICJALIZACJA MAPY Z MAP.JS NATYCHMIAST (Naprawia znikający zamek na radarze)
+initMap(typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000, 'FREE');
 
 let skillPoints = 0;
 let playerSkills = { speed: 0, strength: 0, weapon: 0 };
@@ -390,7 +388,7 @@ socket.on('init', (data) => {
 socket.on('levelUp', (data) => { skillPoints = data.points; });
 
 socket.on('skillUpdated', (data) => {
-    if(!data) return; // <--- POPRAWKA 3: Bezpieczeństwo przed uszkodzonym pakietem skilli
+    if(!data) return; 
     playerSkills = data.skills || { speed: 0, strength: 0, weapon: 0 }; 
     skillPoints = data.points || 0; 
     paths = data.paths || paths; 
@@ -486,7 +484,7 @@ socket.on('serverTick', (data) => {
         activeBushes = window.Guardian ? window.Guardian.safeArray(data.bushes) : data.bushes;
     } else if (typeof mapData !== 'undefined' && Array.isArray(mapData.bushes)) {
         activeBushes = mapData.bushes;
-    } // <--- POPRAWKA 4: Bezpieczne pobieranie krzaków z upewnieniem, że to tablica
+    }
 
     if (data.bots) {
         bots = window.Guardian ? window.Guardian.safeArray(Object.values(data.bots)) : Object.values(data.bots); 
@@ -501,7 +499,6 @@ socket.on('serverTick', (data) => {
     eventTimeLeft = data.eventTimeLeft || 0;
     
     if (data.castles) {
-        // Ignorujemy bazy z Teams w trybie Free
         let nonCastles = safeZones.filter(z => z.type === 'epic_castle' || z.type === 'safezone');
         safeZones.length = 0;
         safeZones.push(...nonCastles);
