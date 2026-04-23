@@ -760,7 +760,7 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
         }
     }
 
-    // --- 7. KRZAKI (Mechanika Ukrycia) ---
+   // --- 7. KRZAKI (Mechanika Ukrycia) ---
     let playerInBush = false;
     for(let i = 0; i < mapData.bushes.length; i++) {
         let bush = mapData.bushes[i];
@@ -771,8 +771,12 @@ function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
             }
         }
     }
-    if (playerInBush) document.body.classList.add('hidden-in-bush');
-    else document.body.classList.remove('hidden-in-bush');
+    
+    // ZAMIAST ZABIJAĆ FPS FILTRAMI CSS, ROBIMY LEKKI MROCZNY WIKNIET NA CANVASIE!
+    if (playerInBush) {
+        ctx.fillStyle = 'rgba(5, 20, 10, 0.35)'; // Lekki, mroczny zielony nalot na ekranie
+        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
+    }
 
     // --- 8. PTAKI & ŚWIETLIKI NA NIEBIE ---
     let now = Date.now();

@@ -4,6 +4,21 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Xtreme Destiny (XD) - Arena Zeszytowa</title>
+    <head>
+    <meta charset="UTF-8">
+    <title>Xtreme Destiny</title>
+    
+    <script>
+        window.MapOptimizer = {
+            isVisible: function(x, y, radius, camera, canvasWidth, canvasHeight) {
+                const buffer = 150; 
+                return !(x + radius + buffer < camera.x || x - radius - buffer > camera.x + canvasWidth || y + radius + buffer < camera.y || y - radius - buffer > camera.y + canvasHeight);
+            },
+            applyGlow: function(ctx, blurAmount, color) { ctx.shadowBlur = blurAmount; ctx.shadowColor = color; },
+            resetGlow: function(ctx) { ctx.shadowBlur = 0; },
+            cleanUpMemory: function() {}
+        };
+    </script>
     
     <script src="https://sdk.crazygames.com/crazygames-sdk-v3.js"></script>
     
