@@ -18,7 +18,7 @@ const skins = {
     arystokrata: new Image(),
     midas: new Image()
 };
-skins.standard.src = 'xtreme-destiny-postac.png'; 
+skins.standard.src = 'xtreme-destiny-postac(1).png'; 
 skins.ninja.src = 'ninja-transparent.png';
 skins.arystokrata.src = 'postac-bez-tla.png';
 skins.midas.src = 'xtreme-destiny-midas.png';
