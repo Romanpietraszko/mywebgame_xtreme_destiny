@@ -1483,6 +1483,21 @@ class MapEngine {
         }
     }
 }
+// ==========================================
+// NAPRAWA GIGANTYCZNEGO ZOOMU (Dopasowanie rozdzielczości)
+// ==========================================
+function resize() {
+    const gameCanvas = document.getElementById('gameCanvas');
+    if (gameCanvas) {
+        gameCanvas.width = window.innerWidth;
+        gameCanvas.height = window.innerHeight;
+        window.globalScale = Math.min(1, window.innerHeight / 900);
+    }
+}
+window.addEventListener('resize', resize);
+// Wymuszenie ustawienia rozdzielczości od razu po załadowaniu
+setTimeout(resize, 50);
+resize();
 
 // Inicjalizacja globalna dla środowiska (Bliźniak dla RenderEngine)
 window.MapSystem = new MapEngine();
