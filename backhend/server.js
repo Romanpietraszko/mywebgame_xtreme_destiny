@@ -8,7 +8,14 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http, {
     cors: { origin: "*", methods: ["GET", "POST"] }
 });
-app.use(express.static(__dirname));
+// --- POPRAWIONY ROUTING (Teraz widzi Frontend i Assety!) ---
+const path = require('path');
+app.use(express.static(path.join(__dirname, '../frontend')));
+app.use('/assety', express.static(path.join(__dirname, '../assety')));
+
+app.get('/', (req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/index.html'));
+});
 
 // ==========================================
 // INTEGRACJA LOKALNEGO AI (QWEN)
