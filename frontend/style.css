@@ -1,348 +1,234 @@
-/* ==========================================
-   STYLE.CSS - VIBE NOIR (Cyberpunk / Mrok)
-========================================== */
+/* ========================================== */
+/* STYLE.CSS - Vibe Noir & Optymalizacja Mobile */
+/* ========================================== */
 
-@import url('https://fonts.googleapis.com/css2?family=Permanent+Marker&family=Rajdhani:wght@500;700&display=swap');
+/* RESET I BLOKADA TELEFONÓW */
+* {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; /* Blokuje przewijanie i zoom palcami w samej grze */
+}
 
-/* GŁÓWNE USTAWIENIA */
 body, html {
     margin: 0;
     padding: 0;
-    width: 100%;
-    height: 100%;
+    width: 100vw;
+    height: 100vh;
     overflow: hidden;
-    background-color: #050505;
-    font-family: 'Rajdhani', sans-serif;
+    background-color: #050505; /* Baza Vibe Noir */
     color: #ffffff;
-    user-select: none;
-    -webkit-user-select: none;
-    touch-action: manipulation;
+    font-family: 'Rajdhani', sans-serif;
 }
 
 canvas {
     display: block;
-    width: 100vw;
-    height: 100vh;
+    width: 100%;
+    height: 100%;
 }
 
-/* WARSTWA UI - MENU STARTOWE */
+/* KLASA POMOCNICZA */
+.hidden {
+    display: none !important;
+}
+
+/* MENU LOBBY */
 #ui-layer {
     position: absolute;
     inset: 0;
-    background: rgba(0, 0, 0, 0.6);
-    backdrop-filter: blur(8px);
     display: flex;
     justify-content: center;
     align-items: center;
+    background: rgba(5, 5, 5, 0.85); /* Przyciemnienie tła za menu */
     z-index: 100;
-    padding: 15px;
-    box-sizing: border-box;
-    overflow-y: auto;
 }
 
-/* --- GLASSMORPHISM MENU --- */
 #menu {
-    position: relative;
-    z-index: 10;
-    background: rgba(10, 10, 15, 0.85); /* Ciemne półprzezroczyste szkło */
-    backdrop-filter: blur(15px); /* Główny efekt zamazania z tyłu */
-    padding: 40px;
-    border-radius: 15px;
+    background: rgba(10, 10, 15, 0.95);
+    padding: 30px;
+    border-radius: 12px;
+    border: 2px solid #3498db;
+    box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(52, 152, 219, 0.2);
     text-align: center;
-    width: 100%; 
-    max-width: 480px; 
-    max-height: 90vh;
-    box-sizing: border-box;
-    box-shadow: 0 0 50px rgba(0,0,0,0.9), inset 0 0 20px rgba(52, 152, 219, 0.1);
-    border: 2px solid rgba(52, 152, 219, 0.5); /* Neonowa ramka */
-    animation: fadeInNoir 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    width: 90%;
+    max-width: 450px;
 }
-
-#menu::-webkit-scrollbar { width: 6px; }
-#menu::-webkit-scrollbar-thumb { background-color: #3498db; border-radius: 10px; }
 
 h1 {
     font-family: 'Permanent Marker', cursive;
-    font-size: clamp(32px, 7vw, 48px);
-    margin-top: 0;
-    margin-bottom: 5px;
-    letter-spacing: 2px;
-    color: #ffffff;
+    font-size: 42px;
+    margin: 0 0 5px 0;
     transform: rotate(-2deg);
-    text-shadow: 0 0 15px rgba(255, 255, 255, 0.3);
 }
 
-.paint-x { color: #3498db; text-shadow: 0 0 20px #3498db; }
-.paint-d { color: #e74c3c; text-shadow: 0 0 20px #e74c3c; }
+.paint-x { color: #3498db; text-shadow: 0 0 10px #3498db; }
+.paint-d { color: #e74c3c; text-shadow: 0 0 10px #e74c3c; }
 
-p.subtitle {
+.subtitle {
     color: #aaaaaa;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
     margin-bottom: 25px;
-    font-weight: 700;
-    font-size: clamp(14px, 4vw, 18px);
-    text-transform: uppercase;
-    letter-spacing: 1px;
 }
 
-.tutorial-box {
-    background: rgba(255, 255, 255, 0.05);
-    padding: 15px;
-    border-radius: 10px;
-    margin-bottom: 20px;
-    font-size: 14px;
-    text-align: left;
-    line-height: 1.5;
-    border-left: 4px solid #f1c40f;
-    color: #dddddd;
-    box-shadow: inset 0 0 10px rgba(0,0,0,0.5);
-}
-
-/* KROKI MENU & INPUT */
-.input-group {
-    margin-bottom: 20px;
-    text-align: left;
-}
-
-.input-group label {
-    display: block;
-    font-weight: 700;
-    margin-bottom: 8px;
-    color: #cccccc;
-    font-size: 16px;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-}
-
-#playerName {
+/* POLA I PRZYCISKI */
+input {
     width: 100%;
     padding: 15px;
-    box-sizing: border-box;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: 20px;
-    font-weight: bold;
-    letter-spacing: 2px;
-    text-align: center;
-    background: rgba(0, 0, 0, 0.8);
+    background: #050505;
     color: #ffffff;
     border: 2px solid #444;
-    border-radius: 10px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 20px;
+    text-align: center;
+    margin-bottom: 15px;
+    transition: 0.3s;
+}
+
+input:focus {
+    border-color: #3498db;
     outline: none;
-    transition: all 0.3s ease;
 }
 
-#playerName:focus {
-    border-color: #e74c3c;
-    box-shadow: 0 0 20px rgba(231, 76, 60, 0.5);
-}
-
-/* GŁÓWNE PRZYCISKI (NEON GHOST BUTTONS) */
 .main-btn {
-    background: rgba(0, 0, 0, 0.5);
+    background: #050505;
     color: #ffffff;
-    border: 2px solid #3498db;
-    padding: 16px;
+    padding: 15px;
     width: 100%;
-    border-radius: 10px;
-    font-family: 'Rajdhani', sans-serif;
-    font-size: clamp(16px, 4vw, 20px);
+    border-radius: 8px;
+    font-size: 20px;
+    font-family: inherit;
     font-weight: bold;
     text-transform: uppercase;
-    letter-spacing: 2px;
     cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    box-shadow: 0 0 10px rgba(52, 152, 219, 0.2);
-    margin-bottom: 12px;
-    box-sizing: border-box;
-    position: relative;
-    overflow: hidden;
-}
-
-.main-btn::before {
-    content: ''; position: absolute; top: 0; left: -100%; width: 100%; height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
-    transition: left 0.5s;
-}
-
-.main-btn:hover::before { left: 100%; }
-
-.main-btn:hover {
-    background: #3498db;
-    color: #050505;
-    box-shadow: 0 0 25px rgba(52, 152, 219, 0.6);
-    transform: translateY(-2px);
+    margin-bottom: 10px;
+    transition: 0.2s;
+    border: 2px solid #555;
 }
 
 .main-btn:active {
-    transform: translateY(2px);
-    box-shadow: 0 0 5px rgba(52, 152, 219, 0.4);
+    transform: scale(0.97);
 }
 
-/* KARTY STEROWANIA I POSTACI (HOLOGRAPHIC) */
-.control-grid, .char-grid {
-    display: flex; gap: 10px; margin-bottom: 15px;
-}
-.control-grid { flex-wrap: wrap; justify-content: space-between; }
-.char-grid { overflow-x: auto; padding-bottom: 10px; scroll-snap-type: x mandatory; }
-.char-grid::-webkit-scrollbar { height: 6px; }
-.char-grid::-webkit-scrollbar-thumb { background: #3498db; border-radius: 10px; }
+/* KOLORY NEONÓW DLA PRZYCISKÓW */
+.border-blue { border-color: #3498db; }
+.border-blue:hover { background: #3498db; color: #000; box-shadow: 0 0 15px rgba(52,152,219,0.5); }
 
-.control-card, .char-card {
-    flex: 1;
-    background: rgba(0, 0, 0, 0.6);
-    border: 2px solid #444;
-    border-radius: 10px;
-    padding: 15px 5px;
+.border-red { border-color: #e74c3c; }
+.border-red:hover { background: #e74c3c; color: #000; box-shadow: 0 0 15px rgba(231,76,60,0.5); }
+
+.border-purple { border-color: #9b59b6; }
+.border-purple:hover { background: #9b59b6; color: #000; box-shadow: 0 0 15px rgba(155,89,182,0.5); }
+
+.border-green { border-color: #2ecc71; }
+.border-green:hover { background: #2ecc71; color: #000; box-shadow: 0 0 15px rgba(46,204,113,0.5); }
+
+.border-gold { border-color: #f1c40f; opacity: 0.5; cursor: not-allowed; }
+
+.back-btn {
+    background: none;
+    border: none;
+    color: #888;
+    text-decoration: underline;
+    font-family: inherit;
+    font-size: 16px;
     cursor: pointer;
-    transition: all 0.3s ease;
-    box-sizing: border-box;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
-    text-align: center;
-    position: relative;
+    margin-top: 10px;
 }
 
-.control-card { min-width: 80px; }
-.char-card { flex: 0 0 auto; width: 110px; padding: 10px; scroll-snap-align: center; }
-
-.control-card:hover, .char-card:hover {
-    border-color: #3498db;
-    background: rgba(52, 152, 219, 0.1);
-    transform: translateY(-4px);
-    box-shadow: 0 10px 20px rgba(52, 152, 219, 0.2);
+/* WYBÓR KLASY */
+.char-grid {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
 }
+
+.char-card {
+    flex: 1;
+    border: 2px solid #444;
+    background: rgba(0,0,0,0.6);
+    padding: 15px 5px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.char-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #fff; }
+.char-card p { margin: 0; font-size: 11px; color: #aaa; }
 
 .char-card.selected {
     border-color: #2ecc71;
     background: rgba(46, 204, 113, 0.15);
-    box-shadow: 0 0 20px rgba(46, 204, 113, 0.4);
+    box-shadow: 0 0 10px rgba(46,204,113,0.3);
 }
 
-.char-card.locked {
-    filter: grayscale(100%) brightness(0.5);
-    border-color: #222;
-    cursor: not-allowed;
-    box-shadow: none;
-}
-.char-card.locked:hover { transform: none; background: rgba(0, 0, 0, 0.6); }
+/* ==========================================
+   MEDIA QUERIES - RESPONSYWNOŚĆ
+   ========================================== */
 
-.keys-preview {
-    font-size: clamp(16px, 3vw, 20px);
-    font-weight: bold;
-    color: #ffffff;
-    margin-bottom: 5px;
-}
-.control-card span { font-size: 12px; color: #aaaaaa; font-weight: bold; display: block; text-transform: uppercase; }
-
-.char-card h4 { margin: 0 0 5px 0; font-size: 14px; color: #ffffff; font-family: 'Permanent Marker', cursive; letter-spacing: 1px; }
-.char-card p { margin: 0; font-size: 11px; color: #aaaaaa; font-weight: bold; }
-.char-card img { width: 50px; height: 50px; margin-bottom: 5px; object-fit: contain; filter: drop-shadow(0 0 5px rgba(255,255,255,0.2)); }
-
-/* SKLEP I PUNKTY UMIEJĘTNOŚCI */
-#skill-menu {
-    position: fixed;
-    left: 10px;
-    bottom: 10px;
-    background: rgba(10, 10, 15, 0.95);
-    padding: 10px;
-    border: 2px solid #333;
-    display: none; 
-    flex-direction: column;
-    gap: 6px;
-    box-shadow: 5px 5px 20px rgba(0,0,0,0.9);
-    z-index: 90;
-    width: 250px;
-}
-
-.sp-label {
-    font-weight: bold;
-    color: #fff;
-    text-align: center;
-    margin-bottom: 5px;
-    font-size: 14px;
-    text-transform: uppercase;
-    border-bottom: 2px dashed #555;
-    padding-bottom: 5px;
-}
-
-/* MECHANIKA KRZAKÓW (Z map.js) */
-.hidden-in-bush {
-    opacity: 0.55 !important;
-    filter: sepia(0.5) hue-rotate(90deg) brightness(0.8);
-    transition: all 0.4s ease-in-out;
-}
-
-/* BRANDING I DODATKI */
-#university-logo {
-    position: fixed;
-    top: 15px;
-    left: 15px;
-    z-index: 1000;
-    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-#university-logo img {
-    height: clamp(40px, 8vw, 60px);
-    filter: drop-shadow(0 0 10px rgba(0,0,0,0.8));
-}
-
-#university-logo:hover {
-    transform: scale(1.1);
-    filter: drop-shadow(0 0 15px rgba(255,255,255,0.5));
-}
-
-#game-info {
-    margin-top: 20px;
-    color: #888888;
-    font-size: 12px;
-    font-weight: bold;
-}
-
-/* ANIMACJE (GAME JUICE) */
-@keyframes fadeInNoir {
-    0% { opacity: 0; transform: translateY(-30px) scale(0.95); filter: blur(5px); }
-    100% { opacity: 1; transform: translateY(0) scale(1); filter: blur(0); }
-}
-
-.shield-flash {
-    animation: cyanPulse 0.4s ease-out;
-}
-
-@keyframes cyanPulse {
-    0% { box-shadow: inset 0 0 0 rgba(0, 206, 201, 0); }
-    30% { box-shadow: inset 0 0 150px rgba(0, 206, 201, 0.4); }
-    100% { box-shadow: inset 0 0 0 rgba(0, 206, 201, 0); }
-}
-
-/* Animacje dla sklepu/błędów (z shop.js) */
-@keyframes shakeError {
-    0%, 100% { transform: translateX(0); border-color: #e74c3c; background: rgba(231, 76, 60, 0.2); }
-    20%, 60% { transform: translateX(-5px); border-color: #e74c3c; }
-    40%, 80% { transform: translateX(5px); border-color: #e74c3c; }
-}
-.shake-error { animation: shakeError 0.4s ease forwards; }
-
-@keyframes flashSuccess {
-    0% { background: rgba(46, 204, 113, 0.8); transform: scale(1.05); box-shadow: 0 0 20px #2ecc71; border-color: #2ecc71; }
-    100% { background: rgba(0,0,0,0.5); transform: scale(1); box-shadow: none; border-color: inherit; }
-}
-.flash-success { animation: flashSuccess 0.5s ease forwards; }
-
-.shop-feedback-toast {
-    position: absolute; top: -20px; left: 50%; transform: translateX(-50%);
-    font-size: 14px; font-weight: bold; opacity: 0; transition: 0.3s; pointer-events: none;
-    text-shadow: 0 0 5px #000;
-}
-
-/* --- RESPONSYWNOŚĆ GLOBALNA --- */
-@media (max-width: 480px), (max-height: 650px) {
-    #ui-layer { align-items: flex-start; }
-    #menu { 
-        padding: 20px; 
-        border-radius: 10px;
-        margin: 10px auto; 
+/* 1. Telefony Pionowo (Wąskie ekrany) */
+@media (max-width: 480px) {
+    #menu {
+        padding: 20px;
+        width: 95%;
     }
-    #university-logo { top: 10px; left: 10px; }
-    #university-logo img { height: 40px !important; }
-    .input-group { margin-bottom: 15px; }
-    #playerName { padding: 12px; font-size: 16px; }
-    .control-grid { margin-top: 10px; }
+
+    h1 {
+        font-size: 34px;
+    }
+
+    .subtitle {
+        font-size: 12px;
+        margin-bottom: 15px;
+    }
+
+    input, .main-btn {
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .char-grid {
+        flex-direction: column; /* Karty pod sobą, żeby się nie zgniatały */
+        gap: 8px;
+    }
+
+    .char-card {
+        padding: 10px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .char-card h4 { margin: 0; font-size: 14px; }
+    .char-card p { font-size: 12px; }
+}
+
+/* 2. Telefony Poziomo / Niskie Ekrany (Landscape) */
+@media (max-height: 600px) {
+    #ui-layer {
+        align-items: flex-start; /* Zapobiega chamskiemu ucięciu góry menu */
+        overflow-y: auto;        /* Odblokowuje suwak tylko dla warstwy UI */
+        padding: 20px 0;
+    }
+
+    #menu {
+        margin: auto; 
+        padding: 15px 20px;
+    }
+
+    h1 {
+        font-size: 28px;
+        margin-bottom: 0;
+    }
+
+    .subtitle {
+        margin-bottom: 10px;
+    }
+
+    input, .main-btn {
+        padding: 10px;
+        margin-bottom: 8px;
+    }
 }

@@ -1,125 +1,112 @@
 // ==========================================
-// GUARDIAN.JS - Centralny System Anty-Bug i Anty-Lag
+// GUARDIAN.JS - Inteligentny Strażnik Wydajności i Stabilności
 // ==========================================
 console.log("🛡️ XD Guardian System: ONLINE");
 
-window.Guardian = {
-    // ==========================================
-    // 1. MODUŁ ANTY-BUG (Sanityzacja Danych)
-    // Zabezpiecza przed wysypaniem się gry, gdy serwer wyśle śmieci
-    // ==========================================
-    
-    // Używamy tego zamiast ufać, że serwer przysłał idealną tablicę
-    safeArray: function(data) {
-        if (!data) return [];
-        if (Array.isArray(data)) return data;
-        if (typeof data === 'object') return Object.values(data);
-        return [];
-    },
+window.Guardian = (function() {
+    // Prywatne zmienne monitorujące
+    let lastTickTime = Date.now();
+    let frameTimes = [];
+    let isLowSpecMode = false;
+    let warningElement = null;
 
-    // Upewnia się, że masa gracza nigdy nie zmieni się w "NaN" (Not a Number)
-    safeNum: function(value, fallback = 0) {
-        if (typeof value === 'number' && !isNaN(value)) return value;
-        return fallback;
-    },
-
-    // Bezpieczny String (Zapobiega błędom przy renderowaniu tekstów)
-    safeString: function(value, fallback = "") {
-        if (typeof value === 'string') return value;
-        if (value && typeof value.toString === 'function') return value.toString();
-        return fallback;
-    },
-
-    // Bezpieczny Obiekt (Zapobiega błędom "Cannot read property of undefined")
-    safeObj: function(value) {
-        if (typeof value === 'object' && value !== null) return value;
-        return {};
-    },
-
-    // ==========================================
-    // 2. MODUŁ ANTY-LAG (Zarządzanie Pamięcią i Ruchem)
-    // ==========================================
-    
-    // Płynne przesuwanie graczy zamiast teleportacji
-    lerp: function(start, end, factor = 0.2) {
-        return start + (end - start) * factor;
-    },
-
-    // Strażnik Pamięci RAM (Memory Leak Protector)
-    // Ucina stare obiekty (cząsteczki, logi), jeśli przekroczą bezpieczny limit
-    limitArray: function(arr, maxLimit) {
-        if (arr && arr.length > maxLimit) {
-            arr.splice(0, arr.length - maxLimit);
-        }
-    },
-
-    // Przepustnica (Throttle)
-    // Zabezpiecza przed spamowaniem serwera (np. 100 kliknięć na sekundę)
-    throttle: function(func, limit) {
-        let inThrottle;
-        return function() {
-            const args = arguments;
-            const context = this;
-            if (!inThrottle) {
-                func.apply(context, args);
-                inThrottle = true;
-                setTimeout(() => inThrottle = false, limit);
-            }
-        }
-    },
-
-    // ==========================================
-    // 3. AUTO-REANIMACJA (Globalny Catcher i UX)
-    // ==========================================
-    initProtection: function() {
-        // Tarcza przeciw awariom pętli
-        window.addEventListener('error', function(event) {
-            console.warn("🛡️ [GUARDIAN] Zablokowano krytyczny błąd silnika!");
-            console.warn("Treść błędu:", event.message);
-            
-            // Gra nie wysypie się na czerwono w przeglądarce
-            event.preventDefault(); 
-            
-            // Jeśli pętla gry umarła, Guardian próbuje ją zrestartować
-            if (typeof gameLoop === 'function' && window.gameState === 'PLAYING') {
-                console.log("🛠️ Guardian reanimuje pętlę gry...");
-                requestAnimationFrame(gameLoop);
-            }
-        });
-
-        // Anty-Ghost Walking (Reset Klawiszy po kliknięciu poza grę)
-        window.addEventListener('blur', function() {
-            console.log("🛡️ [GUARDIAN] Utracono ostrość okna. Wyłączam blokadę ruchu.");
-            // Reset dla klawiatury
-            if (typeof keys !== 'undefined') {
-                for (let k in keys) keys[k] = false;
-            }
-            // Reset dla wirtualnych klawiszy (Gesty AI)
-            if (typeof window.virtualKeys !== 'undefined') {
-                for (let vk in window.virtualKeys) window.virtualKeys[vk] = false;
-            }
-            // Reset dla mobilnego joysticka
-            if (typeof window.mobileJoy !== 'undefined') {
-                window.mobileJoy.active = false;
-                window.mobileJoy.dx = 0;
-                window.mobileJoy.dy = 0;
-            }
-        });
-
-        // Ochrona Graficzna dla urządzeń mobilnych (Zgubiony Canvas)
-        const canvas = document.getElementById('gameCanvas');
-        if (canvas) {
-            canvas.addEventListener('webglcontextlost', function(e) {
-                console.warn("🛡️ [GUARDIAN] Silnik zgubił kontekst graficzny (brak RAMu na telefonie).");
-                e.preventDefault(); 
-            }, false);
-            
-            canvas.addEventListener('webglcontextrestored', function() {
-                console.log("🛡️ [GUARDIAN] Kontekst graficzny odzyskany. Gramy dalej.");
-            }, false);
+    // --- Inicjalizacja UI Ostrzeżeń ---
+    function initUI() {
+        if (!document.getElementById('guardian-warning')) {
+            warningElement = document.createElement('div');
+            warningElement.id = 'guardian-warning';
+            warningElement.style.cssText = `
+                position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+                background: rgba(231, 76, 60, 0.9); color: white; padding: 5px 15px;
+                border-radius: 5px; font-weight: bold; font-family: 'Rajdhani', sans-serif;
+                z-index: 9999; display: none; box-shadow: 0 0 10px red; pointer-events: none;
+            `;
+            document.body.appendChild(warningElement);
         }
     }
-};
 
-// Uruchamiamy tarczę od razu po załadowaniu pliku
-window.Guardian.initProtection();
+    function showWarning(msg) {
+        if (warningElement) {
+            warningElement.innerText = msg;
+            warningElement.style.display = 'block';
+        }
+    }
+
+    function hideWarning() {
+        if (warningElement) warningElement.style.display = 'none';
+    }
+
+    // --- Pętla mierząca FPS ---
+    function monitorWydajnosci(timestamp) {
+        if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
+            let now = Date.now();
+            frameTimes.push(now);
+            // Usuwamy klatki starsze niż 1 sekunda
+            while (frameTimes.length > 0 && frameTimes[0] <= now - 1000) {
+                frameTimes.shift();
+            }
+
+            let fps = frameTimes.length;
+            
+            // Auto-Downgrade grafiki, jeśli FPS spada poniżej 30 przez dłuższą chwilę
+            if (fps < 30 && !isLowSpecMode && fps > 0) {
+                console.warn("🛡️ [GUARDIAN] Wykryto spadki FPS (" + fps + "). Włączam tryb optymalnej wydajności!");
+                isLowSpecMode = true;
+                if (window.Flagi) window.Flagi.Srodowisko.isMobile = true; // Wymusza wyłączenie shadowBlur w grafika.js
+            }
+
+            // Watchdog Sieciowy (Zgubione pakiety)
+            if (now - lastTickTime > 2000) {
+                showWarning("⚠️ UTRACONO POŁĄCZENIE Z SERWEREM...");
+            } else {
+                hideWarning();
+            }
+        }
+        requestAnimationFrame(monitorWydajnosci);
+    }
+
+    // --- Uruchomienie ---
+    window.addEventListener('DOMContentLoaded', () => {
+        initUI();
+        requestAnimationFrame(monitorWydajnosci);
+    });
+
+    // --- Globalne zabezpieczenia ---
+    window.addEventListener('blur', function() {
+        console.log("🛡️ [GUARDIAN] Utracono ostrość. Wymuszam zatrzymanie postaci.");
+        // Symulujemy puszczenie wszystkich klawiszy, aby gracz nie biegł w nieskończoność
+        const keysToRelease = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ'];
+        keysToRelease.forEach(code => {
+            window.dispatchEvent(new KeyboardEvent('keyup', { 'code': code }));
+        });
+    });
+
+    window.addEventListener('error', function(event) {
+        console.error("🛡️ [GUARDIAN] Przechwycono krytyczny błąd: ", event.message);
+        // Zabezpiecza przed "Białym Ekranem Śmierci"
+        event.preventDefault(); 
+    });
+
+    // Publiczne API Guardiana (Do użycia w tryby.js i grafika.js)
+    return {
+        // 1. ZGŁASZANIE PULSU SERWERA (Wywołać w socket.on('serverTick'))
+        odbierzTick: function() {
+            lastTickTime = Date.now();
+        },
+
+        // 2. BEZPIECZNA MATEMATYKA (Sanityzacja danych z serwera)
+        clamp: function(value, min, max) {
+            if (isNaN(value)) return min;
+            return Math.min(Math.max(value, min), max);
+        },
+
+        safeNum: function(value, fallback = 0) {
+            return (typeof value === 'number' && !isNaN(value)) ? value : fallback;
+        },
+
+        // 3. PŁYNNE PRZEWIDYWANIE RUCHU (Interpolacja liniowa dla płynnego 60 FPS)
+        lerp: function(start, end, factor = 0.3) {
+            return start + (end - start) * factor;
+        }
+    };
+})();

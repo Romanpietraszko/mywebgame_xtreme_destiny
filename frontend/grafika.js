@@ -1,1503 +1,317 @@
 // ==========================================
-// MAP.JS - MEGA UPDATE: VIBE NOIR & MOBA
+// GRAFIKA.JS - Silnik Renderujący Vibe Noir
 // ==========================================
 
-// --- SYSTEM MOTYWÓW WIZUALNYCH ---
-const MAP_THEMES = {
-    'FREE': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff', glow: '#3498db' },
-    'PvP': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2980b9' },
-    'TRAINING': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2ecc71' },
+window.Grafika = (function() {
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
     
-    // AKT 1: Ruiny (Mroczny Las - Vibe Noir z neonowym zielonym zarysem)
-    'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff', glow: '#27ae60' },
+    // --- 1. ZMIENNE SYSTEMOWE ---
+    let camera = { x: 0, y: 0 };
+    let screenW = window.innerWidth;
+    let screenH = window.innerHeight;
     
-    // AKT 2: Dolina Cieni (Głęboki mrok z fioletowym neonem)
-    'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff', glow: '#8e44ad' },
-    
-    // AKT 3: Pustkowia Królów (Czarna otchłań z krwistoczerwonymi akcentami)
-    'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff', glow: '#c0392b' }
-};
+    // Pule obiektów i efekty
+    let mapaObiekty = { drzewa: [], krzaki: [], mury: [] };
+    let czyMapaWygenerowana = false;
+    let czasteczkiTla = []; // Latający popiół / mgła
+    let sladPostaci = {}; // Pamięć powidoków dla Bossów (powyżej 300 masy)
 
-let activeTheme = MAP_THEMES['FREE'];
+    // --- 2. OBSŁUGA EKRANU ---
+    function resize() {
+        screenW = window.innerWidth;
+        screenH = window.innerHeight;
+        canvas.width = screenW;
+        canvas.height = screenH;
+    }
+    window.addEventListener('resize', resize);
+    resize();
 
-// Główne kontenery z danymi mapy
-const safeZones = []; 
-const mapData = { 
-    trees: [], roads: [], ponds: [], spots: [], rocks: [], grass: [], 
-    bushes: [], camps: [], fireflies: [], // NOWE
-    birds: [], lastBirdSpawn: 0 
-}; 
-
-// =========================================================================
-// KLASA BAZOWA: MapGenerator (Wspólne narzędzia dla wszystkich trybów)
-// =========================================================================
-class MapGenerator {
-    constructor(worldSize) {
-        this.worldSize = worldSize;
+    // Optymalizacja: Rysuj tylko to, co jest widoczne (Culling)
+    function czyWidoczny(x, y, promien) {
+        const margines = 150;
+        return (
+            x + promien + margines > camera.x &&
+            x - promien - margines < camera.x + screenW &&
+            y + promien + margines > camera.y &&
+            y - promien - margines < camera.y + screenH
+        );
     }
 
-    clearData() {
-        mapData.roads.length = 0;
-        mapData.trees.length = 0;
-        mapData.ponds.length = 0; 
-        mapData.spots.length = 0;
-        mapData.rocks.length = 0;
-        mapData.grass.length = 0;
-        mapData.bushes.length = 0;
-        mapData.camps.length = 0;
-        mapData.fireflies.length = 0;
-        mapData.birds.length = 0;
-        mapData.lastBirdSpawn = Date.now();
-        safeZones.length = 0;
-    }
+    // --- 3. ŚRODOWISKO I GENERACJA MAPY ---
+    function generujSrodowisko(tryb) {
+        mapaObiekty = { drzewa: [], krzaki: [], mury: [] };
+        czasteczkiTla = [];
 
-    addSafeZone(x, y, radius, type = 'safezone', teamLetter = '') {
-        safeZones.push({ x: x, y: y, radius: radius, type: type, team: teamLetter });
-    }
-
-    addRoad(x, y, width, height) {
-        mapData.roads.push({ x: x, y: y, width: width, height: height });
-    }
-    
-    addCamp(x, y) { 
-        mapData.camps.push({x: x, y: y, radius: 80}); 
-    }
-
-    populateWorld(config) {
-        const checkCollision = (px, py, r) => {
-            for(let road of mapData.roads) if (px > road.x - r - 10 && px < road.x + road.width + r + 10 && py > road.y - r - 10 && py < road.y + road.height + r + 10) return true;
-            for(let zone of safeZones) if (Math.hypot(px - zone.x, py - zone.y) < r + zone.radius + 20) return true;
-            for(let pond of mapData.ponds) if (Math.hypot(px - pond.x, py - pond.y) < r + pond.radius + 15) return true;
-            for(let camp of mapData.camps) if (Math.hypot(px - camp.x, py - camp.y) < r + camp.radius + 10) return true;
-            return false;
-        };
-
-        // 1. Detale (Trawa, Nagrobki, Czaszki)
-        for(let i = 0; i < config.numGrass; i++) {
-            let type = config.grassTypes[Math.floor(Math.random() * config.grassTypes.length)];
-            mapData.grass.push({ 
-                x: Math.random() * this.worldSize, 
-                y: Math.random() * this.worldSize, 
-                type: type 
+        // Generowanie cząsteczek tła (Vibe Noir)
+        for(let i=0; i<100; i++) {
+            czasteczkiTla.push({
+                x: Math.random() * screenW,
+                y: Math.random() * screenH,
+                speedX: (Math.random() - 0.5) * 0.5,
+                speedY: (Math.random() - 0.5) * 0.5,
+                r: Math.random() * 2
             });
         }
-
-        // 2. Kropki (Masa)
-        for(let i = 0; i < config.numSpots; i++) {
-            mapData.spots.push({ 
-                x: Math.random() * this.worldSize, 
-                y: Math.random() * this.worldSize, 
-                radius: 3 + Math.random() * 5 
-            });
-        }
-
-        // 3. Głazy w losowych skupiskach (Cluster generation)
-        let totalRocks = config.numRocks || 20;
-        for(let i = 0; i < totalRocks; i++) {
-            let cx = Math.random() * this.worldSize;
-            let cy = Math.random() * this.worldSize;
-            let clusterSize = 3 + Math.floor(Math.random() * 5);
-            for(let j = 0; j < clusterSize; j++) {
-                mapData.rocks.push({ x: cx + (Math.random() * 200 - 100), y: cy + (Math.random() * 200 - 100), radius: 10 + Math.random() * 25 });
-            }
-        }
-
-        // 4. Pułapki (Kałuże, Kratery, Kolce)
-        for (let i = 0; i < config.numPonds; i++) {
-            let r = 30 + Math.random() * 40, px, py;
-            do { px = Math.random() * this.worldSize; py = Math.random() * this.worldSize; } while(checkCollision(px, py, r));
-            mapData.ponds.push({ x: px, y: py, radius: r, numPoints: 12 + Math.floor(Math.random() * 8), randomOffsetLimit: 0.15 + Math.random() * 0.1, type: config.pondType });
-        }
-
-        // 5. Przeszkody (Drzewa, Kolumny)
-        for (let i = 0; i < config.numTrees; i++) {
-            let r = 25 + Math.random() * 20, tx, ty;
-            do { tx = Math.random() * this.worldSize; ty = Math.random() * this.worldSize; } while(checkCollision(tx, ty, r));
-            mapData.trees.push({ x: tx, y: ty, radius: r, type: config.treeType });
-        }
         
-        // 6. Krzaki (Bushes)
-        if (typeof bushes !== 'undefined' && bushes.length > 0) {
-            mapData.bushes = bushes; // Z serwera
-        } else {
-            let numBushes = config.numBushes || 40;
-            for (let i = 0; i < numBushes; i++) {
-                let r = 60 + Math.random() * 60, bx, by;
-                do { bx = Math.random() * this.worldSize; by = Math.random() * this.worldSize; } while(checkCollision(bx, by, r));
-                mapData.bushes.push({ x: bx, y: by, radius: r });
-            }
+        if (tryb === 'FREE') {
+            for(let i=0; i<25; i++) mapaObiekty.drzewa.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 45 });
+            for(let i=0; i<40; i++) mapaObiekty.krzaki.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 70 });
+        } else if (tryb === 'TEAMS') {
+            // Generowanie barykad w ustalonych miejscach
+            for(let i=0; i<32; i++) mapaObiekty.mury.push({ x: Math.random() * 6000, y: Math.random() * 6000, w: 100, h: 30 });
         }
-
-        // 7. Świetliki (Tylko w lasach)
-        if (config.treeType === 'choinka') {
-            for(let i=0; i<80; i++) {
-                mapData.fireflies.push({ 
-                    x: Math.random() * this.worldSize, y: Math.random() * this.worldSize, 
-                    offset: Math.random() * Math.PI * 2, speed: 0.02 + Math.random() * 0.03, radius: 2 + Math.random() * 3 
-                });
-            }
-        }
-    }
-}
-
-// -------------------------------------------------------------------------
-// KLASA: FREE MODE (Dla trybu free.js - Każdy na każdego)
-// -------------------------------------------------------------------------
-class FreeModeMap extends MapGenerator {
-    generate() {
-        this.clearData();
-        activeTheme = MAP_THEMES['FREE'];
-        
-        let center = this.worldSize / 2;
-
-        // JEDEN EPICKI ZAMEK NA ŚRODKU (Królewskie Wzgórze)
-        this.addSafeZone(center, center, 350, 'epic_castle', ''); 
-        
-        // 4 Główne drogi przecinające las i kończące się na krawędzi fosy zamku
-        this.addRoad(center - 100, 0, 200, center - 400); // Północ
-        this.addRoad(center - 100, center + 400, 200, center - 400); // Południe
-        this.addRoad(0, center - 100, center - 400, 200); // Zachód
-        this.addRoad(center + 400, center - 100, center - 400, 200); // Wschód
-
-        // Obozowiska w rogach
-        this.addCamp(center - 800, center - 800); 
-        this.addCamp(center + 800, center + 800);
-
-        this.populateWorld({
-            numGrass: 400, grassTypes: ['grass'],
-            numSpots: 100, numRocks: 40,
-            numPonds: 30, pondType: 'puddle',
-            numTrees: 400, treeType: 'choinka',
-            numBushes: 50
-        });
-    }
-}
-
-// -------------------------------------------------------------------------
-// KLASA: CAMPAIGN (Dla trybu campaign.js - Wszystkie akty)
-// -------------------------------------------------------------------------
-class CampaignMap extends MapGenerator {
-    generate(actType) {
-        this.clearData();
-        activeTheme = MAP_THEMES[actType];
-
-        if (actType === 'campaign_1') this.generateAct1();
-        else if (actType === 'campaign_2') this.generateAct2();
-        else if (actType === 'campaign_3') this.generateAct3();
-    }
-
-    generateAct1() {
-        this.addSafeZone(2000, 3800, 250, 'safezone');
-        this.addRoad(1880, 200, 240, 3600); 
-        this.addRoad(500, 2000, 3000, 150); 
-        this.addCamp(1000, 1000); this.addCamp(3000, 1000);
-
-        this.populateWorld({
-            numGrass: 600, grassTypes: ['grass'],
-            numSpots: 150, numRocks: 30,
-            numPonds: 20, pondType: 'puddle',
-            numTrees: 450, treeType: 'choinka',
-            numBushes: 50
-        });
-    }
-
-    generateAct2() {
-        this.addSafeZone(2000, 2000, 300, 'safezone'); 
-        this.addRoad(0, 1880, 4000, 240);
-        this.addRoad(1880, 0, 240, 4000);
-        this.addRoad(800, 800, 2400, 150);
-        this.addRoad(800, 3000, 2400, 150);
-
-        this.populateWorld({
-            numGrass: 300, grassTypes: ['grave', 'sword'],
-            numSpots: 250, numRocks: 50,
-            numPonds: 45, pondType: 'crater', 
-            numTrees: 300, treeType: 'dead_tree',
-            numBushes: 20
-        });
-    }
-
-    generateAct3() {
-        this.addSafeZone(2000, 3800, 150, 'safezone'); 
-        this.addRoad(1800, 400, 400, 3400); 
-        this.addRoad(1000, 400, 2000, 200); 
-
-        this.populateWorld({
-            numGrass: 100, grassTypes: ['skull', 'crown'],
-            numSpots: 600, numRocks: 100,
-            numPonds: 70, pondType: 'spikes', 
-            numTrees: 400, treeType: 'column',
-            numBushes: 10
-        });
-    }
-}
-
-// -------------------------------------------------------------------------
-// KLASA: TEAMS (Potężna rozbudowa MOBA - E-sportowa Arena)
-// -------------------------------------------------------------------------
-class TeamsMap extends MapGenerator {
-    generate(modeType) {
-        this.clearData(); 
-        activeTheme = MAP_THEMES[modeType] || MAP_THEMES['PvP'];
-        
-        let w = this.worldSize; 
-        let c = w / 2;
-
-        // --- 1. LINIE GŁÓWNE (LANES) ---
-        this.addRoad(c - 250, 0, 500, w); // MID Pion
-        this.addRoad(0, c - 250, w, 500); // MID Poziom
-        this.addRoad(150, 150, w-300, 300); // TOP Line
-        this.addRoad(150, w-450, w-300, 300); // BOT Line
-        this.addRoad(150, 150, 300, w-300); // LEFT Line
-        this.addRoad(w-450, 150, 300, w-300); // RIGHT Line
-
-        // --- 2. ARENA CENTRALNA ---
-        this.addRoad(c - 600, c - 600, 1200, 1200);
-        for(let i = 0; i < 8; i++) {
-            let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
-            mapData.rocks.push({x: c + Math.cos(angle)*650, y: c + Math.sin(angle)*650, radius: 50 + Math.random()*20});
-        }
-
-        // --- 3. OBOZOWISKA (JUNGLE CAMPS) ---
-        this.addCamp(c - 800, c - 800); 
-        this.addCamp(c + 800, c + 800); 
-        this.addCamp(c - 800, c + 800); 
-        this.addCamp(c + 800, c - 800); 
-
-        // --- 4. UFORYFIKOWANE BAZY ---
-        let baseCoords = [{x: 1000, y: 1000}, {x: w-1000, y: 1000}, {x: 1000, y: w-1000}, {x: w-1000, y: w-1000}];
-        baseCoords.forEach(base => {
-            this.addRoad(base.x - 450, base.y - 450, 900, 900);
-            for(let i = 0; i < 16; i++) {
-                let angle = (i/16) * Math.PI * 2;
-                let tx = base.x + Math.cos(angle) * 350;
-                let ty = base.y + Math.sin(angle) * 350;
-                if (i % 4 !== 0) mapData.trees.push({x: tx, y: ty, radius: 45 + Math.random()*10, type: 'column'});
-            }
-            mapData.rocks.push({x: base.x - 200, y: base.y - 200, radius: 45});
-            mapData.rocks.push({x: base.x + 200, y: base.y + 200, radius: 45});
-        });
-
-        // --- 5. TWARDE PRZESZKODY W DŻUNGLI ---
-        for(let i=0; i<15; i++) {
-            let wx = 500 + Math.random() * (w - 1000), wy = 500 + Math.random() * (w - 1000);
-            if(Math.hypot(wx - c, wy - c) > 700) {
-                for(let k=0; k<3; k++) mapData.trees.push({x: wx + k*60, y: wy + k*20, radius: 35, type: 'column'});
-            }
-        }
-
-        // --- 6. WYPEŁNIENIE ŚWIATA ---
-        this.populateWorld({
-            numGrass: 1500, grassTypes: ['grass', 'sword', 'skull', 'grave'], 
-            numSpots: 400, numRocks: 250, numPonds: 50, pondType: 'crater', 
-            numTrees: 1200, treeType: 'dead_tree', numBushes: 150 
-        });
-    }
-}
-
-// =========================================================================
-// INICJALIZATOR
-// =========================================================================
-function initMap(worldSize, mapType = 'FREE') {
-    if (mapType === 'FREE') {
-        new FreeModeMap(worldSize).generate();
-    } else if (mapType.startsWith('campaign_')) {
-        new CampaignMap(worldSize).generate(mapType);
-    } else if (mapType === 'PvP' || mapType === 'TRAINING') {
-        new TeamsMap(worldSize).generate(mapType); 
-    } else {
-        new FreeModeMap(worldSize).generate(); 
-    }
-}
-
-// =========================================================================
-// FUNKCJE RYSOWANIA DETALI MAPY 
-// =========================================================================
-
-function drawCamp(ctx, camp) {
-    ctx.save(); ctx.translate(camp.x, camp.y);
-    ctx.fillStyle = 'rgba(20, 10, 5, 0.4)'; ctx.beginPath(); ctx.arc(0, 0, camp.radius, 0, Math.PI * 2); ctx.fill();
-    ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
-    ctx.fillStyle = '#2c3e50'; ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2;
-    for(let i=0; i<3; i++) {
-        ctx.save(); ctx.rotate(i * (Math.PI*2/3)); ctx.translate(0, -camp.radius * 0.6);
-        ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-20, 15); ctx.lineTo(20, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.restore();
-    }
-    ctx.fillStyle = '#8B4513'; ctx.fillRect(-15, -5, 30, 10); ctx.fillRect(-5, -15, 10, 30); 
-    let firePulse = (Math.sin(Date.now() / 150) + 1) / 2;
-    window.MapOptimizer.applyGlow(ctx, 30 + firePulse * 20, '#e67e22');
-    ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(0, -25 - firePulse*10); ctx.lineTo(-15, 10); ctx.lineTo(15, 10); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(0, -15 - firePulse*5); ctx.lineTo(-8, 10); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill();
-    window.MapOptimizer.resetGlow(ctx);
-    ctx.restore();
-}
-
-function drawBush(ctx, bush) {
-    ctx.save(); ctx.translate(bush.x, bush.y);
-    ctx.fillStyle = 'rgba(5, 20, 10, 0.8)';
-    ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2;
-    let windOffset = Math.sin(Date.now() / 1000 + bush.x) * 0.05;
-    ctx.rotate(windOffset);
-    ctx.beginPath();
-    for (let i = 0; i < 12; i++) {
-        let angle = (i / 12) * Math.PI * 2; 
-        let currentR = bush.radius * (0.8 + Math.sin(i * 3) * 0.2); 
-        let px = Math.cos(angle) * currentR; let py = Math.sin(angle) * currentR;
-        if (i === 0) ctx.moveTo(px, py); else ctx.quadraticCurveTo(0, 0, px, py); 
-    }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.restore();
-}
-
-function drawNotebookGrass(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-5, -8); ctx.moveTo(2, 6); ctx.lineTo(1, -12); ctx.moveTo(4, 5); ctx.lineTo(8, -6); ctx.stroke();
-    ctx.restore();
-}
-
-function drawGrave(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.fillStyle = activeTheme.bg; ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(-6, -4); ctx.arc(0, -4, 6, Math.PI, 0); ctx.lineTo(6, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 2); ctx.moveTo(-3, -2); ctx.lineTo(3, -2); ctx.stroke(); ctx.restore();
-}
-
-function drawSwordDetail(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(0, -10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-5, -6); ctx.lineTo(5, -6); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -11, 1.5, 0, Math.PI*2); ctx.stroke(); ctx.restore();
-}
-
-function drawWastelandSkull(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.arc(0, -2, 5, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-3, 3); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.lineTo(3, 3); ctx.stroke(); 
-    ctx.fillStyle = activeTheme.bg; ctx.beginPath(); ctx.arc(-2, -2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2, -2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.restore();
-}
-
-function drawBrokenCrown(ctx, x, y) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-4, 4); ctx.lineTo(4, 4); ctx.lineTo(6, -4); ctx.lineTo(2, 0); ctx.lineTo(0, -6); ctx.lineTo(-2, 0); ctx.closePath(); ctx.stroke(); ctx.restore();
-}
-
-function drawNotebookRock(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.fillStyle = activeTheme.bg; ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    for (let i = 0; i < 7; i++) {
-        let angle = (i / 7) * Math.PI * 2; let offset = Math.sin(angle * 4 + x) * 0.25; let currentR = radius * (1 + offset);
-        let px = Math.cos(angle) * currentR; let py = Math.sin(angle) * currentR;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-radius * 0.4, -radius * 0.2); ctx.lineTo(radius * 0.3, radius * 0.2); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(radius * 0.1, -radius * 0.4); ctx.lineTo(0, radius * 0.5); ctx.stroke(); ctx.restore();
-}
-
-function drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.lineWidth = 2;
-    ctx.beginPath();
-    for (let i = 0; i < numPoints; i++) {
-        let angle = (i / numPoints) * Math.PI * 2;
-        let offset1 = Math.sin(angle * 3 + x) * randomOffsetLimit; let offset2 = Math.cos(angle * 4 + y) * (randomOffsetLimit * 0.7);
-        let currentRadius = radius * (1 + offset1 + offset2);
-        let px = Math.cos(angle) * currentRadius; let py = Math.sin(angle) * currentRadius;
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    ctx.beginPath();
-    let drop1X = Math.cos(x) * (radius * 1.3); let drop1Y = Math.sin(y) * (radius * 1.3); ctx.arc(drop1X, drop1Y, radius * 0.15, 0, Math.PI * 2);
-    let drop2X = Math.cos(y) * (radius * 1.5); let drop2Y = Math.sin(x) * (radius * 1.5); ctx.arc(drop2X, drop2Y, radius * 0.1, 0, Math.PI * 2); ctx.fill();
-    ctx.restore();
-}
-
-function drawDeepCrater(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); 
-    let pulse = (Math.sin(Date.now()/500 + x) + 1) / 2;
-    window.MapOptimizer.applyGlow(ctx, 20 * pulse, activeTheme.glow);
-    
-    ctx.fillStyle = '#0a0a0a'; ctx.strokeStyle = activeTheme.glow; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-    ctx.beginPath();
-    for(let i=0; i<12; i++) { let a = (i/12) * Math.PI * 2; let r = radius + Math.sin(a * 5 + x) * 10; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-    ctx.closePath(); ctx.fill(); ctx.stroke();
-    window.MapOptimizer.resetGlow(ctx);
-
-    ctx.lineWidth = 2; ctx.strokeStyle = '#333';
-    for(let i=0; i<4; i++) { let a = (i/4) * Math.PI * 2 + (x % 2); ctx.beginPath(); ctx.moveTo(Math.cos(a)*(radius-5), Math.sin(a)*(radius-5)); ctx.lineTo(Math.cos(a)*(radius+20), Math.sin(a)*(radius+20)); ctx.stroke(); }
-    
-    ctx.fillStyle = `rgba(46, 204, 113, ${0.2 + pulse * 0.3})`; ctx.beginPath();
-    for(let i=0; i<10; i++) { let a = (i/10) * Math.PI * 2 + (Date.now()/2000); let r = radius * 0.6 + Math.cos(a * 7 + y) * 8; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-    ctx.closePath(); ctx.fill(); ctx.restore();
-}
-
-function drawSpikesField(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
-    let numSpikes = 5 + Math.floor(Math.abs(x + y) % 3);
-    for(let i=0; i<numSpikes; i++) {
-        let a = (i/numSpikes) * Math.PI * 2 + (x % 1); let dist = radius * 0.5;
-        ctx.save(); ctx.translate(Math.cos(a)*dist, Math.sin(a)*dist); ctx.rotate(a + Math.PI/2); 
-        ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(0, -25); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(8, 10); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill(); ctx.restore();
-    }
-    ctx.restore();
-}
-
-function drawNotebookTree(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.fillStyle = activeTheme.bg; ctx.strokeStyle = activeTheme.border; ctx.lineJoin = 'miter'; ctx.lineWidth = 2;
-    ctx.fillRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8); ctx.strokeRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8);
-    ctx.beginPath(); ctx.moveTo(0, -radius * 0.1); ctx.lineTo(radius * 0.9, radius * 0.5); ctx.lineTo(-radius * 0.9, radius * 0.5);
-    ctx.moveTo(0, -radius * 0.6); ctx.lineTo(radius * 0.7, 0); ctx.lineTo(-radius * 0.7, 0);
-    ctx.moveTo(0, -radius * 1.2); ctx.lineTo(radius * 0.5, -radius * 0.4); ctx.lineTo(-radius * 0.5, -radius * 0.4);
-    ctx.fill(); ctx.stroke(); ctx.restore();
-}
-
-function drawSpookyTree(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.moveTo(0, radius); ctx.lineTo(0, -radius * 0.3); ctx.stroke();
-    ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-radius * 0.6, -radius * 0.5); ctx.lineTo(-radius * 0.9, -radius * 0.1); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -radius * 0.1); ctx.lineTo(radius * 0.5, -radius * 0.6); ctx.lineTo(radius * 0.8, -radius * 0.2); ctx.stroke();
-    ctx.fillStyle = activeTheme.bg; ctx.beginPath(); ctx.ellipse(0, radius * 0.4, radius * 0.15, radius * 0.3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
-}
-
-function drawBrokenColumn(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.fillStyle = activeTheme.bg; ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-    ctx.beginPath(); ctx.ellipse(0, radius*0.8, radius, radius*0.3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(-radius*0.8, radius*0.8); ctx.lineTo(-radius*0.8, -radius*0.5); ctx.lineTo(-radius*0.3, -radius*0.9); ctx.lineTo(0, -radius*0.4); ctx.lineTo(radius*0.5, -radius*0.8); ctx.lineTo(radius*0.8, radius*0.8); ctx.fill(); ctx.stroke();
-    ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-radius*0.4, radius*0.8); ctx.lineTo(-radius*0.4, -radius*0.6); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, radius*0.8); ctx.lineTo(0, -radius*0.4); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(radius*0.4, radius*0.8); ctx.lineTo(radius*0.4, -radius*0.7); ctx.stroke();
-    ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-radius*0.2, 0); ctx.lineTo(radius*0.2, radius*0.3); ctx.lineTo(radius*0.1, radius*0.6); ctx.stroke(); ctx.restore();
-}
-
-// =========================================================================
-// 🏰 MONUMENTALNA TWIERDZA
-// =========================================================================
-
-function drawEpicCastle(ctx, x, y, radius) {
-    ctx.save();
-    ctx.translate(x, y);
-
-    let abyssRadius = radius + 60;
-    ctx.fillStyle = '#010102'; 
-    ctx.beginPath();
-    for (let i = 0; i < 48; i++) {
-        let angle = (i / 48) * Math.PI * 2;
-        let offset = (i % 2 === 0) ? 15 : -15; 
-        let px = Math.cos(angle) * (abyssRadius + offset);
-        let py = Math.sin(angle) * (abyssRadius + offset);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fill();
-
-    window.MapOptimizer.applyGlow(ctx, 20, activeTheme.border);
-    ctx.strokeStyle = activeTheme.border;
-    ctx.lineWidth = 2;
-    ctx.stroke();
-    window.MapOptimizer.resetGlow(ctx);
-
-    ctx.fillStyle = '#050505';
-    ctx.beginPath();
-    for(let i=0; i<8; i++) {
-        let angle = (i / 8) * Math.PI * 2 + (Math.PI/8); 
-        let px = Math.cos(angle) * radius;
-        let py = Math.sin(angle) * radius;
-        if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.fill();
-    ctx.lineWidth = 4;
-    ctx.stroke();
-
-    let innerRadius = radius - 40;
-    ctx.beginPath();
-    for(let i=0; i<8; i++) {
-        let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
-        let px = Math.cos(angle) * innerRadius;
-        let py = Math.sin(angle) * innerRadius;
-        if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath();
-    ctx.lineWidth = 2;
-    ctx.stroke();
-
-    ctx.lineWidth = 1;
-    for(let i=0; i<8; i++) {
-        let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
-        ctx.beginPath();
-        ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
-        ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius);
-        ctx.stroke();
-    }
-
-    ctx.fillStyle = '#050505';
-    ctx.strokeStyle = activeTheme.border;
-    let bridgeAngles = [0, Math.PI/2, Math.PI, Math.PI*1.5]; 
-    
-    for(let angle of bridgeAngles) {
-        ctx.save();
-        ctx.rotate(angle);
-        ctx.lineWidth = 3;
-        ctx.fillRect(innerRadius, -40, abyssRadius - innerRadius + 20, 80);
-        ctx.strokeRect(innerRadius, -40, abyssRadius - innerRadius + 20, 80);
-        
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-        for(let i=1; i<=4; i++) {
-            ctx.beginPath();
-            ctx.moveTo(innerRadius + i*20, -40);
-            ctx.lineTo(innerRadius + i*20, 40);
-            ctx.stroke();
-        }
-        ctx.restore();
-    }
-
-    ctx.fillStyle = '#080808';
-    ctx.fillRect(-120, -innerRadius + 10, 240, 100);
-    ctx.strokeStyle = activeTheme.border;
-    ctx.lineWidth = 2;
-    ctx.strokeRect(-120, -innerRadius + 10, 240, 100);
-    
-    ctx.beginPath(); ctx.moveTo(-120, -innerRadius + 10); ctx.lineTo(0, -innerRadius + 60); ctx.lineTo(120, -innerRadius + 10); ctx.stroke();
-    ctx.beginPath(); ctx.moveTo(0, -innerRadius + 10); ctx.lineTo(0, -innerRadius + 60); ctx.stroke();
-
-    window.MapOptimizer.applyGlow(ctx, 10, '#e74c3c');
-    ctx.fillStyle = '#e74c3c';
-    ctx.fillRect(-40, -innerRadius + 75, 20, 20);
-    ctx.fillRect(20, -innerRadius + 75, 20, 20);
-    window.MapOptimizer.resetGlow(ctx);
-
-    drawSpookyTree(ctx, -140, -80, 25);
-    drawSpookyTree(ctx, 140, -80, 25);
-
-    let isPlayerHere = typeof player !== 'undefined' && player && Math.hypot(player.x - x, player.y - y) < 80;
-    
-    if (isPlayerHere) {
-        window.MapOptimizer.applyGlow(ctx, 25, '#f1c40f');
-    }
-    
-    ctx.beginPath();
-    ctx.arc(0, 0, 70, 0, Math.PI * 2);
-    ctx.fillStyle = isPlayerHere ? 'rgba(241, 196, 15, 0.2)' : 'rgba(255, 255, 255, 0.05)';
-    ctx.fill();
-    ctx.lineWidth = 3;
-    ctx.strokeStyle = isPlayerHere ? '#f1c40f' : 'rgba(255, 255, 255, 0.5)';
-    ctx.setLineDash([10, 10]);
-    ctx.stroke();
-    ctx.setLineDash([]);
-    window.MapOptimizer.resetGlow(ctx);
-    
-    ctx.fillStyle = isPlayerHere ? '#f1c40f' : '#555555';
-    ctx.font = 'bold 24px Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText("👑", 0, 0);
-
-    ctx.restore();
-}
-
-function drawSafeZone(ctx, x, y, radius) {
-    ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.clip(); 
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fillRect(-radius, -radius, radius * 2, radius * 2); ctx.restore(); 
-    ctx.save(); ctx.translate(x, y); ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 4; ctx.setLineDash([20, 15]); 
-    window.MapOptimizer.applyGlow(ctx, 10, '#ffffff');
-    ctx.beginPath();
-    for (let i = 0; i < 32; i++) {
-        let angle = (i / 32) * Math.PI * 2; let offset = Math.sin(angle * 6 + x) * 3; let px = Math.cos(angle) * (radius + offset); let py = Math.sin(angle) * (radius + offset);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath(); ctx.stroke(); ctx.setLineDash([]); window.MapOptimizer.resetGlow(ctx);
-    ctx.fillStyle = '#ffffff'; ctx.font = "bold 16px 'Courier New', monospace"; ctx.textAlign = 'center'; ctx.fillText("BEZPIECZNA STREFA", 0, radius - 20); ctx.restore();
-}
-
-function drawCastle(ctx, x, y, radius, teamLetter = 'B') {
-    ctx.save(); ctx.translate(x, y);
-    let bridgeAngle = Math.atan2(2000 - y, 2000 - x); let moatRadius = radius + 40;
-
-    ctx.fillStyle = '#020202'; ctx.beginPath();
-    for (let i = 0; i < 32; i++) {
-        let angle = (i / 32) * Math.PI * 2; let offset = Math.sin(angle * 8 + x) * 8; let px = Math.cos(angle) * (moatRadius + offset); let py = Math.sin(angle) * (moatRadius + offset);
-        if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-    }
-    ctx.closePath(); ctx.fill();
-
-    let isPlayerHere = typeof player !== 'undefined' && player && Math.hypot(player.x - x, player.y - y) < radius;
-    ctx.beginPath(); ctx.arc(0, 0, radius + 15, 0, Math.PI * 2);
-    
-    if (isPlayerHere) {
-        ctx.save(); ctx.clip(); ctx.fillStyle = '#050505'; ctx.fillRect(-radius-15, -radius-15, (radius+15)*2, (radius+15)*2); ctx.fillStyle = '#111111';
-        let tileSize = 30;
-        for(let tx = -radius-15; tx < radius+15; tx+=tileSize) {
-            for(let ty = -radius-15; ty < radius+15; ty+=tileSize) { if (Math.abs((tx/tileSize) % 2) === Math.abs((ty/tileSize) % 2)) ctx.fillRect(tx, ty, tileSize, tileSize); }
-        }
-        ctx.fillStyle = '#333333'; ctx.fillRect(-30, -30, 60, 80); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(-30, -30, 60, 80);
-        ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-50, -60, 100, 30); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.strokeRect(-50, -60, 100, 30); ctx.restore();
-    } else {
-        ctx.fillStyle = activeTheme.bg; ctx.fill();
-    }
-
-    ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff';
-    window.MapOptimizer.applyGlow(ctx, 15, '#ffffff');
-    ctx.beginPath(); ctx.arc(0, 0, radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2); ctx.stroke(); window.MapOptimizer.resetGlow(ctx);
-
-    ctx.save(); ctx.rotate(bridgeAngle); ctx.fillStyle = '#050505'; ctx.fillRect(radius - 5, -30, 55, 60); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(radius - 5, -30, 55, 60);
-    ctx.lineWidth = 1; for(let i=1; i<=4; i++) { ctx.beginPath(); ctx.moveTo(radius - 5 + i*11, -30); ctx.lineTo(radius - 5 + i*11, 30); ctx.stroke(); } ctx.restore();
-
-    let numTowers = 8;
-    for (let i = 0; i < numTowers; i++) {
-        let angle = (i / numTowers) * Math.PI * 2; let angleDiff = Math.abs(angle - bridgeAngle); angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
-        if (angleDiff < 0.4) continue; 
-        let tx = Math.cos(angle) * radius; let ty = Math.sin(angle) * radius;
-        ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle); ctx.fillStyle = '#050505'; ctx.fillRect(-12, -12, 24, 24); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(-12, -12, 24, 24); ctx.restore();
-    }
-
-    if (!isPlayerHere && teamLetter && teamLetter !== '') {
-        ctx.fillStyle = '#ffffff'; ctx.font = `bold ${radius * 0.6}px 'Courier New', monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(teamLetter, 0, 0); 
-    }
-    ctx.restore();
-}
-
-// =========================================================================
-// GŁÓWNA PĘTLA RYSOWANIA CAŁEGO ŚWIATA (WSZYSTKO W JEDNYM MIEJSCU!)
-// =========================================================================
-
-function drawForestMap(ctx, camera, canvasWidth, canvasHeight) {
-    ctx.fillStyle = activeTheme.bg;
-    ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-    ctx.save();
-    ctx.translate(-camera.x, -camera.y);
-
-    ctx.strokeStyle = activeTheme.border; 
-    ctx.lineWidth = 4;
-    let wSize = typeof WORLD_SIZE !== 'undefined' ? WORLD_SIZE : 4000;
-    ctx.strokeRect(0, 0, wSize, wSize); 
-    ctx.lineWidth = 1; 
-    ctx.strokeRect(-10, -10, wSize + 20, wSize + 20);
-
-    // --- 1. DROGI ---
-    ctx.fillStyle = activeTheme.road; 
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 2;
-    for(let i = 0; i < mapData.roads.length; i++) {
-        let road = mapData.roads[i];
-        if (!window.MapOptimizer.isVisible(road.x + road.width/2, road.y + road.height/2, Math.max(road.width, road.height)/2, camera, canvasWidth, canvasHeight)) continue;
-        ctx.fillRect(road.x, road.y, road.width, road.height);
-        ctx.setLineDash([15, 10]);
-        ctx.strokeRect(road.x, road.y, road.width, road.height);
-        ctx.setLineDash([]);
-        
-        if (typeof currentQuest !== 'undefined' && currentQuest > 10) {
-            ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-            for(let j = road.y + 100; j < road.y + road.height; j += 150) { 
-                ctx.beginPath(); ctx.moveTo(road.x + 10, j); ctx.lineTo(road.x + road.width - 10, j + Math.sin(j * 123 + road.x) * 20); ctx.stroke(); 
-            }
-        }
-    }
-
-    // --- 2. DETALE (Trawa, Nagrobki) ---
-    for(let i = 0; i < mapData.grass.length; i++) {
-        let g = mapData.grass[i];
-        if (!window.MapOptimizer.isVisible(g.x, g.y, 10, camera, canvasWidth, canvasHeight)) continue;
-        if (g.type === 'grave') drawGrave(ctx, g.x, g.y);
-        else if (g.type === 'sword') drawSwordDetail(ctx, g.x, g.y);
-        else if (g.type === 'skull') drawWastelandSkull(ctx, g.x, g.y);
-        else if (g.type === 'crown') drawBrokenCrown(ctx, g.x, g.y);
-        else drawNotebookGrass(ctx, g.x, g.y);
-    }
-
-    // --- 3. KROPKI ATRAMENTU ---
-    ctx.fillStyle = activeTheme.spotColor;
-    for(let i = 0; i < mapData.spots.length; i++) {
-        let s = mapData.spots[i];
-        if (!window.MapOptimizer.isVisible(s.x, s.y, s.radius, camera, canvasWidth, canvasHeight)) continue;
-        window.MapOptimizer.applyGlow(ctx, 10, activeTheme.spotColor);
-        ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill(); 
-        window.MapOptimizer.resetGlow(ctx);
-    }
-
-    // --- 4. PUŁAPKI & OBOZOWISKA ---
-    for(let i = 0; i < mapData.ponds.length; i++) {
-        let pond = mapData.ponds[i];
-        if (!window.MapOptimizer.isVisible(pond.x, pond.y, pond.radius, camera, canvasWidth, canvasHeight)) continue;
-        if (pond.type === 'crater') drawDeepCrater(ctx, pond.x, pond.y, pond.radius);
-        else if (pond.type === 'spikes') drawSpikesField(ctx, pond.x, pond.y, pond.radius);
-        else drawNotebookPuddle(ctx, pond.x, pond.y, pond.radius, pond.numPoints, pond.randomOffsetLimit);
-    }
-
-    for(let i = 0; i < mapData.camps.length; i++) {
-        let camp = mapData.camps[i];
-        if (window.MapOptimizer.isVisible(camp.x, camp.y, camp.radius, camera, canvasWidth, canvasHeight)) drawCamp(ctx, camp);
-    }
-
-    // --- 5. BAZY I ZAMKI ---
-    for (let i = 0; i < safeZones.length; i++) {
-        let zone = safeZones[i];
-        if (!window.MapOptimizer.isVisible(zone.x, zone.y, zone.radius, camera, canvasWidth, canvasHeight)) continue;
-        if (zone.type === 'epic_castle') drawEpicCastle(ctx, zone.x, zone.y, zone.radius);
-        else if (zone.type === 'castle') drawCastle(ctx, zone.x, zone.y, zone.radius, zone.team);
-        else drawSafeZone(ctx, zone.x, zone.y, zone.radius);
-    }
-
-    // --- 6. GŁAZY & PRZESZKODY (Z-Sorting) ---
-    let visibleObstacles = [];
-    for(let i = 0; i < mapData.rocks.length; i++) {
-        let r = mapData.rocks[i];
-        if (window.MapOptimizer.isVisible(r.x, r.y, r.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(r);
-    }
-    for(let i = 0; i < mapData.trees.length; i++) {
-        let tree = mapData.trees[i];
-        if (window.MapOptimizer.isVisible(tree.x, tree.y, tree.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(tree);
-    }
-
-    visibleObstacles.sort((a, b) => a.y - b.y); 
-    
-    for(let i = 0; i < visibleObstacles.length; i++) {
-        let o = visibleObstacles[i];
-        if (o.type) { 
-            if (o.type === 'dead_tree') drawSpookyTree(ctx, o.x, o.y, o.radius);
-            else if (o.type === 'column') drawBrokenColumn(ctx, o.x, o.y, o.radius);
-            else drawNotebookTree(ctx, o.x, o.y, o.radius);
-        } else {
-            drawNotebookRock(ctx, o.x, o.y, o.radius);
-        }
-    }
-
-   // --- 7. KRZAKI (Mechanika Ukrycia) ---
-    let playerInBush = false;
-    for(let i = 0; i < mapData.bushes.length; i++) {
-        let bush = mapData.bushes[i];
-        if (window.MapOptimizer.isVisible(bush.x, bush.y, bush.radius, camera, canvasWidth, canvasHeight)) {
-            drawBush(ctx, bush);
-            if (typeof player !== 'undefined' && player && Math.hypot(player.x - bush.x, player.y - bush.y) < bush.radius) {
-                playerInBush = true;
-            }
-        }
-    }
-    
-    // ZAMIAST ZABIJAĆ FPS FILTRAMI CSS, ROBIMY LEKKI MROCZNY WIKNIET NA CANVASIE!
-    if (playerInBush) {
-        ctx.fillStyle = 'rgba(5, 20, 10, 0.35)'; // Lekki, mroczny zielony nalot na ekranie
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-    }
-
-    // --- 8. PTAKI & ŚWIETLIKI NA NIEBIE ---
-    let now = Date.now();
-    if (now - mapData.lastBirdSpawn > 30000) { 
-        mapData.lastBirdSpawn = now; let flock = [];
-        for(let i=0; i<7; i++) flock.push({ offsetX: -Math.abs(i - 3) * 25, offsetY: (i - 3) * 25 }); 
-        mapData.birds.push({ x: -200, y: Math.random() * 3000 + 500, speed: 2 + Math.random(), flock: flock });
-    }
-
-    ctx.strokeStyle = activeTheme.border; ctx.lineWidth = 2; ctx.lineJoin = 'miter';
-    for (let i = mapData.birds.length - 1; i >= 0; i--) {
-        let b = mapData.birds[i]; b.x += b.speed; b.y -= b.speed * 0.3; 
-        b.flock.forEach(f => {
-            let bx = b.x + f.offsetX; let by = b.y + f.offsetY;
-            ctx.beginPath(); ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx, by); ctx.lineTo(bx - 6, by + 6); ctx.stroke();
-        });
-        if (b.x > wSize + 500 || b.y < -200) mapData.birds.splice(i, 1); 
-    }
-
-    ctx.fillStyle = activeTheme.glow;
-    window.MapOptimizer.applyGlow(ctx, 10, activeTheme.glow);
-    for (let i = 0; i < mapData.fireflies.length; i++) {
-        let f = mapData.fireflies[i];
-        f.x += Math.sin(now * f.speed + f.offset) * 2;
-        f.y -= 0.5; 
-        if (f.y < 0) f.y = wSize;
-        if (window.MapOptimizer.isVisible(f.x, f.y, f.radius, camera, canvasWidth, canvasHeight)) {
-            ctx.globalAlpha = Math.abs(Math.sin(now * f.speed));
-            ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2); ctx.fill();
-        }
-    }
-    ctx.globalAlpha = 1.0;
-    window.MapOptimizer.resetGlow(ctx);
-
-    ctx.restore(); 
-
-    // --- 9. EFEKTY POGODOWE (HUD) ---
-    let eventName = typeof currentEvent !== 'undefined' ? currentEvent : null;
-    if (eventName === 'TOXIC_RAIN') {
-        ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        for(let i = 0; i < 150; i++) {
-            let rx = (Math.sin(i * 123) * 10000 - now * 0.5) % canvasWidth; let ry = (Math.cos(i * 321) * 10000 + now * 1.5) % canvasHeight;
-            if (rx < 0) rx += canvasWidth; if (ry < 0) ry += canvasHeight;
-            ctx.moveTo(rx, ry); ctx.lineTo(rx - 8, ry + 25); 
-        }
-        ctx.stroke();
-    } else if (eventName === 'BLIZZARD') {
-        ctx.fillStyle = 'rgba(52, 152, 219, 0.2)'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        for(let i = 0; i < 200; i++) {
-            let sx = (Math.cos(i * 987) * 10000 + now * 2.0) % canvasWidth; let sy = (Math.sin(i * 654) * 10000 + now * 0.3) % canvasHeight;
-            if (sx < 0) sx += canvasWidth; if (sy < 0) sy += canvasHeight;
-            ctx.beginPath(); ctx.arc(sx, sy, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
-        }
-    }
-
-    window.MapOptimizer.cleanUpMemory();
-}
-
-// =========================================================================
-// FUNKCJE SYSTEMOWE
-// =========================================================================
-window.wrapText = function(context, text, x, y, maxWidth, lineHeight) {
-    if (!text) return;
-    let words = text.split(' '); let line = '';
-    for(let n = 0; n < words.length; n++) {
-        let testLine = line + words[n] + ' '; let metrics = context.measureText(testLine); let testWidth = metrics.width;
-        if (testWidth > maxWidth && n > 0) { context.fillText(line, x, y); line = words[n] + ' '; y += lineHeight; } 
-        else { line = testLine; }
-    }
-    context.fillText(line, x, y);
-};
-function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; globalScale = Math.min(1, window.innerHeight / 900); }
-window.onresize = resize; resize();
-// ==========================================
-// MAPENGINE.JS - Zunifikowany Silnik Środowiska (Vibe Noir Edition)
-// Opakowany w Klasę (Wzorzec MVC - Widok Świata)
-// ==========================================
-
-class MapEngine {
-    constructor() {
-        this.worldSize = 4000;
-        
-        // --- SYSTEM MOTYWÓW WIZUALNYCH ---
-        this.MAP_THEMES = {
-            'FREE': { bg: '#050505', road: 'rgba(255, 255, 255, 0.05)', border: '#ffffff', spotColor: '#ffffff', glow: '#3498db' },
-            'PvP': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2980b9' },
-            'TRAINING': { bg: '#050505', road: 'rgba(52, 152, 219, 0.05)', border: '#3498db', spotColor: '#ffffff', glow: '#2ecc71' },
-            'campaign_1': { bg: '#050505', road: 'rgba(46, 204, 113, 0.05)', border: '#2ecc71', spotColor: '#ffffff', glow: '#27ae60' },
-            'campaign_2': { bg: '#020205', road: 'rgba(155, 89, 182, 0.05)', border: '#9b59b6', spotColor: '#ffffff', glow: '#8e44ad' },
-            'campaign_3': { bg: '#0a0505', road: 'rgba(231, 76, 60, 0.05)', border: '#e74c3c', spotColor: '#ffffff', glow: '#c0392b' }
-        };
-
-        this.activeTheme = this.MAP_THEMES['FREE'];
-        this.safeZones = []; 
-        this.mapData = { 
-            trees: [], roads: [], ponds: [], spots: [], rocks: [], grass: [], 
-            bushes: [], camps: [], fireflies: [], birds: [], lastBirdSpawn: 0 
-        };
-    }
-
-    // ==========================================
-    // GENEROWANIE I LOGIKA DANYCH ŚWIATA
-    // ==========================================
-    clearData() {
-        this.mapData.roads.length = 0; this.mapData.trees.length = 0; this.mapData.ponds.length = 0; 
-        this.mapData.spots.length = 0; this.mapData.rocks.length = 0; this.mapData.grass.length = 0; 
-        this.mapData.bushes.length = 0; this.mapData.camps.length = 0; this.mapData.fireflies.length = 0; 
-        this.mapData.birds.length = 0; this.mapData.lastBirdSpawn = Date.now(); 
-        this.safeZones.length = 0;
-    }
-
-    addSafeZone(x, y, radius, type = 'safezone', teamLetter = '') {
-        this.safeZones.push({ x: x, y: y, radius: radius, type: type, team: teamLetter });
-    }
-
-    addRoad(x, y, width, height) {
-        this.mapData.roads.push({ x: x, y: y, width: width, height: height });
-    }
-    
-    addCamp(x, y) { 
-        this.mapData.camps.push({x: x, y: y, radius: 80}); 
-    }
-
-    populateWorld(config) {
-        const checkCollision = (px, py, r) => {
-            for(let road of this.mapData.roads) if (px > road.x - r - 10 && px < road.x + road.width + r + 10 && py > road.y - r - 10 && py < road.y + road.height + r + 10) return true;
-            for(let zone of this.safeZones) if (Math.hypot(px - zone.x, py - zone.y) < r + zone.radius + 20) return true;
-            for(let pond of this.mapData.ponds) if (Math.hypot(px - pond.x, py - pond.y) < r + pond.radius + 15) return true;
-            for(let camp of this.mapData.camps) if (Math.hypot(px - camp.x, py - camp.y) < r + camp.radius + 10) return true;
-            return false;
-        };
-
-        for(let i = 0; i < config.numGrass; i++) {
-            this.mapData.grass.push({ x: Math.random() * this.worldSize, y: Math.random() * this.worldSize, type: config.grassTypes[Math.floor(Math.random() * config.grassTypes.length)] });
-        }
-
-        for(let i = 0; i < config.numSpots; i++) {
-            this.mapData.spots.push({ x: Math.random() * this.worldSize, y: Math.random() * this.worldSize, radius: 3 + Math.random() * 5 });
-        }
-
-        let totalRocks = config.numRocks || 20;
-        for(let i = 0; i < totalRocks; i++) {
-            let cx = Math.random() * this.worldSize; let cy = Math.random() * this.worldSize;
-            let clusterSize = 3 + Math.floor(Math.random() * 5);
-            for(let j = 0; j < clusterSize; j++) {
-                this.mapData.rocks.push({ x: cx + (Math.random() * 200 - 100), y: cy + (Math.random() * 200 - 100), radius: 10 + Math.random() * 25 });
-            }
-        }
-
-        for (let i = 0; i < config.numPonds; i++) {
-            let r = 30 + Math.random() * 40, px, py;
-            do { px = Math.random() * this.worldSize; py = Math.random() * this.worldSize; } while(checkCollision(px, py, r));
-            this.mapData.ponds.push({ x: px, y: py, radius: r, numPoints: 12 + Math.floor(Math.random() * 8), randomOffsetLimit: 0.15 + Math.random() * 0.1, type: config.pondType });
-        }
-
-        for (let i = 0; i < config.numTrees; i++) {
-            let r = 25 + Math.random() * 20, tx, ty;
-            do { tx = Math.random() * this.worldSize; ty = Math.random() * this.worldSize; } while(checkCollision(tx, ty, r));
-            this.mapData.trees.push({ x: tx, y: ty, radius: r, type: config.treeType });
-        }
-        
-        if (typeof bushes !== 'undefined' && bushes.length > 0) {
-            this.mapData.bushes = bushes; 
-        } else {
-            let numBushes = config.numBushes || 40;
-            for (let i = 0; i < numBushes; i++) {
-                let r = 60 + Math.random() * 60, bx, by;
-                do { bx = Math.random() * this.worldSize; by = Math.random() * this.worldSize; } while(checkCollision(bx, by, r));
-                this.mapData.bushes.push({ x: bx, y: by, radius: r });
-            }
-        }
-
-        if (config.treeType === 'choinka') {
-            for(let i=0; i<80; i++) {
-                this.mapData.fireflies.push({ 
-                    x: Math.random() * this.worldSize, y: Math.random() * this.worldSize, 
-                    offset: Math.random() * Math.PI * 2, speed: 0.02 + Math.random() * 0.03, radius: 2 + Math.random() * 3 
-                });
-            }
-        }
-    }
-
-    // --- METODY GENEROWANIA KONKRETNYCH TRYBÓW ---
-    generateFreeMode() {
-        this.clearData(); this.activeTheme = this.MAP_THEMES['FREE']; let center = this.worldSize / 2;
-        this.addSafeZone(center, center, 350, 'epic_castle', ''); 
-        this.addRoad(center - 100, 0, 200, center - 400); this.addRoad(center - 100, center + 400, 200, center - 400); 
-        this.addRoad(0, center - 100, center - 400, 200); this.addRoad(center + 400, center - 100, center - 400, 200);
-        this.addCamp(center - 800, center - 800); this.addCamp(center + 800, center + 800);
-        this.populateWorld({ numGrass: 400, grassTypes: ['grass'], numSpots: 100, numRocks: 40, numPonds: 30, pondType: 'puddle', numTrees: 400, treeType: 'choinka', numBushes: 50 });
-    }
-
-    generateCampaign(actType) {
-        this.clearData(); this.activeTheme = this.MAP_THEMES[actType];
-        if (actType === 'campaign_1') {
-            this.addSafeZone(2000, 3800, 250, 'safezone'); this.addRoad(1880, 200, 240, 3600); this.addRoad(500, 2000, 3000, 150); 
-            this.addCamp(1000, 1000); this.addCamp(3000, 1000);
-            this.populateWorld({ numGrass: 600, grassTypes: ['grass'], numSpots: 150, numRocks: 30, numPonds: 20, pondType: 'puddle', numTrees: 450, treeType: 'choinka', numBushes: 50 });
-        } else if (actType === 'campaign_2') {
-            this.addSafeZone(2000, 2000, 300, 'safezone'); this.addRoad(0, 1880, 4000, 240); this.addRoad(1880, 0, 240, 4000); 
-            this.addRoad(800, 800, 2400, 150); this.addRoad(800, 3000, 2400, 150);
-            this.populateWorld({ numGrass: 300, grassTypes: ['grave', 'sword'], numSpots: 250, numRocks: 50, numPonds: 45, pondType: 'crater', numTrees: 300, treeType: 'dead_tree', numBushes: 20 });
-        } else if (actType === 'campaign_3') {
-            this.addSafeZone(2000, 3800, 150, 'safezone'); this.addRoad(1800, 400, 400, 3400); this.addRoad(1000, 400, 2000, 200); 
-            this.populateWorld({ numGrass: 100, grassTypes: ['skull', 'crown'], numSpots: 600, numRocks: 100, numPonds: 70, pondType: 'spikes', numTrees: 400, treeType: 'column', numBushes: 10 });
-        }
-    }
-
-    generateTeams(modeType) {
-        this.clearData(); this.activeTheme = this.MAP_THEMES[modeType] || this.MAP_THEMES['PvP'];
-        let w = this.worldSize; let c = w / 2;
-        this.addRoad(c - 250, 0, 500, w); this.addRoad(0, c - 250, w, 500); 
-        this.addRoad(150, 150, w-300, 300); this.addRoad(150, w-450, w-300, 300); 
-        this.addRoad(150, 150, 300, w-300); this.addRoad(w-450, 150, 300, w-300);
-        this.addRoad(c - 600, c - 600, 1200, 1200);
-        for(let i = 0; i < 8; i++) { let angle = (i / 8) * Math.PI * 2 + (Math.PI/8); this.mapData.rocks.push({x: c + Math.cos(angle)*650, y: c + Math.sin(angle)*650, radius: 50 + Math.random()*20}); }
-        this.addCamp(c - 800, c - 800); this.addCamp(c + 800, c + 800); this.addCamp(c - 800, c + 800); this.addCamp(c + 800, c - 800); 
-        let baseCoords = [{x: 1000, y: 1000}, {x: w-1000, y: 1000}, {x: 1000, y: w-1000}, {x: w-1000, y: w-1000}];
-        baseCoords.forEach(base => {
-            this.addRoad(base.x - 450, base.y - 450, 900, 900);
-            for(let i = 0; i < 16; i++) { let angle = (i/16) * Math.PI * 2; let tx = base.x + Math.cos(angle) * 350; let ty = base.y + Math.sin(angle) * 350; if (i % 4 !== 0) this.mapData.trees.push({x: tx, y: ty, radius: 45 + Math.random()*10, type: 'column'}); }
-            this.mapData.rocks.push({x: base.x - 200, y: base.y - 200, radius: 45}); this.mapData.rocks.push({x: base.x + 200, y: base.y + 200, radius: 45});
-        });
-        for(let i=0; i<15; i++) { let wx = 500 + Math.random() * (w - 1000), wy = 500 + Math.random() * (w - 1000); if(Math.hypot(wx - c, wy - c) > 700) { for(let k=0; k<3; k++) this.mapData.trees.push({x: wx + k*60, y: wy + k*20, radius: 35, type: 'column'}); } }
-        this.populateWorld({ numGrass: 1500, grassTypes: ['grass', 'sword', 'skull', 'grave'], numSpots: 400, numRocks: 250, numPonds: 50, pondType: 'crater', numTrees: 1200, treeType: 'dead_tree', numBushes: 150 });
-    }
-
-    initMap(worldSize, mapType = 'FREE') {
-        this.worldSize = worldSize;
-        if (mapType === 'FREE') this.generateFreeMode();
-        else if (mapType.startsWith('campaign_')) this.generateCampaign(mapType);
-        else if (mapType === 'PvP' || mapType === 'TRAINING') this.generateTeams(mapType); 
-        else this.generateFreeMode();
-    }
-
-    // ==========================================
-    // RYSOWANIE MAŁYCH ELEMENTÓW MAPY
-    // ==========================================
-    drawCamp(ctx, camp) {
-        ctx.save(); ctx.translate(camp.x, camp.y);
-        ctx.fillStyle = 'rgba(20, 10, 5, 0.4)'; ctx.beginPath(); ctx.arc(0, 0, camp.radius, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = '#333'; ctx.lineWidth = 2; ctx.stroke();
-        ctx.fillStyle = '#2c3e50'; ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2;
-        for(let i=0; i<3; i++) {
-            ctx.save(); ctx.rotate(i * (Math.PI*2/3)); ctx.translate(0, -camp.radius * 0.6);
-            ctx.beginPath(); ctx.moveTo(0, -15); ctx.lineTo(-20, 15); ctx.lineTo(20, 15); ctx.closePath(); ctx.fill(); ctx.stroke();
-            ctx.restore();
-        }
-        ctx.fillStyle = '#8B4513'; ctx.fillRect(-15, -5, 30, 10); ctx.fillRect(-5, -15, 10, 30); 
-        let firePulse = (Math.sin(Date.now() / 150) + 1) / 2;
-        window.Renderer.applyGlow(ctx, 30 + firePulse * 20, '#e67e22');
-        ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.moveTo(0, -25 - firePulse*10); ctx.lineTo(-15, 10); ctx.lineTo(15, 10); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(0, -15 - firePulse*5); ctx.lineTo(-8, 10); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill();
-        window.Renderer.resetGlow(ctx);
-        ctx.restore();
-    }
-
-    drawBush(ctx, bush) {
-        ctx.save(); ctx.translate(bush.x, bush.y); ctx.fillStyle = 'rgba(5, 20, 10, 0.8)';
-        ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2;
-        ctx.rotate(Math.sin(Date.now() / 1000 + bush.x) * 0.05);
-        ctx.beginPath();
-        for (let i = 0; i < 12; i++) {
-            let angle = (i / 12) * Math.PI * 2; let currentR = bush.radius * (0.8 + Math.sin(i * 3) * 0.2); 
-            let px = Math.cos(angle) * currentR; let py = Math.sin(angle) * currentR;
-            if (i === 0) ctx.moveTo(px, py); else ctx.quadraticCurveTo(0, 0, px, py); 
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke(); ctx.restore();
-    }
-
-    drawNotebookGrass(ctx, x, y) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 1.5; ctx.lineCap = 'round';
-        ctx.beginPath(); ctx.moveTo(0, 5); ctx.lineTo(-5, -8); ctx.moveTo(2, 6); ctx.lineTo(1, -12); ctx.moveTo(4, 5); ctx.lineTo(8, -6); ctx.stroke();
-        ctx.restore();
-    }
-
-    drawGrave(ctx, x, y) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2.5; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.fillStyle = this.activeTheme.bg; ctx.beginPath(); ctx.moveTo(-6, 8); ctx.lineTo(-6, -4); ctx.arc(0, -4, 6, Math.PI, 0); ctx.lineTo(6, 8); ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(0, -5); ctx.lineTo(0, 2); ctx.moveTo(-3, -2); ctx.lineTo(3, -2); ctx.stroke(); ctx.restore();
-    }
-
-    drawSwordDetail(ctx, x, y) {
-        ctx.save(); ctx.translate(x, y); ctx.rotate(-0.3); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(0, 10); ctx.lineTo(0, -10); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-5, -6); ctx.lineTo(5, -6); ctx.stroke(); ctx.beginPath(); ctx.arc(0, -11, 1.5, 0, Math.PI*2); ctx.stroke(); ctx.restore();
-    }
-
-    drawWastelandSkull(ctx, x, y) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.beginPath(); ctx.arc(0, -2, 5, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(-3, 3); ctx.lineTo(-3, 6); ctx.lineTo(3, 6); ctx.lineTo(3, 3); ctx.stroke(); 
-        ctx.fillStyle = this.activeTheme.bg; ctx.beginPath(); ctx.arc(-2, -2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(2, -2, 1.5, 0, Math.PI*2); ctx.fill(); ctx.restore();
-    }
-
-    drawBrokenCrown(ctx, x, y) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-4, 4); ctx.lineTo(4, 4); ctx.lineTo(6, -4); ctx.lineTo(2, 0); ctx.lineTo(0, -6); ctx.lineTo(-2, 0); ctx.closePath(); ctx.stroke(); ctx.restore();
-    }
-
-    drawNotebookRock(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.fillStyle = this.activeTheme.bg; ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.lineJoin = 'round';
-        ctx.beginPath();
-        for (let i = 0; i < 7; i++) {
-            let angle = (i / 7) * Math.PI * 2; let offset = Math.sin(angle * 4 + x) * 0.25; let currentR = radius * (1 + offset);
-            let px = Math.cos(angle) * currentR; let py = Math.sin(angle) * currentR;
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-radius * 0.4, -radius * 0.2); ctx.lineTo(radius * 0.3, radius * 0.2); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(radius * 0.1, -radius * 0.4); ctx.lineTo(0, radius * 0.5); ctx.stroke(); ctx.restore();
-    }
-
-    drawNotebookPuddle(ctx, x, y, radius, numPoints, randomOffsetLimit) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.lineWidth = 2;
-        ctx.beginPath();
-        for (let i = 0; i < numPoints; i++) {
-            let angle = (i / numPoints) * Math.PI * 2;
-            let offset1 = Math.sin(angle * 3 + x) * randomOffsetLimit; let offset2 = Math.cos(angle * 4 + y) * (randomOffsetLimit * 0.7);
-            let currentRadius = radius * (1 + offset1 + offset2);
-            let px = Math.cos(angle) * currentRadius; let py = Math.sin(angle) * currentRadius;
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        ctx.beginPath();
-        let drop1X = Math.cos(x) * (radius * 1.3); let drop1Y = Math.sin(y) * (radius * 1.3); ctx.arc(drop1X, drop1Y, radius * 0.15, 0, Math.PI * 2);
-        let drop2X = Math.cos(y) * (radius * 1.5); let drop2Y = Math.sin(x) * (radius * 1.5); ctx.arc(drop2X, drop2Y, radius * 0.1, 0, Math.PI * 2); ctx.fill();
-        ctx.restore();
-    }
-
-    drawDeepCrater(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); 
-        let pulse = (Math.sin(Date.now()/500 + x) + 1) / 2;
-        window.Renderer.applyGlow(ctx, 20 * pulse, this.activeTheme.glow);
-        
-        ctx.fillStyle = '#0a0a0a'; ctx.strokeStyle = this.activeTheme.glow; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-        ctx.beginPath();
-        for(let i=0; i<12; i++) { let a = (i/12) * Math.PI * 2; let r = radius + Math.sin(a * 5 + x) * 10; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-        window.Renderer.resetGlow(ctx);
-
-        ctx.lineWidth = 2; ctx.strokeStyle = '#333';
-        for(let i=0; i<4; i++) { let a = (i/4) * Math.PI * 2 + (x % 2); ctx.beginPath(); ctx.moveTo(Math.cos(a)*(radius-5), Math.sin(a)*(radius-5)); ctx.lineTo(Math.cos(a)*(radius+20), Math.sin(a)*(radius+20)); ctx.stroke(); }
-        
-        ctx.fillStyle = `rgba(46, 204, 113, ${0.2 + pulse * 0.3})`; ctx.beginPath();
-        for(let i=0; i<10; i++) { let a = (i/10) * Math.PI * 2 + (Date.now()/2000); let r = radius * 0.6 + Math.cos(a * 7 + y) * 8; ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r); }
-        ctx.closePath(); ctx.fill(); ctx.restore();
-    }
-
-    drawSpikesField(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2.5; ctx.lineJoin = 'round';
-        let numSpikes = 5 + Math.floor(Math.abs(x + y) % 3);
-        for(let i=0; i<numSpikes; i++) {
-            let a = (i/numSpikes) * Math.PI * 2 + (x % 1); let dist = radius * 0.5;
-            ctx.save(); ctx.translate(Math.cos(a)*dist, Math.sin(a)*dist); ctx.rotate(a + Math.PI/2); 
-            ctx.fillStyle = '#111111'; ctx.beginPath(); ctx.moveTo(-8, 10); ctx.lineTo(0, -25); ctx.lineTo(8, 10); ctx.closePath(); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = '#050505'; ctx.beginPath(); ctx.moveTo(0, -25); ctx.lineTo(8, 10); ctx.lineTo(0, 10); ctx.closePath(); ctx.fill(); ctx.restore();
-        }
-        ctx.restore();
-    }
-
-    drawNotebookTree(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.fillStyle = this.activeTheme.bg; ctx.strokeStyle = this.activeTheme.border; ctx.lineJoin = 'miter'; ctx.lineWidth = 2;
-        ctx.fillRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8); ctx.strokeRect(-radius * 0.15, 0, radius * 0.3, radius * 0.8);
-        ctx.beginPath(); ctx.moveTo(0, -radius * 0.1); ctx.lineTo(radius * 0.9, radius * 0.5); ctx.lineTo(-radius * 0.9, radius * 0.5);
-        ctx.moveTo(0, -radius * 0.6); ctx.lineTo(radius * 0.7, 0); ctx.lineTo(-radius * 0.7, 0);
-        ctx.moveTo(0, -radius * 1.2); ctx.lineTo(radius * 0.5, -radius * 0.4); ctx.lineTo(-radius * 0.5, -radius * 0.4);
-        ctx.fill(); ctx.stroke(); ctx.restore();
-    }
-
-    drawSpookyTree(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 4; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-        ctx.beginPath(); ctx.moveTo(0, radius); ctx.lineTo(0, -radius * 0.3); ctx.stroke();
-        ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(-radius * 0.6, -radius * 0.5); ctx.lineTo(-radius * 0.9, -radius * 0.1); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, -radius * 0.1); ctx.lineTo(radius * 0.5, -radius * 0.6); ctx.lineTo(radius * 0.8, -radius * 0.2); ctx.stroke();
-        ctx.fillStyle = this.activeTheme.bg; ctx.beginPath(); ctx.ellipse(0, radius * 0.4, radius * 0.15, radius * 0.3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke(); ctx.restore();
-    }
-
-    drawBrokenColumn(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.fillStyle = this.activeTheme.bg; ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 3; ctx.lineJoin = 'round';
-        ctx.beginPath(); ctx.ellipse(0, radius*0.8, radius, radius*0.3, 0, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(-radius*0.8, radius*0.8); ctx.lineTo(-radius*0.8, -radius*0.5); ctx.lineTo(-radius*0.3, -radius*0.9); ctx.lineTo(0, -radius*0.4); ctx.lineTo(radius*0.5, -radius*0.8); ctx.lineTo(radius*0.8, radius*0.8); ctx.fill(); ctx.stroke();
-        ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(-radius*0.4, radius*0.8); ctx.lineTo(-radius*0.4, -radius*0.6); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, radius*0.8); ctx.lineTo(0, -radius*0.4); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(radius*0.4, radius*0.8); ctx.lineTo(radius*0.4, -radius*0.7); ctx.stroke();
-        ctx.lineWidth = 2.5; ctx.beginPath(); ctx.moveTo(-radius*0.2, 0); ctx.lineTo(radius*0.2, radius*0.3); ctx.lineTo(radius*0.1, radius*0.6); ctx.stroke(); ctx.restore();
-    }
-
-    // ==========================================
-    // RYSOWANIE DUŻYCH STRUKTUR (ZAMKI)
-    // ==========================================
-    drawEpicCastle(ctx, x, y, radius, playerReference) {
-        ctx.save(); ctx.translate(x, y);
-
-        let abyssRadius = radius + 60;
-        ctx.fillStyle = '#010102'; ctx.beginPath();
-        for (let i = 0; i < 48; i++) {
-            let angle = (i / 48) * Math.PI * 2; let offset = (i % 2 === 0) ? 15 : -15; 
-            let px = Math.cos(angle) * (abyssRadius + offset); let py = Math.sin(angle) * (abyssRadius + offset);
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill();
-
-        window.Renderer.applyGlow(ctx, 20, this.activeTheme.border);
-        ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.stroke();
-        window.Renderer.resetGlow(ctx);
-
-        ctx.fillStyle = '#050505'; ctx.beginPath();
-        for(let i=0; i<8; i++) {
-            let angle = (i / 8) * Math.PI * 2 + (Math.PI/8); 
-            let px = Math.cos(angle) * radius; let py = Math.sin(angle) * radius;
-            if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill(); ctx.lineWidth = 4; ctx.stroke();
-
-        let innerRadius = radius - 40; ctx.beginPath();
-        for(let i=0; i<8; i++) {
-            let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
-            let px = Math.cos(angle) * innerRadius; let py = Math.sin(angle) * innerRadius;
-            if(i===0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.lineWidth = 2; ctx.stroke();
-
-        ctx.lineWidth = 1;
-        for(let i=0; i<8; i++) {
-            let angle = (i / 8) * Math.PI * 2 + (Math.PI/8);
-            ctx.beginPath(); ctx.moveTo(Math.cos(angle) * radius, Math.sin(angle) * radius);
-            ctx.lineTo(Math.cos(angle) * innerRadius, Math.sin(angle) * innerRadius); ctx.stroke();
-        }
-
-        ctx.fillStyle = '#050505'; ctx.strokeStyle = this.activeTheme.border;
-        let bridgeAngles = [0, Math.PI/2, Math.PI, Math.PI*1.5]; 
-        
-        for(let angle of bridgeAngles) {
-            ctx.save(); ctx.rotate(angle); ctx.lineWidth = 3;
-            ctx.fillRect(innerRadius, -40, abyssRadius - innerRadius + 20, 80);
-            ctx.strokeRect(innerRadius, -40, abyssRadius - innerRadius + 20, 80);
-            ctx.lineWidth = 1; ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-            for(let i=1; i<=4; i++) { ctx.beginPath(); ctx.moveTo(innerRadius + i*20, -40); ctx.lineTo(innerRadius + i*20, 40); ctx.stroke(); }
-            ctx.restore();
-        }
-
-        ctx.fillStyle = '#080808'; ctx.fillRect(-120, -innerRadius + 10, 240, 100);
-        ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.strokeRect(-120, -innerRadius + 10, 240, 100);
-        
-        ctx.beginPath(); ctx.moveTo(-120, -innerRadius + 10); ctx.lineTo(0, -innerRadius + 60); ctx.lineTo(120, -innerRadius + 10); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(0, -innerRadius + 10); ctx.lineTo(0, -innerRadius + 60); ctx.stroke();
-
-        window.Renderer.applyGlow(ctx, 10, '#e74c3c');
-        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-40, -innerRadius + 75, 20, 20); ctx.fillRect(20, -innerRadius + 75, 20, 20);
-        window.Renderer.resetGlow(ctx);
-
-        this.drawSpookyTree(ctx, -140, -80, 25); this.drawSpookyTree(ctx, 140, -80, 25);
-
-        let isPlayerHere = playerReference && Math.hypot(playerReference.x - x, playerReference.y - y) < 80;
-        
-        if (isPlayerHere) window.Renderer.applyGlow(ctx, 25, '#f1c40f');
-        
-        ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI * 2);
-        ctx.fillStyle = isPlayerHere ? 'rgba(241, 196, 15, 0.2)' : 'rgba(255, 255, 255, 0.05)'; ctx.fill();
-        ctx.lineWidth = 3; ctx.strokeStyle = isPlayerHere ? '#f1c40f' : 'rgba(255, 255, 255, 0.5)';
-        ctx.setLineDash([10, 10]); ctx.stroke(); ctx.setLineDash([]);
-        window.Renderer.resetGlow(ctx);
-        
-        ctx.fillStyle = isPlayerHere ? '#f1c40f' : '#555555';
-        ctx.font = 'bold 24px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText("👑", 0, 0);
-
-        ctx.restore();
-    }
-
-    drawSafeZone(ctx, x, y, radius) {
-        ctx.save(); ctx.translate(x, y); ctx.beginPath(); ctx.arc(0, 0, radius, 0, Math.PI * 2); ctx.clip(); 
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.05)'; ctx.fillRect(-radius, -radius, radius * 2, radius * 2); ctx.restore(); 
-        ctx.save(); ctx.translate(x, y); ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)'; ctx.lineWidth = 4; ctx.setLineDash([20, 15]); 
-        window.Renderer.applyGlow(ctx, 10, '#ffffff');
-        ctx.beginPath();
-        for (let i = 0; i < 32; i++) {
-            let angle = (i / 32) * Math.PI * 2; let offset = Math.sin(angle * 6 + x) * 3; let px = Math.cos(angle) * (radius + offset); let py = Math.sin(angle) * (radius + offset);
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.stroke(); ctx.setLineDash([]); window.Renderer.resetGlow(ctx);
-        ctx.fillStyle = '#ffffff'; ctx.font = "bold 16px 'Courier New', monospace"; ctx.textAlign = 'center'; ctx.fillText("BEZPIECZNA STREFA", 0, radius - 20); ctx.restore();
-    }
-
-    drawCastle(ctx, x, y, radius, teamLetter, playerReference) {
-        ctx.save(); ctx.translate(x, y);
-        let bridgeAngle = Math.atan2(2000 - y, 2000 - x); let moatRadius = radius + 40;
-
-        ctx.fillStyle = '#020202'; ctx.beginPath();
-        for (let i = 0; i < 32; i++) {
-            let angle = (i / 32) * Math.PI * 2; let offset = Math.sin(angle * 8 + x) * 8; let px = Math.cos(angle) * (moatRadius + offset); let py = Math.sin(angle) * (moatRadius + offset);
-            if (i === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-        }
-        ctx.closePath(); ctx.fill();
-
-        let isPlayerHere = playerReference && Math.hypot(playerReference.x - x, playerReference.y - y) < radius;
-        ctx.beginPath(); ctx.arc(0, 0, radius + 15, 0, Math.PI * 2);
-        
-        if (isPlayerHere) {
-            ctx.save(); ctx.clip(); ctx.fillStyle = '#050505'; ctx.fillRect(-radius-15, -radius-15, (radius+15)*2, (radius+15)*2); ctx.fillStyle = '#111111';
-            let tileSize = 30;
-            for(let tx = -radius-15; tx < radius+15; tx+=tileSize) {
-                for(let ty = -radius-15; ty < radius+15; ty+=tileSize) { if (Math.abs((tx/tileSize) % 2) === Math.abs((ty/tileSize) % 2)) ctx.fillRect(tx, ty, tileSize, tileSize); }
-            }
-            ctx.fillStyle = '#333333'; ctx.fillRect(-30, -30, 60, 80); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(-30, -30, 60, 80);
-            ctx.fillStyle = '#1a1a1a'; ctx.fillRect(-50, -60, 100, 30); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.strokeRect(-50, -60, 100, 30); ctx.restore();
-        } else {
-            ctx.fillStyle = this.activeTheme.bg; ctx.fill();
-        }
-
-        ctx.lineWidth = 4; ctx.strokeStyle = '#ffffff';
-        window.Renderer.applyGlow(ctx, 15, '#ffffff');
-        ctx.beginPath(); ctx.arc(0, 0, radius, bridgeAngle + 0.35, bridgeAngle - 0.35 + Math.PI * 2); ctx.stroke(); window.Renderer.resetGlow(ctx);
-
-        ctx.save(); ctx.rotate(bridgeAngle); ctx.fillStyle = '#050505'; ctx.fillRect(radius - 5, -30, 55, 60); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(radius - 5, -30, 55, 60);
-        ctx.lineWidth = 1; for(let i=1; i<=4; i++) { ctx.beginPath(); ctx.moveTo(radius - 5 + i*11, -30); ctx.lineTo(radius - 5 + i*11, 30); ctx.stroke(); } ctx.restore();
-
-        let numTowers = 8;
-        for (let i = 0; i < numTowers; i++) {
-            let angle = (i / numTowers) * Math.PI * 2; let angleDiff = Math.abs(angle - bridgeAngle); angleDiff = Math.min(angleDiff, Math.PI * 2 - angleDiff);
-            if (angleDiff < 0.4) continue; 
-            let tx = Math.cos(angle) * radius; let ty = Math.sin(angle) * radius;
-            ctx.save(); ctx.translate(tx, ty); ctx.rotate(angle); ctx.fillStyle = '#050505'; ctx.fillRect(-12, -12, 24, 24); ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2; ctx.strokeRect(-12, -12, 24, 24); ctx.restore();
-        }
-
-        if (!isPlayerHere && teamLetter && teamLetter !== '') {
-            ctx.fillStyle = '#ffffff'; ctx.font = `bold ${radius * 0.6}px 'Courier New', monospace`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(teamLetter, 0, 0); 
-        }
-        ctx.restore();
-    }
-
-    // ==========================================
-    // GŁÓWNA METODA RYSOWANIA CAŁEGO ŚWIATA
-    // ==========================================
-    renderMap(ctx, camera, canvasWidth, canvasHeight, currentPlayer, currentQuest, currentEvent) {
-        ctx.fillStyle = this.activeTheme.bg;
-        ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-        ctx.save();
-        ctx.translate(-camera.x, -camera.y);
-
-        ctx.strokeStyle = this.activeTheme.border; 
-        ctx.lineWidth = 4;
-        ctx.strokeRect(0, 0, this.worldSize, this.worldSize); 
-        ctx.lineWidth = 1; 
-        ctx.strokeRect(-10, -10, this.worldSize + 20, this.worldSize + 20);
-
-        // 1. DROGI
-        ctx.fillStyle = this.activeTheme.road; ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)'; ctx.lineWidth = 2;
-        for(let i = 0; i < this.mapData.roads.length; i++) {
-            let road = this.mapData.roads[i];
-            if (!window.Renderer.isVisible(road.x + road.width/2, road.y + road.height/2, Math.max(road.width, road.height)/2, camera, canvasWidth, canvasHeight)) continue;
-            ctx.fillRect(road.x, road.y, road.width, road.height);
-            ctx.setLineDash([15, 10]); ctx.strokeRect(road.x, road.y, road.width, road.height); ctx.setLineDash([]);
+        czyMapaWygenerowana = true;
+    }
+
+    function aktualizujCząsteczki() {
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        czasteczkiTla.forEach(c => {
+            c.x += c.speedX; c.y += c.speedY;
+            // Zapętlanie cząsteczek na ekranie (zawsze latają wokół kamery)
+            if (c.x < 0) c.x = screenW; if (c.x > screenW) c.x = 0;
+            if (c.y < 0) c.y = screenH; if (c.y > screenH) c.y = 0;
             
-            if (currentQuest && currentQuest > 10) {
-                ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
-                for(let j = road.y + 100; j < road.y + road.height; j += 150) { 
-                    ctx.beginPath(); ctx.moveTo(road.x + 10, j); ctx.lineTo(road.x + road.width - 10, j + Math.sin(j * 123 + road.x) * 20); ctx.stroke(); 
-                }
-            }
-        }
+            ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+        });
+    }
 
-        // 2. DETALE 
-        for(let i = 0; i < this.mapData.grass.length; i++) {
-            let g = this.mapData.grass[i];
-            if (!window.Renderer.isVisible(g.x, g.y, 10, camera, canvasWidth, canvasHeight)) continue;
-            if (g.type === 'grave') this.drawGrave(ctx, g.x, g.y);
-            else if (g.type === 'sword') this.drawSwordDetail(ctx, g.x, g.y);
-            else if (g.type === 'skull') this.drawWastelandSkull(ctx, g.x, g.y);
-            else if (g.type === 'crown') this.drawBrokenCrown(ctx, g.x, g.y);
-            else this.drawNotebookGrass(ctx, g.x, g.y);
+    function rysujHexagon(x, y, r, kolorWnetrza, kolorObrys) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.beginPath();
+        for (let i = 0; i < 6; i++) {
+            ctx.lineTo(r * Math.cos(i * Math.PI / 3), r * Math.sin(i * Math.PI / 3));
         }
+        ctx.closePath();
+        ctx.fillStyle = kolorWnetrza; ctx.fill();
+        ctx.strokeStyle = kolorObrys; ctx.lineWidth = 5; ctx.stroke();
+        ctx.restore();
+    }
 
-        // 3. KROPKI ATRAMENTU
-        ctx.fillStyle = this.activeTheme.spotColor;
-        for(let i = 0; i < this.mapData.spots.length; i++) {
-            let s = this.mapData.spots[i];
-            if (!window.Renderer.isVisible(s.x, s.y, s.radius, camera, canvasWidth, canvasHeight)) continue;
-            window.Renderer.applyGlow(ctx, 10, this.activeTheme.spotColor);
-            ctx.beginPath(); ctx.arc(s.x, s.y, s.radius, 0, Math.PI * 2); ctx.fill(); 
-            window.Renderer.resetGlow(ctx);
-        }
-
-        // 4. PUŁAPKI & OBOZOWISKA
-        for(let i = 0; i < this.mapData.ponds.length; i++) {
-            let pond = this.mapData.ponds[i];
-            if (!window.Renderer.isVisible(pond.x, pond.y, pond.radius, camera, canvasWidth, canvasHeight)) continue;
-            if (pond.type === 'crater') this.drawDeepCrater(ctx, pond.x, pond.y, pond.radius);
-            else if (pond.type === 'spikes') this.drawSpikesField(ctx, pond.x, pond.y, pond.radius);
-            else this.drawNotebookPuddle(ctx, pond.x, pond.y, pond.radius, pond.numPoints, pond.randomOffsetLimit);
-        }
-
-        for(let i = 0; i < this.mapData.camps.length; i++) {
-            let camp = this.mapData.camps[i];
-            if (window.Renderer.isVisible(camp.x, camp.y, camp.radius, camera, canvasWidth, canvasHeight)) this.drawCamp(ctx, camp);
-        }
-
-        // 5. BAZY I ZAMKI
-        for (let i = 0; i < this.safeZones.length; i++) {
-            let zone = this.safeZones[i];
-            if (!window.Renderer.isVisible(zone.x, zone.y, zone.radius, camera, canvasWidth, canvasHeight)) continue;
-            if (zone.type === 'epic_castle') this.drawEpicCastle(ctx, zone.x, zone.y, zone.radius, currentPlayer);
-            else if (zone.type === 'castle') this.drawCastle(ctx, zone.x, zone.y, zone.radius, zone.team, currentPlayer);
-            else this.drawSafeZone(ctx, zone.x, zone.y, zone.radius);
-        }
-
-        // 6. GŁAZY & PRZESZKODY (Z-Sorting)
-        let visibleObstacles = [];
-        for(let i = 0; i < this.mapData.rocks.length; i++) {
-            let r = this.mapData.rocks[i];
-            if (window.Renderer.isVisible(r.x, r.y, r.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(r);
-        }
-        for(let i = 0; i < this.mapData.trees.length; i++) {
-            let tree = this.mapData.trees[i];
-            if (window.Renderer.isVisible(tree.x, tree.y, tree.radius, camera, canvasWidth, canvasHeight)) visibleObstacles.push(tree);
-        }
-
-        visibleObstacles.sort((a, b) => a.y - b.y); 
+    // --- 4. RYSOWANIE TERENU ---
+    function rysujMape(tryb, limitSwiata) {
+        ctx.fillStyle = '#050505'; // Baza Vibe Noir
+        ctx.fillRect(camera.x, camera.y, screenW, screenH);
         
-        for(let i = 0; i < visibleObstacles.length; i++) {
-            let o = visibleObstacles[i];
-            if (o.type) { 
-                if (o.type === 'dead_tree') this.drawSpookyTree(ctx, o.x, o.y, o.radius);
-                else if (o.type === 'column') this.drawBrokenColumn(ctx, o.x, o.y, o.radius);
-                else this.drawNotebookTree(ctx, o.x, o.y, o.radius);
-            } else {
-                this.drawNotebookRock(ctx, o.x, o.y, o.radius);
-            }
-        }
+        aktualizujCząsteczki();
 
-        // 7. KRZAKI (Mechanika Ukrycia)
-        let playerInBush = false;
-        for(let i = 0; i < this.mapData.bushes.length; i++) {
-            let bush = this.mapData.bushes[i];
-            if (window.Renderer.isVisible(bush.x, bush.y, bush.radius, camera, canvasWidth, canvasHeight)) {
-                this.drawBush(ctx, bush);
-                if (currentPlayer && Math.hypot(currentPlayer.x - bush.x, currentPlayer.y - bush.y) < bush.radius) {
-                    playerInBush = true;
-                }
-            }
-        }
+        // Siatka świata (Grid)
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.1)';
+        ctx.lineWidth = 1;
+        const siatkaRozmiar = 200;
+        const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar;
+        const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
         
-        if (playerInBush) {
-            ctx.fillStyle = 'rgba(5, 20, 10, 0.35)'; 
-            ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-        }
+        ctx.beginPath();
+        for(let x = startX; x < camera.x + screenW; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH); }
+        for(let y = startY; y < camera.y + screenH; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW, y); }
+        ctx.stroke();
 
-        // 8. PTAKI & ŚWIETLIKI NA NIEBIE
-        let now = Date.now();
-        if (now - this.mapData.lastBirdSpawn > 30000) { 
-            this.mapData.lastBirdSpawn = now; let flock = [];
-            for(let i=0; i<7; i++) flock.push({ offsetX: -Math.abs(i - 3) * 25, offsetY: (i - 3) * 25 }); 
-            this.mapData.birds.push({ x: -200, y: Math.random() * 3000 + 500, speed: 2 + Math.random(), flock: flock });
-        }
+        // Granice świata
+        ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4;
+        ctx.strokeRect(0, 0, limitSwiata, limitSwiata);
 
-        ctx.strokeStyle = this.activeTheme.border; ctx.lineWidth = 2; ctx.lineJoin = 'miter';
-        for (let i = this.mapData.birds.length - 1; i >= 0; i--) {
-            let b = this.mapData.birds[i]; b.x += b.speed; b.y -= b.speed * 0.3; 
-            b.flock.forEach(f => {
-                let bx = b.x + f.offsetX; let by = b.y + f.offsetY;
-                ctx.beginPath(); ctx.moveTo(bx - 6, by - 6); ctx.lineTo(bx, by); ctx.lineTo(bx - 6, by + 6); ctx.stroke();
+        // --- SPECFIKA TRYBU FREE ---
+        if (tryb === 'FREE') {
+            mapaObiekty.krzaki.forEach(k => {
+                if(czyWidoczny(k.x, k.y, k.r)) {
+                    ctx.fillStyle = 'rgba(46, 204, 113, 0.1)'; ctx.strokeStyle = 'rgba(46, 204, 113, 0.3)';
+                    ctx.beginPath(); ctx.arc(k.x, k.y, k.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                }
             });
-            if (b.x > this.worldSize + 500 || b.y < -200) this.mapData.birds.splice(i, 1); 
+            
+            // Centralny Zamek Monolit (ośmiokąt)
+            if (czyWidoczny(2000, 2000, 300)) {
+                ctx.save(); ctx.translate(2000, 2000);
+                ctx.fillStyle = '#020202'; ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 8;
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = '#f1c40f'; }
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 300, Math.sin(i * Math.PI/4) * 300);
+                ctx.closePath(); ctx.fill(); ctx.stroke();
+                
+                // Wirujący rdzeń w zamku
+                ctx.rotate(Date.now() / 1000);
+                ctx.strokeStyle = 'rgba(255,255,255,0.5)'; ctx.lineWidth = 2;
+                ctx.strokeRect(-50, -50, 100, 100);
+                ctx.restore();
+            }
+
+            mapaObiekty.drzewa.forEach(d => {
+                if(czyWidoczny(d.x, d.y, d.r)) {
+                    ctx.fillStyle = '#0a0a0a'; ctx.strokeStyle = '#333'; ctx.lineWidth = 2;
+                    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+                }
+            });
         }
-
-        ctx.fillStyle = this.activeTheme.glow;
-        window.Renderer.applyGlow(ctx, 10, this.activeTheme.glow);
-        for (let i = 0; i < this.mapData.fireflies.length; i++) {
-            let f = this.mapData.fireflies[i];
-            f.x += Math.sin(now * f.speed + f.offset) * 2;
-            f.y -= 0.5; 
-            if (f.y < 0) f.y = this.worldSize;
-            if (window.Renderer.isVisible(f.x, f.y, f.radius, camera, canvasWidth, canvasHeight)) {
-                ctx.globalAlpha = Math.abs(Math.sin(now * f.speed));
-                ctx.beginPath(); ctx.arc(f.x, f.y, f.radius, 0, Math.PI*2); ctx.fill();
-            }
-        }
-        ctx.globalAlpha = 1.0;
-        window.Renderer.resetGlow(ctx);
-
-        ctx.restore(); 
-
-        // 9. EFEKTY POGODOWE 
-        if (currentEvent === 'TOXIC_RAIN') {
-            ctx.fillStyle = 'rgba(46, 204, 113, 0.15)'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)'; ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            for(let i = 0; i < 150; i++) {
-                let rx = (Math.sin(i * 123) * 10000 - now * 0.5) % canvasWidth; let ry = (Math.cos(i * 321) * 10000 + now * 1.5) % canvasHeight;
-                if (rx < 0) rx += canvasWidth; if (ry < 0) ry += canvasHeight;
-                ctx.moveTo(rx, ry); ctx.lineTo(rx - 8, ry + 25); 
-            }
-            ctx.stroke();
-        } else if (currentEvent === 'BLIZZARD') {
-            ctx.fillStyle = 'rgba(52, 152, 219, 0.2)'; ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-            ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-            for(let i = 0; i < 200; i++) {
-                let sx = (Math.cos(i * 987) * 10000 + now * 2.0) % canvasWidth; let sy = (Math.sin(i * 654) * 10000 + now * 0.3) % canvasHeight;
-                if (sx < 0) sx += canvasWidth; if (sy < 0) sy += canvasHeight;
-                ctx.beginPath(); ctx.arc(sx, sy, 1 + (i % 3), 0, Math.PI * 2); ctx.fill();
-            }
+        // --- SPECFIKA TRYBU TEAMS ---
+        else if (tryb === 'TEAMS') {
+            rysujHexagon(1000, 1000, 200, '#050505', '#e74c3c'); // Czerwona baza
+            rysujHexagon(5000, 1000, 200, '#050505', '#3498db'); // Niebieska baza
+            rysujHexagon(1000, 5000, 200, '#050505', '#2ecc71'); // Zielona baza
+            rysujHexagon(5000, 5000, 200, '#050505', '#f1c40f'); // Żółta baza
+            
+            mapaObiekty.mury.forEach(m => {
+                if(czyWidoczny(m.x + m.w/2, m.y + m.h/2, Math.max(m.w, m.h))) {
+                    ctx.fillStyle = '#111'; ctx.strokeStyle = '#555'; ctx.lineWidth = 2;
+                    ctx.fillRect(m.x, m.y, m.w, m.h); ctx.strokeRect(m.x, m.y, m.w, m.h);
+                }
+            });
         }
     }
-}
-// ==========================================
-// NAPRAWA GIGANTYCZNEGO ZOOMU (Dopasowanie rozdzielczości)
-// ==========================================
-function resize() {
-    const gameCanvas = document.getElementById('gameCanvas');
-    if (gameCanvas) {
-        gameCanvas.width = window.innerWidth;
-        gameCanvas.height = window.innerHeight;
-        window.globalScale = Math.min(1, window.innerHeight / 900);
-    }
-}
-window.addEventListener('resize', resize);
-// Wymuszenie ustawienia rozdzielczości od razu po załadowaniu
-setTimeout(resize, 50);
-resize();
 
-// Inicjalizacja globalna dla środowiska (Bliźniak dla RenderEngine)
-window.MapSystem = new MapEngine();
+    // --- 5. RYSOWANIE POSTACI I EWOLUCJI ---
+    function rysujPostac(postac, id, isMe) {
+        if (!postac || !czyWidoczny(postac.x, postac.y, 100)) return;
+
+        let masa = Math.min(postac.score || 10, 600); // Limit masy
+        let promien = 15 + Math.sqrt(masa) * 1.5;
+        let skin = postac.skin || 'standard';
+
+        // A. SYSTEM POWIDOKÓW (Ghost Trail) dla Bossów
+        if (masa >= 300) {
+            if (!sladPostaci[id]) sladPostaci[id] = [];
+            sladPostaci[id].push({x: postac.x, y: postac.y});
+            if (sladPostaci[id].length > 5) sladPostaci[id].shift(); // Pamięta 5 ostatnich klatek
+
+            sladPostaci[id].forEach((punkt, index) => {
+                ctx.beginPath();
+                ctx.arc(punkt.x, punkt.y, promien * (index/5), 0, Math.PI*2);
+                ctx.fillStyle = (skin === 'ninja') ? `rgba(155, 89, 182, ${index * 0.05})` : `rgba(231, 76, 60, ${index * 0.05})`;
+                ctx.fill();
+            });
+        }
+
+        ctx.save();
+        ctx.translate(postac.x, postac.y);
+        
+        // Zwracanie postaci zgodnie z kierunkiem poruszania (kąt)
+        if (postac.kat) ctx.rotate(postac.kat);
+
+        // B. RYSOWANIE BAZY I KLASY
+        ctx.fillStyle = isMe ? '#222' : '#111';
+        let kolorKlasy = '#fff';
+        if (skin === 'standard') kolorKlasy = '#e74c3c'; // Czerwony
+        if (skin === 'ninja') kolorKlasy = '#9b59b6'; // Fiolet
+        if (skin === 'arystokrata') kolorKlasy = '#f1c40f'; // Złoty
+
+        ctx.strokeStyle = isMe ? '#fff' : kolorKlasy;
+        ctx.lineWidth = masa === 600 ? 5 : 2;
+
+        ctx.beginPath();
+        if (skin === 'ninja') {
+            ctx.arc(0, 0, promien, Math.PI, 0); // Ostra maska Ninja
+            ctx.lineTo(0, promien * 1.3);
+        } else if (skin === 'arystokrata') {
+            ctx.arc(0, 0, promien, 0, Math.PI*2); // Klasyczny okrąg, ale dodamy ringi
+            ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, promien - 5, 0, Math.PI*2);
+        } else {
+            ctx.arc(0, 0, promien, 0, Math.PI*2);
+        }
+        ctx.closePath();
+        ctx.fill(); ctx.stroke();
+
+        // C. EWOLUCJA ZBROI (Zgodnie z GDD)
+        if (masa >= 30) {
+            // Broń w dłoni
+            ctx.fillStyle = kolorKlasy;
+            ctx.fillRect(promien, -4, promien * 0.8, 8); // Miecz skierowany w prawo
+        }
+        if (masa >= 80) {
+            // Naramienniki
+            ctx.strokeStyle = '#555'; ctx.lineWidth = 4;
+            ctx.beginPath(); ctx.arc(0, 0, promien + 6, Math.PI*0.7, Math.PI*1.3); ctx.stroke();
+            ctx.beginPath(); ctx.arc(0, 0, promien + 6, -Math.PI*0.3, Math.PI*0.3); ctx.stroke();
+        }
+        if (masa >= 130) {
+            // Cyber-Wizjer / Oczy
+            ctx.fillStyle = kolorKlasy;
+            if (masa >= 300) {
+                // Złe oczy Bossa \ /
+                ctx.fillRect(promien * 0.2, -8, 4, 6);
+                ctx.fillRect(promien * 0.2, 2, 4, 6);
+            } else {
+                ctx.fillRect(promien * 0.2, -5, 6, 10); // Normalny wizjer
+            }
+        }
+        if (masa >= 180) {
+            // Rdzeń na klatce piersiowej
+            ctx.fillStyle = '#3498db';
+            rysujHexagon(0, 0, promien * 0.4, '#3498db', '#fff');
+        }
+        if (masa === 600) {
+            // Tytan - Korona i Overcharge
+            ctx.fillStyle = '#f1c40f';
+            ctx.beginPath(); ctx.moveTo(-15, -promien - 5); ctx.lineTo(0, -promien - 25); ctx.lineTo(15, -promien - 5); ctx.fill();
+        }
+
+        ctx.restore(); // Przywraca rotację
+
+        // D. HUD GRACZA (Nick i Punkty ZAWSZE w poziomie, niezależnie od rotacji postaci)
+        ctx.save();
+        ctx.translate(postac.x, postac.y);
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 12px Rajdhani';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, -promien - 15);
+        
+        // Pasek HP / Tarcza (Jeśli używa tarczy)
+        if (postac.isShielding) {
+            ctx.strokeStyle = '#3498db'; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke();
+        }
+        ctx.restore();
+    }
+
+    // --- 6. GŁÓWNA PĘTLA RENDERUJĄCA ---
+    return {
+        rysujKlatke: function(stanSerwera, mojGracz) {
+            if (!stanSerwera || !mojGracz) return;
+
+            // Kamera miękko podąża za graczem (Lerp) albo sztywno (dla pewności)
+            camera.x = mojGracz.x - screenW / 2;
+            camera.y = mojGracz.y - screenH / 2;
+
+            let tryb = window.Flagi.Stan.wybranyTryb || 'FREE';
+            let limitWielkosci = window.Flagi.Srodowisko.worldSize || 4000;
+            if (tryb === 'TEAMS') limitWielkosci = 6000;
+
+            if (!czyMapaWygenerowana) generujSrodowisko(tryb);
+
+            ctx.save();
+            ctx.translate(-camera.x, -camera.y);
+
+            // 1. Tło i Elementy Środowiska
+            rysujMape(tryb, limitWielkosci);
+
+            // 2. Masa (Kropki jedzenia)
+            if (stanSerwera.foods) {
+                ctx.fillStyle = '#f1c40f';
+                stanSerwera.foods.forEach(f => {
+                    if (czyWidoczny(f.x, f.y, 5)) {
+                        // Kropki lekko pulsują
+                        let r = 5 + Math.sin(Date.now() / 200 + f.x) * 1.5;
+                        ctx.beginPath(); ctx.arc(f.x, f.y, Math.max(2, r), 0, Math.PI*2); ctx.fill();
+                    }
+                });
+            }
+
+            // 3. Rysowanie wszystkich bytow (Inni gracze i Boty)
+            if (stanSerwera.players) {
+                Object.keys(stanSerwera.players).forEach(id => {
+                    if (id !== mojGracz.id) rysujPostac(stanSerwera.players[id], id, false);
+                });
+            }
+            if (stanSerwera.bots) {
+                Object.keys(stanSerwera.bots).forEach(id => {
+                    rysujPostac(stanSerwera.bots[id], id, false);
+                });
+            }
+
+            // 4. Rysowanie NAS (Zawsze na samym wierzchu)
+            rysujPostac(mojGracz, mojGracz.id, true);
+
+            ctx.restore(); // Koniec rysowania z perspektywy kamery
+        }
+    };
+})();
