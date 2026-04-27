@@ -14,7 +14,7 @@ const path = require('path');
 app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/assety', express.static(path.join(__dirname, '../assety')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../frontend/index.html')));
-
+app.use('/automatyzacja', express.static(path.join(__dirname, '../automatyzacja')));
 // ==========================================
 // LOKALNE AI (QWEN) - Ekran Śmierci i Wellbeing
 // ==========================================
