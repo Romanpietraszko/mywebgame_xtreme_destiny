@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Produkcyjny Silnik Renderujący (Vibe Noir / TikTok Edition)
+// GRAFIKA.JS - Produkcyjny Silnik Renderujący (PNG Gracze + Neonowe Boty)
 // ==========================================
 
 window.Grafika = (function() {
@@ -16,7 +16,17 @@ window.Grafika = (function() {
     let czyMapaWygenerowana = false;
     let czasteczkiTla = []; 
     let sladPostaci = {}; 
-    let lokalnyBuforJedzenia = {}; // Tarcza na wypadek braku danych o jedzeniu
+    let lokalnyBuforJedzenia = {};
+
+    // --- ŁADOWANIE GRAFIK POSTACI (ASSETY) ---
+    const obrazyPostaci = {
+        'standard': new Image(),
+        'ninja': new Image(),
+        'arystokrata': new Image()
+    };
+    obrazyPostaci['standard'].src = '/assety/xtreme-destiny-postac(1).png';
+    obrazyPostaci['ninja'].src = '/assety/ninja-transparent.png';
+    obrazyPostaci['arystokrata'].src = '/assety/postac-bez-tla.png';
 
     // --- OBSŁUGA EKRANU ---
     function resize() {
@@ -44,19 +54,16 @@ window.Grafika = (function() {
         mapaObiekty = { drzewa: [], krzaki: [], mury: [] };
         czasteczkiTla = [];
 
-        // Generowanie cząsteczek Vibe Noir (Popiół/Mgła)
+        // Generowanie cząsteczek Vibe Noir
         for(let i = 0; i < 100; i++) {
             czasteczkiTla.push({
-                x: Math.random() * screenW,
-                y: Math.random() * screenH,
-                speedX: (Math.random() - 0.5) * 0.5,
-                speedY: (Math.random() - 0.5) * 0.5,
+                x: Math.random() * screenW, y: Math.random() * screenH,
+                speedX: (Math.random() - 0.5) * 0.5, speedY: (Math.random() - 0.5) * 0.5,
                 r: Math.random() * 2
             });
         }
         
         if (tryb === 'FREE') {
-            // Sztywne pozycjonowanie, by mapa się nie zmieniała przy odświeżeniu (w pełnej wersji można to ciągnąć z serwera)
             for(let i=0; i<30; i++) mapaObiekty.drzewa.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 45 });
             for(let i=0; i<45; i++) mapaObiekty.krzaki.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 70 });
         }
@@ -74,27 +81,22 @@ window.Grafika = (function() {
     }
 
     function rysujMape(tryb, limitSwiata) {
-        // Tło Noir
         ctx.fillStyle = '#050505'; 
         ctx.fillRect(camera.x, camera.y, screenW, screenH);
-        
         aktualizujCząsteczki();
 
-        // Neonowa Siatka Świata (Grid)
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)';
-        ctx.lineWidth = 1;
+        // Siatka
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)'; ctx.lineWidth = 1;
         const siatkaRozmiar = 200;
         const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar;
         const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
-        
         ctx.beginPath();
         for(let x = startX; x < camera.x + screenW; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH); }
         for(let y = startY; y < camera.y + screenH; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW, y); }
         ctx.stroke();
 
-        // Granice Świata (Strefa Śmierci)
-        ctx.strokeStyle = '#e74c3c'; 
-        ctx.lineWidth = 6;
+        // Granice Świata
+        ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 6;
         if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#e74c3c'; }
         ctx.strokeRect(0, 0, limitSwiata, limitSwiata);
         ctx.shadowBlur = 0;
@@ -102,66 +104,42 @@ window.Grafika = (function() {
         const czas = Date.now();
 
         if (tryb === 'FREE') {
-            // Rysowanie Toksycznych Krzaków (Stealth)
+            // Krzaki (Stealth)
             mapaObiekty.krzaki.forEach(k => {
                 if(czyWidoczny(k.x, k.y, k.r)) {
                     ctx.save(); ctx.translate(k.x, k.y);
-                    
                     let krzakGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, k.r);
-                    krzakGrad.addColorStop(0, 'rgba(46, 204, 113, 0.05)');
-                    krzakGrad.addColorStop(1, 'rgba(10, 30, 15, 0.8)');
-                    
-                    ctx.fillStyle = krzakGrad; 
-                    ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)'; 
-                    ctx.lineWidth = 4;
+                    krzakGrad.addColorStop(0, 'rgba(46, 204, 113, 0.05)'); krzakGrad.addColorStop(1, 'rgba(10, 30, 15, 0.8)');
+                    ctx.fillStyle = krzakGrad; ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)'; ctx.lineWidth = 4;
                     if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#2ecc71'; }
-                    
                     ctx.beginPath(); ctx.arc(0, 0, k.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                    
-                    ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)'; 
-                    ctx.lineWidth = 2; 
-                    ctx.shadowBlur = 0;
+                    ctx.strokeStyle = 'rgba(46, 204, 113, 0.15)'; ctx.lineWidth = 2; ctx.shadowBlur = 0;
                     ctx.beginPath(); ctx.arc(-k.r*0.2, -k.r*0.2, k.r*0.6, 0, Math.PI*2); ctx.stroke();
                     ctx.beginPath(); ctx.arc(k.r*0.3, k.r*0.1, k.r*0.5, 0, Math.PI*2); ctx.stroke();
-                    
                     ctx.restore();
                 }
             });
             
-            // Rysowanie Cyber-Zamku (Monolit)
+            // Cyber-Zamek
             if (czyWidoczny(2000, 2000, 300)) {
                 ctx.save(); ctx.translate(2000, 2000);
-                
                 let puls = Math.abs(Math.sin(czas / 600)); 
                 let zamekGrad = ctx.createRadialGradient(0, 0, 50, 0, 0, 300);
-                zamekGrad.addColorStop(0, `rgba(241, 196, 15, ${0.1 + puls * 0.1})`);
-                zamekGrad.addColorStop(1, '#020202');
-                
-                ctx.fillStyle = zamekGrad; 
-                ctx.strokeStyle = '#f1c40f'; 
-                ctx.lineWidth = 6 + (puls * 4);
+                zamekGrad.addColorStop(0, `rgba(241, 196, 15, ${0.1 + puls * 0.1})`); zamekGrad.addColorStop(1, '#020202');
+                ctx.fillStyle = zamekGrad; ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 6 + (puls * 4);
                 if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20 + (puls * 15); ctx.shadowColor = '#f1c40f'; }
-                
-                // Zewnętrzny Hexagon
-                ctx.beginPath();
-                for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 300, Math.sin(i * Math.PI/4) * 300);
+                ctx.beginPath(); for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 300, Math.sin(i * Math.PI/4) * 300);
                 ctx.closePath(); ctx.fill(); ctx.stroke();
-                
-                // Wewnętrzna siatka holograficzna
                 ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(241, 196, 15, 0.3)'; ctx.lineWidth = 2;
-                ctx.beginPath();
-                for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 280, Math.sin(i * Math.PI/4) * 280);
+                ctx.beginPath(); for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 280, Math.sin(i * Math.PI/4) * 280);
                 ctx.closePath(); ctx.stroke();
-                
-                // Wirujący Rdzeń (Sklep/Midas Area)
                 ctx.rotate(czas / 1000); ctx.strokeStyle = '#ffffff'; 
                 if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#fff'; }
                 ctx.beginPath(); ctx.rect(-40, -40, 80, 80); ctx.rotate(Math.PI / 4); ctx.rect(-40, -40, 80, 80); ctx.stroke();
-                
                 ctx.restore();
             }
             
-            // Rysowanie Martwych Drzew
+            // Martwe Drzewa
             mapaObiekty.drzewa.forEach(d => {
                 if(czyWidoczny(d.x, d.y, d.r)) {
                     ctx.fillStyle = '#080808'; ctx.strokeStyle = '#222'; ctx.lineWidth = 3;
@@ -172,106 +150,124 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE BYTÓW (POSTACIE/BOTY) ---
+    // --- RYSOWANIE DRONÓW AI (Neonowa Geometria) ---
+    function rysujBota(bot) {
+        if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
+
+        let wKrzaku = false;
+        mapaObiekty.krzaki.forEach(k => { if (Math.hypot(bot.x - k.x, bot.y - k.y) < k.r) wKrzaku = true; });
+        if (wKrzaku) return; // Boty w krzakach też znikają
+
+        let masa = Math.min(bot.score || 10, 600);
+        let promien = 15 + Math.sqrt(masa) * 1.5;
+        let isBoss = bot.skin === 'ninja';
+
+        ctx.save();
+        ctx.translate(bot.x, bot.y);
+        ctx.rotate(bot.angle || 0);
+
+        if (!window.Flagi.Srodowisko.isMobile) {
+            ctx.shadowBlur = 15; ctx.shadowColor = isBoss ? '#9b59b6' : '#e74c3c';
+        }
+
+        ctx.fillStyle = '#050505';
+        ctx.strokeStyle = isBoss ? '#9b59b6' : '#e74c3c';
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+        if (isBoss) {
+            ctx.moveTo(0, -promien); ctx.lineTo(promien, 0); ctx.lineTo(0, promien); ctx.lineTo(-promien, 0);
+        } else {
+            for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * promien, Math.sin(i * Math.PI/4) * promien);
+        }
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = isBoss ? 'rgba(155, 89, 182, 0.5)' : 'rgba(231, 76, 60, 0.5)';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(0, 0, promien * 0.4, 0, Math.PI*2); ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(-promien*0.6, 0); ctx.lineTo(promien*0.6, 0);
+        ctx.moveTo(0, -promien*0.6); ctx.lineTo(0, promien*0.6);
+        ctx.stroke();
+
+        ctx.restore();
+
+        ctx.save();
+        ctx.translate(bot.x, bot.y);
+        ctx.fillStyle = isBoss ? '#9b59b6' : '#e74c3c';
+        ctx.font = 'bold 12px Exo 2, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(`${bot.name} (${Math.floor(masa)})`, 0, -promien - 10);
+        ctx.restore();
+    }
+
+    // --- RYSOWANIE GRACZY (Własne Assety PNG) ---
     function rysujPostac(postac, id, isMe) {
         if (!postac || !czyWidoczny(postac.x, postac.y, 100)) return;
 
-        // MECHANIKA STEALTH: Sprawdź czy gracz ukrywa się w krzaku
         let wKrzaku = false;
         mapaObiekty.krzaki.forEach(k => {
             if (Math.hypot(postac.x - k.x, postac.y - k.y) < k.r) wKrzaku = true;
         });
 
-        // Jeśli ktoś jest w krzaku i NIE JEST Tobą -> staje się niewidzialny
         if (wKrzaku && !isMe) return; 
 
         let masa = Math.min(postac.score || 10, 600);
-        let promien = 15 + Math.sqrt(masa) * 1.5;
+        let promien = 20 + Math.sqrt(masa) * 2;
         let skin = postac.skin || 'standard';
 
         ctx.save(); 
-        
-        // Jeśli TY jesteś w krzaku, stajesz się "duchem" na swoim ekranie
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4; 
 
-        // Tytan: Powidoki Bossów (Tylko dla masy >= 300)
         if (masa >= 300 && !wKrzaku) {
             if (!sladPostaci[id]) sladPostaci[id] = [];
             sladPostaci[id].push({x: postac.x, y: postac.y});
             if (sladPostaci[id].length > 5) sladPostaci[id].shift();
             
             sladPostaci[id].forEach((punkt, index) => {
-                ctx.beginPath(); ctx.arc(punkt.x, punkt.y, promien * (index/5), 0, Math.PI*2);
+                ctx.beginPath(); ctx.arc(punkt.x, punkt.y, promien * 0.8 * (index/5), 0, Math.PI*2);
                 ctx.fillStyle = (skin === 'ninja') ? `rgba(155, 89, 182, ${index * 0.05})` : `rgba(231, 76, 60, ${index * 0.05})`;
                 ctx.fill();
             });
         }
 
         ctx.translate(postac.x, postac.y);
-        
-        // Rotacja w kierunku poruszania/strzału
         if (postac.kat) ctx.rotate(postac.kat);
 
-        // Baza postaci
-        ctx.fillStyle = isMe ? '#222' : '#111';
-        let kolorKlasy = skin === 'standard' ? '#e74c3c' : (skin === 'ninja' ? '#9b59b6' : '#f1c40f');
-        ctx.strokeStyle = isMe ? '#fff' : kolorKlasy;
-        ctx.lineWidth = masa >= 600 ? 5 : 2; // Tytan ma pancerz gruby na 5px
-
-        // Kształt zależny od klasy
-        ctx.beginPath();
-        if (skin === 'ninja') { 
-            ctx.arc(0, 0, promien, Math.PI, 0); ctx.lineTo(0, promien * 1.3); 
-        } else if (skin === 'arystokrata') { 
-            ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.stroke(); ctx.beginPath(); ctx.arc(0, 0, promien - 5, 0, Math.PI*2); 
-        } else { 
-            ctx.arc(0, 0, promien, 0, Math.PI*2); 
-        }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
-
-        // EWOLUCJA ZBROI (Zależna od masy)
-        if (masa >= 30) { 
-            // Miecz w dłoni
-            ctx.fillStyle = kolorKlasy; 
-            ctx.fillRect(promien, -4, promien * 0.8, 8); 
-        }
-        if (masa >= 80) { 
-            // Naramienniki
-            ctx.strokeStyle = '#555'; ctx.lineWidth = 4; 
-            ctx.beginPath(); ctx.arc(0, 0, promien + 6, Math.PI*0.7, Math.PI*1.3); ctx.stroke(); 
-            ctx.beginPath(); ctx.arc(0, 0, promien + 6, -Math.PI*0.3, Math.PI*0.3); ctx.stroke(); 
-        }
-        if (masa >= 130) { 
-            // Cyber-wizjer
-            ctx.fillStyle = kolorKlasy; 
-            masa >= 300 ? (ctx.fillRect(promien * 0.2, -8, 4, 6), ctx.fillRect(promien * 0.2, 2, 4, 6)) : ctx.fillRect(promien * 0.2, -5, 6, 10); 
-        }
-        if (masa >= 180) { 
-            // Rdzeń klatki piersiowej
-            ctx.fillStyle = '#3498db'; ctx.beginPath(); ctx.arc(0, 0, promien*0.4, 0, Math.PI*2); ctx.fill(); 
-        }
-        if (masa >= 600) { 
-            // Złota Korona Overcharge
-            ctx.fillStyle = '#f1c40f'; ctx.beginPath(); ctx.moveTo(-15, -promien - 5); ctx.lineTo(0, -promien - 25); ctx.lineTo(15, -promien - 5); ctx.fill(); 
+        let img = obrazyPostaci[skin] || obrazyPostaci['standard'];
+        
+        if (img.complete && img.naturalWidth !== 0) {
+            if (masa >= 100 && !window.Flagi.Srodowisko.isMobile) {
+                ctx.shadowBlur = 15;
+                ctx.shadowColor = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
+            }
+            ctx.drawImage(img, -promien, -promien, promien * 2, promien * 2);
+        } else {
+            ctx.fillStyle = '#555';
+            ctx.beginPath(); ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.fill();
         }
 
-        ctx.restore(); // Przywraca rotację
+        ctx.restore(); 
 
-        // HUD: Nick, Masa i Tarcza (Rysowane zawsze w poziomie, żeby dało się czytać)
+        if (postac.isShielding) { 
+            ctx.save();
+            ctx.translate(postac.x, postac.y);
+            ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)'; 
+            ctx.lineWidth = 4; 
+            ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
+            ctx.restore();
+        }
+
         ctx.save();
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4;
         ctx.translate(postac.x, postac.y);
         ctx.fillStyle = '#ffffff'; 
-        ctx.font = 'bold 12px Rajdhani, Exo 2, sans-serif'; 
+        ctx.font = 'bold 14px Exo 2, sans-serif'; 
         ctx.textAlign = 'center';
         
         let prefix = masa >= 600 ? "👑 " : "";
-        ctx.fillText(`${prefix}${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, -promien - 15);
-        
-        if (postac.isShielding) { 
-            ctx.strokeStyle = '#3498db'; ctx.lineWidth = 3; 
-            ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
-        }
+        ctx.fillText(`${prefix}${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, promien + 25);
         ctx.restore();
     }
 
@@ -280,7 +276,6 @@ window.Grafika = (function() {
         rysujKlatke: function(stanSerwera, mojGracz) {
             if (!stanSerwera || !mojGracz) return;
 
-            // Kamera podąża za graczem
             camera.x = mojGracz.x - screenW / 2; 
             camera.y = mojGracz.y - screenH / 2;
             
@@ -292,10 +287,8 @@ window.Grafika = (function() {
             ctx.save(); 
             ctx.translate(-camera.x, -camera.y);
 
-            // 1. Świat
             rysujMape(tryb, limitWielkosci);
 
-            // 2. Masa (Bezpieczne Rysowanie)
             if (stanSerwera.foods) {
                 lokalnyBuforJedzenia = window.Guardian ? window.Guardian.safeObj(stanSerwera.foods) : stanSerwera.foods;
             }
@@ -308,7 +301,6 @@ window.Grafika = (function() {
                 }
             });
 
-            // 3. Pociski i Bronie
             if (stanSerwera.projectiles) {
                 let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles) : stanSerwera.projectiles;
                 Object.values(bezpiecznePociski).forEach(proj => {
@@ -322,20 +314,19 @@ window.Grafika = (function() {
                 });
             }
 
-            // 4. Inne byty (Boty i Gracze)
+            if (stanSerwera.bots) {
+                Object.values(stanSerwera.bots).forEach(bot => rysujBota(bot));
+            }
+
             if (stanSerwera.players) {
                 Object.keys(stanSerwera.players).forEach(id => {
                     if (id !== mojGracz.id) rysujPostac(stanSerwera.players[id], id, false);
                 });
             }
-            if (stanSerwera.bots) {
-                Object.keys(stanSerwera.bots).forEach(id => rysujPostac(stanSerwera.bots[id], id, false));
-            }
 
-            // 5. Mój Gracz (Rysowany na samym wierzchu)
             rysujPostac(mojGracz, mojGracz.id, true);
 
-            ctx.restore(); // Przywrócenie koordynatów dla UI HTML
+            ctx.restore(); 
         }
     };
 })();

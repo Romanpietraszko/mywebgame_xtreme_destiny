@@ -307,22 +307,49 @@ setInterval(async () => {
         if (proj.life <= 0) delete state.projectiles[projId];
     }
 
-    // 4. LOGIKA BOTÓW (Stanowa maszyna sztucznej inteligencji)
+    // 4. LOGIKA BOTÓW (Agresywna maszyna sztucznej inteligencji)
     for (let bId in state.bots) {
         let b = state.bots[bId];
         let nearby = getNearby(b.x, b.y);
-        
-        // Zmiana stanu
-        if (Math.random() < 0.05) {
-            let hasThreat = false;
-            nearby.players.forEach(p => { if (p.score > b.score * 1.2 && Math.hypot(p.x - b.x, p.y - b.y) < 300) hasThreat = true; });
-            b.state = hasThreat ? 'FLEE' : 'HUNT';
+        let targetPlayer = null;
+        let predatorPlayer = null;
+        let closestDist = Infinity;
+
+        // System Skanowania Zagrożeń i Ofiar (Zasięg: 500px)
+        nearby.players.forEach(p => {
+            if (p.isSafe) return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            if (dist < 500) { 
+                if (b.score > p.score * 1.15) {
+                    // Gracz jest mniejszy i słabszy - NAMIERZANIE OFIARY
+                    if (dist < closestDist) { closestDist = dist; targetPlayer = p; }
+                } else if (p.score > b.score * 1.15) {
+                    // Gracz jest potężniejszy - WYKRYTO ZAGROŻENIE
+                    predatorPlayer = p;
+                }
+            }
+        });
+
+        // Podejmowanie decyzji
+        if (predatorPlayer) {
+            b.state = 'FLEE';
+            // Uciekaj dokładnie w przeciwną stronę niż drapieżnik
+            b.angle = Math.atan2(b.y - predatorPlayer.y, b.x - predatorPlayer.x); 
+        } else if (targetPlayer) {
+            b.state = 'HUNT';
+            // Pędź prosto na ofiarę
+            b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x); 
+        } else {
+            b.state = 'IDLE';
+            if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2; // Swobodne patrolowanie
         }
 
-        let speed = b.score > 100 ? 1.5 : 2.5;
+        // Prędkość zależy od stanu i klasy
+        let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
+        if (b.skin === 'ninja') speed += 1.0; // Elita (Bossowie) jest znacznie szybsza!
+
         b.x = Math.max(0, Math.min(4000, b.x + Math.cos(b.angle) * speed));
         b.y = Math.max(0, Math.min(4000, b.y + Math.sin(b.angle) * speed));
-        if (Math.random() < 0.02) b.angle = Math.random() * Math.PI * 2; // Losowy skręt
     }
 
     // 5. WYSYŁKA DANYCH DO KLIENTÓW
