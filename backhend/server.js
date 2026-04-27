@@ -15,6 +15,7 @@ app.use(express.static(path.join(__dirname, '../frontend')));
 app.use('/assety', express.static(path.join(__dirname, '../assety')));
 app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../frontend/index.html')));
 app.use('/automatyzacja', express.static(path.join(__dirname, '../automatyzacja')));
+
 // ==========================================
 // LOKALNE AI (QWEN) - Ekran Śmierci i Wellbeing
 // ==========================================
@@ -139,8 +140,16 @@ io.on('connection', (socket) => {
         if (dx !== 0 || dy !== 0) {
             let angle = Math.atan2(dy, dx);
             let limit = p.mode === 'TEAMS' ? 6000 : 4000;
-            p.x = Math.max(0, Math.min(limit, p.x + Math.cos(angle) * speed));
-            p.y = Math.max(0, Math.min(limit, p.y + Math.sin(angle) * speed));
+            let nextX = p.x + Math.cos(angle) * speed;
+            let nextY = p.y + Math.sin(angle) * speed;
+
+            // NAPRAWA: ŚMIERĆ ZA MAPĄ (Krawędź)
+            if (nextX < 0 || nextX > limit || nextY < 0 || nextY > limit) {
+                triggerZgon(p.id, "Strefę Śmierci (Krawędź)");
+            } else {
+                p.x = nextX;
+                p.y = nextY;
+            }
         }
 
         // Strzelanie
@@ -155,6 +164,20 @@ io.on('connection', (socket) => {
                     dx: Math.cos(keys.katCelowania), dy: Math.sin(keys.katCelowania),
                     life: wp.life, speed: wp.speed, damage: wp.dmg, piercing: wp.piercing
                 };
+            }
+        }
+    });
+
+    // NAPRAWA: Obsługa Sklepu
+    socket.on('buyShopItem', (item) => {
+        const p = state.players[socket.id];
+        if (p && WEAPONS[item]) {
+            // Sprawdź czy gracza stać na zakup w sklepie (np. koszt to cena * 10 dla stałej zmiany)
+            let shopCost = WEAPONS[item].cost * 25; 
+            if (p.score >= shopCost) {
+                p.score -= shopCost;
+                p.activeWeapon = item;
+                socket.emit('shopSuccess', { item: item });
             }
         }
     });
@@ -227,6 +250,25 @@ setInterval(async () => {
             } else if (dist < r2 && p2.score > p.score * 1.15) {
                 dodajMase(p2, Math.floor(p.score * 0.5));
                 triggerZgon(p.id, p2.name);
+            }
+        });
+
+        // NAPRAWA: Kolizje PvE (Gracz vs Bot)
+        nearby.bots.forEach(b => {
+            if (p.isSafe) return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            let bRadius = 15 + Math.sqrt(b.score) * 1.5;
+
+            // Gracz zjada Bota
+            if (dist < pRadius && p.score > b.score * 1.15) {
+                dodajMase(p, Math.floor(b.score * 0.5)); // Zastrzyk masy dla gracza
+                delete state.bots[b.id]; // Usunięcie bota
+                spawnBot(); // Natychmiastowy respawn nowego drona
+            } 
+            // Bot zjada Gracza
+            else if (dist < bRadius && b.score > p.score * 1.15) {
+                b.score += Math.floor(p.score * 0.5); // Bot rośnie po zjedzeniu gracza!
+                triggerZgon(p.id, b.name);
             }
         });
         
