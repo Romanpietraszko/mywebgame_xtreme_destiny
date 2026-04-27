@@ -83,18 +83,18 @@ window.Guardian = (function() {
 
     window.addEventListener('error', function(event) {
         console.error("🛡️ [GUARDIAN] Przechwycono krytyczny błąd: ", event.message);
-        // Zabezpiecza przed "Białym Ekranem Śmierci"
+        // Zabezpiecza przed "Białym Ekranem Śmierci" - gra się nie zawiesi, tylko zignoruje uszkodzoną klatkę
         event.preventDefault(); 
     });
 
     // Publiczne API Guardiana (Do użycia w tryby.js i grafika.js)
     return {
-        // 1. ZGŁASZANIE PULSU SERWERA (Wywołać w socket.on('serverTick'))
+        // 1. ZGŁASZANIE PULSU SERWERA
         odbierzTick: function() {
             lastTickTime = Date.now();
         },
 
-        // 2. BEZPIECZNA MATEMATYKA (Sanityzacja danych z serwera)
+        // 2. BEZPIECZNA MATEMATYKA
         clamp: function(value, min, max) {
             if (isNaN(value)) return min;
             return Math.min(Math.max(value, min), max);
@@ -104,9 +104,30 @@ window.Guardian = (function() {
             return (typeof value === 'number' && !isNaN(value)) ? value : fallback;
         },
 
-        // 3. PŁYNNE PRZEWIDYWANIE RUCHU (Interpolacja liniowa dla płynnego 60 FPS)
         lerp: function(start, end, factor = 0.3) {
             return start + (end - start) * factor;
+        },
+
+        // 3. NOWOŚĆ: SANITYZACJA DANYCH (Autonaprawa w locie)
+        safeObj: function(data) {
+            // Jeśli dane to obiekt i nie jest null, oddaj je. W przeciwnym razie oddaj pusty obiekt.
+            if (typeof data === 'object' && data !== null && !Array.isArray(data)) return data;
+            return {};
+        },
+
+        safeArray: function(data) {
+            // Zamienia cokolwiek co przyszło z serwera na bezpieczną tablicę do pętli .forEach()
+            if (!data) return [];
+            if (Array.isArray(data)) return data;
+            if (typeof data === 'object') return Object.values(data);
+            return [];
+        },
+
+        safeString: function(value, fallback = "") {
+            // Zabezpiecza np. Nick gracza przed wywaleniem funkcji renderującej tekst
+            if (typeof value === 'string') return value;
+            if (value && typeof value.toString === 'function') return value.toString();
+            return fallback;
         }
     };
 })();
