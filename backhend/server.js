@@ -79,7 +79,7 @@ function spawnBot() {
     let isBoss = Math.random() < 0.05;
     state.bots[id] = {
         id: id,
-        x: Math.random() * 4000, y: Math.random() * 4000,
+        x: Math.random() * 6000, y: Math.random() * 6000, // Zwiększono zasięg dla obu trybów
         score: isBoss ? (150 + Math.random() * 100) : (5 + Math.random() * 20),
         skin: isBoss ? 'ninja' : 'standard',
         name: isBoss ? 'Elita AI' : 'Dron AI',
@@ -104,22 +104,49 @@ io.on('connection', (socket) => {
         else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; startMass = 15; }
         else { mult = 1.02; } // Standard ma stały lekki bonus
 
+        // SYSTEM FRAKCJI I RESPAWNÓW (TEAMS vs FREE)
+        let pTeam = 'NONE';
+        let spawnX = 2000 + (Math.random() * 200 - 100);
+        let spawnY = 2000 + (Math.random() * 200 - 100);
+
+        if (data.mode === 'TEAMS') {
+            let redCount = 0;
+            let blueCount = 0;
+            for (let id in state.players) {
+                if (state.players[id].mode === 'TEAMS') {
+                    if (state.players[id].team === 'RED') redCount++;
+                    if (state.players[id].team === 'BLUE') blueCount++;
+                }
+            }
+            
+            pTeam = redCount <= blueCount ? 'RED' : 'BLUE';
+
+            if (pTeam === 'RED') {
+                spawnX = 500 + (Math.random() * 400 - 200); // Baza Lewa
+                spawnY = 3000 + (Math.random() * 400 - 200);
+            } else {
+                spawnX = 5500 + (Math.random() * 400 - 200); // Baza Prawa
+                spawnY = 3000 + (Math.random() * 400 - 200);
+            }
+        }
+
         state.players[socket.id] = {
             id: socket.id,
             name: data.name || "Nieznany",
             skin: data.skin || 'standard',
             mode: data.mode || 'FREE',
-            x: 2000 + (Math.random() * 200 - 100),
-            y: 2000 + (Math.random() * 200 - 100),
+            team: pTeam,
+            x: spawnX,
+            y: spawnY,
             score: startMass,
             baseSpeed: spd, massMultiplier: mult,
             inventory: { bow: 0, knife: 0, shuriken: 0 },
             activeWeapon: 'sword',
             overcharge: 0, // Pasek Nova na poziomie 600 masy
             isShielding: false, isSafe: false,
-            lastTickX: 2000, lastTickY: 2000
+            lastTickX: spawnX, lastTickY: spawnY
         };
-        socket.emit('init', { id: socket.id });
+        socket.emit('init', { id: socket.id, team: pTeam });
     });
 
     socket.on('playerInput', (keys) => {
@@ -160,6 +187,7 @@ io.on('connection', (socket) => {
                 let pid = ++entityIdCounter;
                 state.projectiles[pid] = {
                     id: pid, ownerId: p.id,
+                    team: p.team, mode: p.mode, // Dziedziczenie drużyny do Friendly Fire
                     x: p.x, y: p.y,
                     dx: Math.cos(keys.katCelowania), dy: Math.sin(keys.katCelowania),
                     life: wp.life, speed: wp.speed, damage: wp.dmg, piercing: wp.piercing
@@ -241,6 +269,9 @@ setInterval(async () => {
         // Kolizje PvP
         nearby.players.forEach(p2 => {
             if (p.id === p2.id || p.isSafe || p2.isSafe) return;
+            // Blokada Friendly Fire
+            if (p.mode === 'TEAMS' && p.team === p2.team) return;
+
             let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
             let r2 = 15 + Math.sqrt(p2.score) * 1.5;
 
@@ -278,7 +309,11 @@ setInterval(async () => {
             p.overcharge = 0;
             // Odepchnij i zrań wszystko w promieniu 300px
             nearby.players.forEach(p2 => {
-                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) p2.score = Math.max(1, p2.score - 50);
+                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
+                    // Blokada Friendly Fire dla Nova
+                    if (p.mode === 'TEAMS' && p.team === p2.team) return;
+                    p2.score = Math.max(1, p2.score - 50);
+                }
             });
             nearby.bots.forEach(b => {
                 if (Math.hypot(p.x - b.x, p.y - b.y) < 300) b.score = Math.max(1, b.score - 100);
@@ -298,6 +333,9 @@ setInterval(async () => {
 
         nearby.players.forEach(p => {
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
+                // Blokada Friendly Fire dla pocisków
+                if (proj.mode === 'TEAMS' && p.team === proj.team) return;
+
                 if (!p.isShielding) p.score = Math.max(1, p.score - proj.damage);
                 hit = true;
             }
@@ -348,8 +386,8 @@ setInterval(async () => {
         let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
         if (b.skin === 'ninja') speed += 1.0; // Elita (Bossowie) jest znacznie szybsza!
 
-        b.x = Math.max(0, Math.min(4000, b.x + Math.cos(b.angle) * speed));
-        b.y = Math.max(0, Math.min(4000, b.y + Math.sin(b.angle) * speed));
+        b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
+        b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
     }
 
     // 5. WYSYŁKA DANYCH DO KLIENTÓW
