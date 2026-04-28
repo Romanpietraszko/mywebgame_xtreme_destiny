@@ -35,6 +35,7 @@
 
         // 2. REFERENCJE UI
         const uiLayer = document.getElementById('ui-layer');
+        const bgLayer = document.getElementById('css-arena-bg'); // <-- Tło neonowe CSS
         const step1 = document.getElementById('step-1');
         const step2 = document.getElementById('step-2');
         const step3 = document.getElementById('step-3');
@@ -129,8 +130,9 @@
 
             socket.emit('joinGame', data);
             
-            // Zarządzanie interfejsem
+            // Zarządzanie interfejsem - ROZWIĄZANIE PROBLEMU
             if (uiLayer) uiLayer.classList.add('hidden');
+            if (bgLayer) bgLayer.classList.add('hidden'); // <-- Twarde ukrycie zbugowanego tła
             if (timerContainer) timerContainer.classList.remove('hidden');
             
             // Start Zegara Przetrwania
