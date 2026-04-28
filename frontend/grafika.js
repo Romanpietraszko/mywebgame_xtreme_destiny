@@ -17,6 +17,17 @@ window.Grafika = (function() {
     let czasteczkiTla = []; 
     let sladPostaci = {}; 
     let lokalnyBuforJedzenia = {};
+    
+    // Zmienna do obsługi mapy pod klawiszem M
+    let pokazDuzaMape = false;
+
+    // Nasłuchiwanie klawisza M
+    window.addEventListener('keydown', (e) => {
+        if (e.code === 'KeyM') pokazDuzaMape = true;
+    });
+    window.addEventListener('keyup', (e) => {
+        if (e.code === 'KeyM') pokazDuzaMape = false;
+    });
 
     // --- ŁADOWANIE GRAFIK POSTACI (ASSETY) ---
     const obrazyPostaci = {
@@ -271,6 +282,72 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
+    // --- RYSOWANIE MAPY TAKTYCZNEJ ---
+    function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
+        ctx.save();
+        
+        // Obliczanie rozmiaru i pozycji
+        let mapSize = czyMala ? 160 : Math.min(screenW, screenH) * 0.7;
+        let startX = czyMala ? screenW - mapSize - 20 : (screenW - mapSize) / 2;
+        let startY = czyMala ? 20 : (screenH - mapSize) / 2;
+        let scale = mapSize / limitWielkosci;
+
+        // Tło i obramowanie mapy
+        ctx.fillStyle = 'rgba(10, 10, 15, 0.85)';
+        ctx.strokeStyle = czyMala ? '#3498db' : '#f1c40f';
+        ctx.lineWidth = 2;
+        ctx.fillRect(startX, startY, mapSize, mapSize);
+        ctx.strokeRect(startX, startY, mapSize, mapSize);
+
+        // Zamek na środku (dla orientacji)
+        if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'FREE') {
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.3)';
+            ctx.beginPath(); 
+            ctx.arc(startX + (2000 * scale), startY + (2000 * scale), 300 * scale, 0, Math.PI*2); 
+            ctx.fill();
+        }
+
+        // Funkcja rysująca obiekty na mapie
+        function rysujKropke(x, y, kolor, promienKropki) {
+            ctx.fillStyle = kolor;
+            ctx.beginPath(); 
+            ctx.arc(startX + (x * scale), startY + (y * scale), promienKropki, 0, Math.PI*2); 
+            ctx.fill();
+        }
+
+        // Rysowanie botów (czerwone kropki)
+        if (stanSerwera.bots) {
+            Object.values(stanSerwera.bots).forEach(b => rysujKropke(b.x, b.y, '#e74c3c', czyMala ? 1 : 2));
+        }
+        
+        // Rysowanie innych graczy
+        if (stanSerwera.players) {
+            Object.values(stanSerwera.players).forEach(p => {
+                if (p.id !== mojGracz.id) {
+                    let kolorGracza = '#95a5a6'; // Neutralny szary w trybie FREE
+                    if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
+                        kolorGracza = p.team === 'RED' ? '#e74c3c' : '#3498db';
+                    }
+                    rysujKropke(p.x, p.y, kolorGracza, czyMala ? 2 : 4);
+                }
+            });
+        }
+
+        // Rysowanie gracza (Pulsująca biała kropka)
+        let puls = 2 + Math.abs(Math.sin(Date.now() / 300)) * 2;
+        rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
+
+        // Napis na dużej mapie
+        if (!czyMala) {
+            ctx.fillStyle = '#fff';
+            ctx.font = 'bold 24px Exo 2, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText("MAPA TAKTYCZNA", startX + mapSize/2, startY - 20);
+        }
+        
+        ctx.restore();
+    }
+
     // --- GŁÓWNA PĘTLA RENDERUJĄCA ---
     return {
         rysujKlatke: function(stanSerwera, mojGracz) {
@@ -326,7 +403,14 @@ window.Grafika = (function() {
 
             rysujPostac(mojGracz, mojGracz.id, true);
 
-            ctx.restore(); 
+            ctx.restore(); // Koniec rysowania świata, powrót do warstwy UI
+
+            // Rysowanie UI na wierzchu ekranu
+            if (pokazDuzaMape) {
+                rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, false);
+            } else {
+                rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, true);
+            }
         }
     };
 })();

@@ -128,6 +128,12 @@ io.on('connection', (socket) => {
                 spawnX = 5500 + (Math.random() * 400 - 200); // Baza Prawa
                 spawnY = 3000 + (Math.random() * 400 - 200);
             }
+        } else if (data.mode === 'FREE' && data.spawnZone) {
+            // OBSŁUGA SEKTORÓW ZRZUTU DLA TRYBU FREE
+            if (data.spawnZone === 'nw') { spawnX = Math.random() * 2000; spawnY = Math.random() * 2000; }
+            else if (data.spawnZone === 'ne') { spawnX = 2000 + Math.random() * 2000; spawnY = Math.random() * 2000; }
+            else if (data.spawnZone === 'sw') { spawnX = Math.random() * 2000; spawnY = 2000 + Math.random() * 2000; }
+            else if (data.spawnZone === 'se') { spawnX = 2000 + Math.random() * 2000; spawnY = 2000 + Math.random() * 2000; }
         }
 
         state.players[socket.id] = {
@@ -276,9 +282,11 @@ setInterval(async () => {
             let r2 = 15 + Math.sqrt(p2.score) * 1.5;
 
             if (dist < pRadius && p.score > p2.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: p2.name }); // WYSYŁKA DO KILLFEEDU
                 dodajMase(p, Math.floor(p2.score * 0.5));
                 triggerZgon(p2.id, p.name);
             } else if (dist < r2 && p2.score > p.score * 1.15) {
+                io.emit('killEvent', { zabojca: p2.name, ofiara: p.name }); // WYSYŁKA DO KILLFEEDU
                 dodajMase(p2, Math.floor(p.score * 0.5));
                 triggerZgon(p.id, p2.name);
             }
@@ -292,12 +300,14 @@ setInterval(async () => {
 
             // Gracz zjada Bota
             if (dist < pRadius && p.score > b.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: b.name }); // WYSYŁKA DO KILLFEEDU
                 dodajMase(p, Math.floor(b.score * 0.5)); // Zastrzyk masy dla gracza
                 delete state.bots[b.id]; // Usunięcie bota
                 spawnBot(); // Natychmiastowy respawn nowego drona
             } 
             // Bot zjada Gracza
             else if (dist < bRadius && b.score > p.score * 1.15) {
+                io.emit('killEvent', { zabojca: b.name, ofiara: p.name }); // WYSYŁKA DO KILLFEEDU
                 b.score += Math.floor(p.score * 0.5); // Bot rośnie po zjedzeniu gracza!
                 triggerZgon(p.id, b.name);
             }
@@ -305,7 +315,7 @@ setInterval(async () => {
         
         // Atak obszarowy: OVERCHARGE NOVA
         if (p.overcharge >= 100) {
-            io.emit('killEvent', { text: `⚡ TYTAN ${p.name} UWOLNIŁ PRZEŁADOWANIE!` });
+            io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
             p.overcharge = 0;
             // Odepchnij i zrań wszystko w promieniu 300px
             nearby.players.forEach(p2 => {

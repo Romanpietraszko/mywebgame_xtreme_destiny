@@ -11,6 +11,14 @@
 </head>
 <body>
 
+    <div id="css-arena-bg">
+        <div class="neon-shape bot-red"></div>
+        <div class="neon-shape bot-purple"></div>
+        <div class="neon-shape food-yellow food-1"></div>
+        <div class="neon-shape food-yellow food-2"></div>
+        <div class="neon-shape food-yellow food-3"></div>
+    </div>
+
     <div id="ui-layer">
         <div id="menu">
             <h1><span class="paint-x">X</span>treme <span class="paint-d">D</span>estiny</h1>
@@ -52,11 +60,32 @@
                 <button id="btn-enter-arena" class="main-btn border-green">WEJDŹ NA ARENĘ</button>
                 <button class="back-btn" data-target="step-2">Powrót</button>
             </div>
+
+            <div id="step-4" class="hidden">
+                <h3>Wybierz Sektor Zrzutu:</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <button class="main-btn border-gold" data-spawn="nw">Sektor Północny-Zachód</button>
+                    <button class="main-btn border-gold" data-spawn="ne">Sektor Północny-Wschód</button>
+                    <button class="main-btn border-gold" data-spawn="sw">Sektor Południowy-Zachód</button>
+                    <button class="main-btn border-gold" data-spawn="se">Sektor Południowy-Wschód</button>
+                </div>
+                <button class="main-btn border-green" id="btn-deploy">DESANT (WEJDŹ DO GRY)</button>
+                <button class="back-btn" data-target="step-3">Powrót</button>
+            </div>
         </div>
     </div>
 
     <div id="in-game-ui" style="pointer-events: none; position: absolute; inset: 0; z-index: 50;">
         
+        <img id="uni-logo" src="/assety/logo.png" alt="Logo Uczelni" onerror="this.style.display='none'" style="position: absolute; top: 20px; left: 20px; width: 80px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); z-index: 100;">
+
+        <div id="survival-timer" class="hidden" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(5,5,5,0.8); border: 2px solid #2ecc71; padding: 5px 15px; border-radius: 5px; color: #2ecc71; font-family: 'Exo 2', sans-serif; font-weight: bold; font-size: 18px;">
+            CZAS: <span id="time-display">00:00</span>
+        </div>
+
+        <div id="killfeed" style="position: absolute; top: 20px; right: 200px; width: 250px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; pointer-events: none;">
+            </div>
+
         <div id="midas-tutorial" class="hidden" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,10,15,0.9); border: 2px solid #f1c40f; padding: 15px 25px; border-radius: 8px; color: #fff; font-size: 16px; text-align: center; box-shadow: 0 0 15px rgba(241,196,15,0.3);">
             <strong style="color: #f1c40f;">[Midas]:</strong> <span id="midas-text">Witaj na arenie! Zbieraj jedzenie, by rosnąć.</span>
         </div>

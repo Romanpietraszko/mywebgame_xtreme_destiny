@@ -18,7 +18,7 @@ body, html {
     overflow: hidden;
     background-color: #050505; /* Baza Vibe Noir */
     color: #ffffff;
-    font-family: 'Rajdhani', sans-serif;
+    font-family: 'Exo 2', 'Rajdhani', sans-serif;
 }
 
 canvas {
@@ -32,23 +32,26 @@ canvas {
     display: none !important;
 }
 
-/* MENU LOBBY */
+/* MENU LOBBY (ZMIANA NA PRZEZROCZYSTE DLA TŁA) */
 #ui-layer {
     position: absolute;
     inset: 0;
     display: flex;
     justify-content: center;
     align-items: center;
-    background: rgba(5, 5, 5, 0.85); /* Przyciemnienie tła za menu */
+    background: transparent; /* Zmienione na przezroczyste, by widzieć tło areny */
     z-index: 100;
 }
 
+/* GLASSMORPHISM - MROŻONE SZKŁO */
 #menu {
-    background: rgba(10, 10, 15, 0.95);
+    background: rgba(10, 10, 15, 0.45); /* Półprzezroczyste tło */
+    backdrop-filter: blur(12px); /* Magia rozmycia tła za panelem */
+    -webkit-backdrop-filter: blur(12px); /* Dla Safari/iOS */
     padding: 30px;
     border-radius: 12px;
-    border: 2px solid #3498db;
-    box-shadow: 0 0 30px rgba(0, 0, 0, 0.9), 0 0 15px rgba(52, 152, 219, 0.2);
+    border: 2px solid rgba(52, 152, 219, 0.5);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(52, 152, 219, 0.3);
     text-align: center;
     width: 90%;
     max-width: 450px;
@@ -114,18 +117,19 @@ input:focus {
 
 /* KOLORY NEONÓW DLA PRZYCISKÓW */
 .border-blue { border-color: #3498db; }
-.border-blue:hover { background: #3498db; color: #000; box-shadow: 0 0 15px rgba(52,152,219,0.5); }
+.border-blue:hover, .border-blue.selected { background: #3498db; color: #000; box-shadow: 0 0 15px rgba(52,152,219,0.5); }
 
 .border-red { border-color: #e74c3c; }
-.border-red:hover { background: #e74c3c; color: #000; box-shadow: 0 0 15px rgba(231,76,60,0.5); }
+.border-red:hover, .border-red.selected { background: #e74c3c; color: #000; box-shadow: 0 0 15px rgba(231,76,60,0.5); }
 
 .border-purple { border-color: #9b59b6; }
-.border-purple:hover { background: #9b59b6; color: #000; box-shadow: 0 0 15px rgba(155,89,182,0.5); }
+.border-purple:hover, .border-purple.selected { background: #9b59b6; color: #000; box-shadow: 0 0 15px rgba(155,89,182,0.5); }
 
 .border-green { border-color: #2ecc71; }
-.border-green:hover { background: #2ecc71; color: #000; box-shadow: 0 0 15px rgba(46,204,113,0.5); }
+.border-green:hover, .border-green.selected { background: #2ecc71; color: #000; box-shadow: 0 0 15px rgba(46,204,113,0.5); }
 
-.border-gold { border-color: #f1c40f; opacity: 0.5; cursor: not-allowed; }
+.border-gold { border-color: #f1c40f; opacity: 0.7; }
+.border-gold:hover, .border-gold.selected { background: #f1c40f; color: #000; box-shadow: 0 0 15px rgba(241,196,15,0.5); opacity: 1; }
 
 .back-btn {
     background: none;
@@ -165,10 +169,27 @@ input:focus {
 }
 
 /* ==========================================
-   MEDIA QUERIES - RESPONSYWNOŚĆ
+   MEDIA QUERIES - RESPONSYWNOŚĆ (HUD I MENU)
    ========================================== */
 
-/* 1. Telefony Pionowo (Wąskie ekrany) */
+/* 1. TABLETY I MAŁE MONITORY (do 768px) */
+@media (max-width: 768px) {
+    #killfeed {
+        right: 20px !important;
+        width: 200px !important;
+    }
+    
+    #uni-logo {
+        width: 60px !important;
+    }
+
+    #survival-timer {
+        font-size: 16px !important;
+        padding: 5px 10px !important;
+    }
+}
+
+/* 2. TELEFONY PIONOWO (do 480px) */
 @media (max-width: 480px) {
     #menu {
         padding: 20px;
@@ -190,7 +211,7 @@ input:focus {
     }
 
     .char-grid {
-        flex-direction: column; /* Karty pod sobą, żeby się nie zgniatały */
+        flex-direction: column;
         gap: 8px;
     }
 
@@ -201,15 +222,63 @@ input:focus {
         align-items: center;
     }
 
+    .char-card img { width: 40px !important; height: 40px !important; }
     .char-card h4 { margin: 0; font-size: 14px; }
     .char-card p { font-size: 12px; }
+
+    #step-4 div {
+        grid-template-columns: 1fr !important;
+        gap: 5px !important;
+    }
+    
+    #step-4 .main-btn {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    #castle-shop {
+        width: 90% !important;
+        padding: 15px !important;
+    }
+    #castle-shop h2 { font-size: 18px; }
+    #castle-shop button { font-size: 12px !important; padding: 8px !important; }
+
+    #uni-logo {
+        width: 45px !important;
+        top: 10px !important;
+        left: 10px !important;
+    }
+
+    #survival-timer {
+        top: 10px !important;
+        font-size: 12px !important;
+        padding: 3px 8px !important;
+    }
+
+    #killfeed {
+        top: 45px !important;
+        right: 10px !important;
+        width: 160px !important;
+    }
+
+    #killfeed div {
+        font-size: 10px !important;
+        padding: 3px 6px !important;
+    }
+    
+    #midas-tutorial {
+        width: 90%;
+        font-size: 12px !important;
+        padding: 10px !important;
+        bottom: 10px !important;
+    }
 }
 
-/* 2. Telefony Poziomo / Niskie Ekrany (Landscape) */
+/* 3. TELEFONY POZIOMO (Niskie ekrany - do 600px wysokości) */
 @media (max-height: 600px) {
     #ui-layer {
-        align-items: flex-start; /* Zapobiega chamskiemu ucięciu góry menu */
-        overflow-y: auto;        /* Odblokowuje suwak tylko dla warstwy UI */
+        align-items: flex-start;
+        overflow-y: auto;
         padding: 20px 0;
     }
 
@@ -231,4 +300,80 @@ input:focus {
         padding: 10px;
         margin-bottom: 8px;
     }
+    
+    .char-card img { width: 35px !important; height: 35px !important; }
+
+    #killfeed {
+        top: 60px !important;
+    }
+}
+
+
+/* ==========================================
+   CZYSTY CSS - TŁO MENU (VIBE NOIR SYMULACJA)
+   ========================================== */
+
+#css-arena-bg {
+    position: absolute;
+    inset: 0;
+    z-index: 10; /* Pod ui-layer, ale nad Canvasem, gdy w menu */
+    background: #050505;
+    background-image: 
+        linear-gradient(rgba(52, 152, 219, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(52, 152, 219, 0.05) 1px, transparent 1px);
+    background-size: 100px 100px;
+    overflow: hidden;
+}
+
+.neon-shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    animation: floatShape 15s infinite linear;
+}
+
+/* Wirus / Dron (Czerwony Oktagon) */
+.bot-red {
+    width: 80px; height: 80px;
+    border: 4px solid #e74c3c;
+    box-shadow: 0 0 20px #e74c3c;
+    top: 20%; left: -10%;
+    clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); 
+    border-radius: 0;
+}
+
+/* Elita AI (Fioletowy Romb) */
+.bot-purple {
+    width: 120px; height: 120px;
+    border: 5px solid #9b59b6;
+    box-shadow: 0 0 25px #9b59b6;
+    bottom: -10%; right: 10%;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); 
+    border-radius: 0;
+    animation-duration: 20s;
+    animation-direction: reverse;
+}
+
+/* Jedzenie (Żółte kropki z aurą) */
+.food-yellow {
+    width: 15px; height: 15px;
+    background: #f1c40f;
+    box-shadow: 0 0 10px #f1c40f;
+}
+
+.food-1 { top: 60%; left: 80%; animation-duration: 10s; }
+.food-2 { top: 15%; right: 20%; animation-duration: 12s; animation-direction: reverse; }
+.food-3 { bottom: 30%; left: 20%; animation-duration: 18s; }
+
+/* Ruch cząsteczek na tytule - Wolne dryfowanie */
+@keyframes floatShape {
+    0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+    10% { opacity: 0.8; }
+    90% { opacity: 0.8; }
+    100% { transform: translateY(-500px) translateX(300px) rotate(360deg); opacity: 0; }
+}
+
+/* ZABEZPIECZENIE: Gdy wejdziesz do gry, ukrywamy tło CSS dla lepszej wydajności */
+#ui-layer.hidden ~ #css-arena-bg {
+    display: none;
 }

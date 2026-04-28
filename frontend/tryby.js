@@ -15,6 +15,11 @@
     let mojeId = null;
     let stanSerwera = null;
     let czyWsklepie = false;
+    
+    // Zmienne dla HUD i Zrzutu
+    let wybranySpawn = 'random'; 
+    let czasStart = 0;
+    let interwalCzasu = null;
 
     // Obiekt wejściowy (Input) wysyłany do Sędziego
     let inputKlawiszy = {
@@ -29,10 +34,16 @@
     const step1 = document.getElementById('step-1');
     const step2 = document.getElementById('step-2');
     const step3 = document.getElementById('step-3');
+    const step4 = document.getElementById('step-4'); // Wybór sektora zrzutu
     const inputNick = document.getElementById('playerName');
     const castleShop = document.getElementById('castle-shop');
     const midasTutorial = document.getElementById('midas-tutorial');
     const midasText = document.getElementById('midas-text');
+    
+    // Referencje nowego HUD
+    const killfeed = document.getElementById('killfeed');
+    const timerDisplay = document.getElementById('time-display');
+    const timerContainer = document.getElementById('survival-timer');
 
     // 3. OBSŁUGA LOBBY I WYBORU KLAS
     document.getElementById('nextBtn').addEventListener('click', () => {
@@ -73,24 +84,90 @@
         });
     });
 
-    // 4. WEJŚCIE NA ARENĘ (START)
+    // 4. LOGIKA WYBORU ZRZUTU I WEJŚCIA NA ARENĘ
     document.getElementById('btn-enter-arena').addEventListener('click', () => {
+        const mode = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
+        
+        // W trybie drużynowym omijamy wybór spawnu (Serwer sam dzieli na bazy)
+        if (mode === 'TEAMS') {
+            wejdzNaArene('random');
+        } else {
+            step3.classList.add('hidden');
+            step4.classList.remove('hidden');
+        }
+    });
+
+    // Obsługa przycisków wyboru sektora
+    document.querySelectorAll('[data-spawn]').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+            document.querySelectorAll('[data-spawn]').forEach(b => b.classList.remove('border-green'));
+            e.currentTarget.classList.add('border-green');
+            wybranySpawn = e.currentTarget.getAttribute('data-spawn');
+        });
+    });
+
+    // Ostateczny start po wybraniu sektora
+    document.getElementById('btn-deploy').addEventListener('click', () => {
+        wejdzNaArene(wybranySpawn);
+    });
+
+    // Główna funkcja startowa
+    function wejdzNaArene(sektor) {
         const data = {
             name: inputNick.value.trim() || "Gracz",
             mode: window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE',
-            skin: window.Flagi ? window.Flagi.Stan.wybranaKlasa : 'standard'
+            skin: window.Flagi ? window.Flagi.Stan.wybranaKlasa : 'standard',
+            spawnZone: sektor
         };
 
         socket.emit('joinGame', data);
+        
+        // Zarządzanie interfejsem
         uiLayer.classList.add('hidden');
+        if (timerContainer) timerContainer.classList.remove('hidden');
+        
+        // Start Zegara Przetrwania
+        czasStart = Date.now();
+        interwalCzasu = setInterval(aktualizujCzas, 1000);
         
         if (window.Flagi) window.Flagi.ustawStan('PLAYING');
-        if (window.Guardian) window.Guardian.odbierzTick(); // Reset strażnika na start
+        if (window.Guardian) window.Guardian.odbierzTick(); 
 
         requestAnimationFrame(pętlaGry);
-    });
+    }
 
-    // 5. SYSTEM STEROWANIA (Klawiatura + Mysz)
+    // 5. FUNKCJE HUD (ZEGAR I KILLFEED)
+    function aktualizujCzas() {
+        if (!timerDisplay) return;
+        let roznica = Math.floor((Date.now() - czasStart) / 1000);
+        let min = String(Math.floor(roznica / 60)).padStart(2, '0');
+        let sek = String(roznica % 60).padStart(2, '0');
+        timerDisplay.innerText = `${min}:${sek}`;
+    }
+
+    function dodajDoKillfeedu(zabojca, ofiara) {
+        if (!killfeed) return;
+        const wpis = document.createElement('div');
+        wpis.style.background = 'rgba(20,20,25,0.85)';
+        wpis.style.borderLeft = '3px solid #e74c3c';
+        wpis.style.padding = '5px 10px';
+        wpis.style.color = '#fff';
+        wpis.style.fontFamily = "'Exo 2', sans-serif";
+        wpis.style.fontSize = '13px';
+        wpis.style.borderRadius = '3px';
+        wpis.innerHTML = `<span style="color:#e74c3c; font-weight:bold;">${zabojca}</span> zniszczył <span style="color:#aaa;">${ofiara}</span>`;
+        
+        killfeed.appendChild(wpis);
+        
+        // Usuwanie wiadomości po 5 sekundach
+        setTimeout(() => {
+            wpis.style.opacity = '0';
+            wpis.style.transition = 'opacity 0.5s ease';
+            setTimeout(() => wpis.remove(), 500);
+        }, 5000);
+    }
+
+    // 6. SYSTEM STEROWANIA (Klawiatura + Mysz)
     window.addEventListener('keydown', (e) => {
         if (e.code === 'KeyW' || e.code === 'ArrowUp') inputKlawiszy.up = true;
         if (e.code === 'KeyS' || e.code === 'ArrowDown') inputKlawiszy.down = true;
@@ -116,7 +193,7 @@
     window.addEventListener('mousedown', (e) => { if (e.button === 0) inputKlawiszy.atakuje = true; });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) inputKlawiszy.atakuje = false; });
 
-    // 6. SYSTEM SKLEPU I MIDASA (API GLOBALNE DLA HTML)
+    // 7. SYSTEM SKLEPU I MIDASA
     window.kupBron = function(typ) {
         socket.emit('buyShopItem', typ);
         console.log("💰 Próba zakupu broni:", typ);
@@ -128,32 +205,34 @@
     };
 
     function obslugaStref(mojGracz) {
-        // Sprawdzenie czy gracz jest w Zamku (Monolit 2000, 2000, radius 300)
+        const tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
+        
+        // Zamek i sklep na środku mapy
         const dystansDoZamku = Math.hypot(mojGracz.x - 2000, mojGracz.y - 2000);
         
-        if (dystansDoZamku < 300) {
+        if (dystansDoZamku < 300 && tryb === 'FREE') {
             if (!czyWsklepie) {
                 czyWsklepie = true;
                 castleShop.classList.remove('hidden');
             }
         } else {
-            if (czyWsklepie) {
-                zamknijSklep();
-            }
+            if (czyWsklepie) zamknijSklep();
         }
 
-        // Prosty Midas (Tutorial na starcie)
-        if (mojGracz.score < 15) {
-            midasTutorial.classList.remove('hidden');
-            midasText.innerText = "Zbieraj żółte punkty masy, aby ewoluować. Unikaj większych!";
-        } else if (mojGracz.score >= 30 && mojGracz.score < 50) {
-            midasText.innerText = "Odblokowałeś broń! Klikaj LPM, aby atakować kosztem 2 masy.";
-        } else {
-            midasTutorial.classList.add('hidden');
+        // Midas (Tutorial na starcie)
+        if (tryb === 'FREE') {
+            if (mojGracz.score < 15) {
+                midasTutorial.classList.remove('hidden');
+                midasText.innerText = "Zbieraj masę, by ewoluować. Naciśnij 'M' by uruchomić skaner taktyczny.";
+            } else if (mojGracz.score >= 30 && mojGracz.score < 50) {
+                midasText.innerText = "Odblokowałeś miecz! Klikaj LPM, by atakować kosztem 2 masy.";
+            } else {
+                midasTutorial.classList.add('hidden');
+            }
         }
     }
 
-    // 7. KOMUNIKACJA Z SERWEREM
+    // 8. KOMUNIKACJA Z SERWEREM
     socket.on('init', (data) => { mojeId = data.id; });
 
     socket.on('serverTick', (data) => {
@@ -166,26 +245,39 @@
         zamknijSklep();
     });
 
+    // Odbiór wiadomości dla Killfeedu
+    socket.on('killEvent', (data) => {
+        if (data.zabojca && data.ofiara) {
+            dodajDoKillfeedu(data.zabojca, data.ofiara);
+        }
+    });
+
     socket.on('gameOver', (data) => {
         if (window.Flagi) window.Flagi.ustawStan('GAMEOVER');
+        
+        // Zatrzymanie czasu i czyszczenie HUD
+        clearInterval(interwalCzasu);
+        if (timerContainer) timerContainer.classList.add('hidden');
+        if (killfeed) killfeed.innerHTML = '';
+        
+        const finalTime = timerDisplay ? timerDisplay.innerText : "00:00";
+
         uiLayer.classList.remove('hidden');
         uiLayer.innerHTML = `
             <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid #e74c3c; border-radius: 15px; box-shadow: 0 0 40px #000;">
                 <h1 style="color: #e74c3c; font-size: 48px; font-family: 'Permanent Marker';">SYSTEM HALTED</h1>
                 <p style="color: #aaa; margin: 20px 0;">"${data.message}"</p>
-                <h2 style="color: #f1c40f;">MASA: ${data.finalScore}</h2>
+                <h2 style="color: #f1c40f;">MASA: ${data.finalScore} | CZAS: ${finalTime}</h2>
                 <button class="main-btn border-red" style="margin-top: 30px;" onclick="location.reload()">REBOOT SYSTEM</button>
             </div>
         `;
     });
 
-    // 8. PĘTLA GRY (RENDER + INPUT)
+    // 9. PĘTLA GRY (RENDER + INPUT)
     function pętlaGry() {
         if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-            // Wyślij dane do Sędziego
             socket.emit('playerInput', inputKlawiszy);
 
-            // Pobierz dane o sobie i narysuj świat
             if (stanSerwera && stanSerwera.players && mojeId) {
                 const mojGracz = stanSerwera.players[mojeId];
                 if (mojGracz) {
