@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Produkcyjny Silnik Renderujący (PNG Gracze + Neonowe Boty)
+// GRAFIKA.JS - Produkcyjny Silnik Renderujący (Architektura Północna & Taktyczne Boty)
 // ==========================================
 
 window.Grafika = (function() {
@@ -131,22 +131,72 @@ window.Grafika = (function() {
                 }
             });
             
-            // Cyber-Zamek
-            if (czyWidoczny(2000, 2000, 300)) {
+            // Cyber-Zamek (Nowy, wyciągnięty ze szkicu z blankami)
+            if (czyWidoczny(2000, 2000, 400)) {
                 ctx.save(); ctx.translate(2000, 2000);
                 let puls = Math.abs(Math.sin(czas / 600)); 
-                let zamekGrad = ctx.createRadialGradient(0, 0, 50, 0, 0, 300);
-                zamekGrad.addColorStop(0, `rgba(241, 196, 15, ${0.1 + puls * 0.1})`); zamekGrad.addColorStop(1, '#020202');
-                ctx.fillStyle = zamekGrad; ctx.strokeStyle = '#f1c40f'; ctx.lineWidth = 6 + (puls * 4);
-                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20 + (puls * 15); ctx.shadowColor = '#f1c40f'; }
-                ctx.beginPath(); for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 300, Math.sin(i * Math.PI/4) * 300);
-                ctx.closePath(); ctx.fill(); ctx.stroke();
-                ctx.shadowBlur = 0; ctx.strokeStyle = 'rgba(241, 196, 15, 0.3)'; ctx.lineWidth = 2;
-                ctx.beginPath(); for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * 280, Math.sin(i * Math.PI/4) * 280);
-                ctx.closePath(); ctx.stroke();
-                ctx.rotate(czas / 1000); ctx.strokeStyle = '#ffffff'; 
+                
+                // Baza twierdzy
+                ctx.fillStyle = 'rgba(10, 10, 15, 0.9)'; 
+                ctx.strokeStyle = '#f1c40f'; 
+                ctx.lineWidth = 4 + (puls * 2);
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15 + (puls * 10); ctx.shadowColor = '#f1c40f'; }
+                
+                const cW = 400; // Szerokość zamku
+                const cH = 300; // Wysokość zamku
+                
+                // Rysowanie ścieżki zgodnej ze szkicem (Wieże + Blanki)
+                ctx.beginPath();
+                ctx.moveTo(-cW/2, cH/2);
+                ctx.lineTo(cW/2, cH/2);
+                ctx.lineTo(cW/2, 0); // Ściana prawa
+                
+                // Blanki na prawej wieży
+                ctx.lineTo(cW*0.6, 0); ctx.lineTo(cW*0.6, -cH*0.1);
+                ctx.lineTo(cW*0.7, -cH*0.1); ctx.lineTo(cW*0.7, 0);
+                ctx.lineTo(cW/2, 0); 
+                
+                // Dach prawej wieży
+                ctx.lineTo(cW*0.4, -cH*0.35);
+                // Szczyt głównego budynku
+                ctx.lineTo(0, -cH*0.65);
+                // Dach lewej wieży
+                ctx.lineTo(-cW*0.4, -cH*0.35);
+                
+                // Lewa wieża zjazdem
+                ctx.lineTo(-cW/2, 0);
+                // Blanki na lewej wieży
+                ctx.lineTo(-cW*0.7, 0); ctx.lineTo(-cW*0.7, -cH*0.1);
+                ctx.lineTo(-cW*0.6, -cH*0.1); ctx.lineTo(-cW*0.6, 0);
+                ctx.lineTo(-cW/2, 0);
+                
+                ctx.closePath(); 
+                ctx.fill(); 
+                ctx.stroke();
+                
+                // Detale (okna i brama)
+                ctx.shadowBlur = 0; 
+                ctx.strokeStyle = 'rgba(241, 196, 15, 0.5)'; 
+                ctx.lineWidth = 2;
+                
+                // Brama
+                ctx.strokeRect(-cW*0.15, cH*0.15, cW*0.3, cH*0.35);
+                // Okno główne lewe
+                ctx.strokeRect(-cW*0.35, -cH*0.05, cW*0.1, cH*0.2);
+                // Okno główne prawe
+                ctx.strokeRect(cW*0.25, -cH*0.05, cW*0.1, cH*0.2);
+                // Okienko na lewej flance
+                ctx.strokeRect(-cW*0.68, -cH*0.05, cW*0.06, cH*0.08);
+                // Okienko na prawej flance
+                ctx.strokeRect(cW*0.62, -cH*0.05, cW*0.06, cH*0.08);
+
+                // Holograficzny rdzeń na środku (sklep)
+                ctx.translate(0, cH * 0.1); 
+                ctx.rotate(czas / 1000); 
+                ctx.strokeStyle = '#ffffff'; 
                 if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#fff'; }
-                ctx.beginPath(); ctx.rect(-40, -40, 80, 80); ctx.rotate(Math.PI / 4); ctx.rect(-40, -40, 80, 80); ctx.stroke();
+                ctx.beginPath(); ctx.rect(-25, -25, 50, 50); ctx.rotate(Math.PI / 4); ctx.rect(-25, -25, 50, 50); ctx.stroke();
+                
                 ctx.restore();
             }
             
@@ -161,13 +211,13 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE DRONÓW AI (Neonowa Geometria) ---
+    // --- RYSOWANIE DRONÓW AI (Kształty Taktyczne) ---
     function rysujBota(bot) {
         if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
 
         let wKrzaku = false;
         mapaObiekty.krzaki.forEach(k => { if (Math.hypot(bot.x - k.x, bot.y - k.y) < k.r) wKrzaku = true; });
-        if (wKrzaku) return; // Boty w krzakach też znikają
+        if (wKrzaku) return;
 
         let masa = Math.min(bot.score || 10, 600);
         let promien = 15 + Math.sqrt(masa) * 1.5;
@@ -187,19 +237,33 @@ window.Grafika = (function() {
 
         ctx.beginPath();
         if (isBoss) {
-            ctx.moveTo(0, -promien); ctx.lineTo(promien, 0); ctx.lineTo(0, promien); ctx.lineTo(-promien, 0);
+            // Elita (Taktyczny kształt rombu)
+            ctx.moveTo(promien * 0.8, -promien); 
+            ctx.lineTo(promien, 0); 
+            ctx.lineTo(promien * 0.8, promien); 
+            ctx.lineTo(-promien * 0.8, promien); 
+            ctx.lineTo(-promien, 0); 
+            ctx.lineTo(-promien * 0.8, -promien);
         } else {
-            for (let i = 0; i < 8; i++) ctx.lineTo(Math.cos(i * Math.PI/4) * promien, Math.sin(i * Math.PI/4) * promien);
+            // Dron (Sześciokąt)
+            for (let i = 0; i < 6; i++) {
+                ctx.lineTo(Math.cos(i * Math.PI/3) * promien, Math.sin(i * Math.PI/3) * promien);
+            }
         }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        ctx.closePath(); 
+        ctx.fill(); 
+        ctx.stroke();
 
         ctx.shadowBlur = 0;
         ctx.strokeStyle = isBoss ? 'rgba(155, 89, 182, 0.5)' : 'rgba(231, 76, 60, 0.5)';
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(0, 0, promien * 0.4, 0, Math.PI*2); ctx.stroke();
+        
+        // Siatka celownicza
         ctx.beginPath();
         ctx.moveTo(-promien*0.6, 0); ctx.lineTo(promien*0.6, 0);
-        ctx.moveTo(0, -promien*0.6); ctx.lineTo(0, promien*0.6);
+        ctx.moveTo(promien*0.3, -promien*0.5); ctx.lineTo(promien*0.3, promien*0.5);
+        ctx.moveTo(-promien*0.3, -promien*0.5); ctx.lineTo(-promien*0.3, promien*0.5);
         ctx.stroke();
 
         ctx.restore();
@@ -282,32 +346,67 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    // --- RYSOWANIE MAPY TAKTYCZNEJ ---
+    // --- RYSOWANIE MAPY TAKTYCZNEJ (Ze szczegółowym Zamkiem) ---
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
         ctx.save();
         
-        // Obliczanie rozmiaru i pozycji
         let mapSize = czyMala ? 160 : Math.min(screenW, screenH) * 0.7;
         let startX = czyMala ? screenW - mapSize - 20 : (screenW - mapSize) / 2;
         let startY = czyMala ? 20 : (screenH - mapSize) / 2;
         let scale = mapSize / limitWielkosci;
 
-        // Tło i obramowanie mapy
         ctx.fillStyle = 'rgba(10, 10, 15, 0.85)';
         ctx.strokeStyle = czyMala ? '#3498db' : '#f1c40f';
         ctx.lineWidth = 2;
         ctx.fillRect(startX, startY, mapSize, mapSize);
         ctx.strokeRect(startX, startY, mapSize, mapSize);
 
-        // Zamek na środku (dla orientacji)
+        // Zamek na mapie taktycznej (skalowany rysunek)
         if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'FREE') {
-            ctx.fillStyle = 'rgba(241, 196, 15, 0.3)';
-            ctx.beginPath(); 
-            ctx.arc(startX + (2000 * scale), startY + (2000 * scale), 300 * scale, 0, Math.PI*2); 
+            const castleX = startX + (2000 * scale);
+            const castleY = startY + (2000 * scale);
+            const castleWidth = 300 * scale;
+            const castleHeight = 250 * scale;
+
+            ctx.save();
+            ctx.translate(castleX, castleY);
+            ctx.strokeStyle = '#f1c40f';
+            ctx.lineWidth = czyMala ? 1 : 3;
+            if (!window.Flagi.Srodowisko.isMobile && !czyMala) { ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f'; }
+            ctx.fillStyle = 'rgba(241, 196, 15, 0.05)';
+
+            // Bryła zamku
+            ctx.beginPath();
+            ctx.moveTo(-castleWidth/2, castleHeight/2);
+            ctx.lineTo(castleWidth/2, castleHeight/2);
+            ctx.lineTo(castleWidth/2, 0);
+
+            // Blanki na prawej
+            ctx.lineTo(castleWidth*0.6, 0); ctx.lineTo(castleWidth*0.6, -castleHeight*0.1);
+            ctx.lineTo(castleWidth*0.7, -castleHeight*0.1); ctx.lineTo(castleWidth*0.7, 0);
+            
+            ctx.lineTo(castleWidth/2, 0);
+            ctx.lineTo(castleWidth*0.4, -castleHeight*0.3);
+            ctx.lineTo(0, -castleHeight/2); 
+            ctx.lineTo(-castleWidth*0.4, -castleHeight*0.3);
+
+            ctx.lineTo(-castleWidth/2, 0);
+            // Blanki na lewej
+            ctx.lineTo(-castleWidth*0.7, 0); ctx.lineTo(-castleWidth*0.7, -castleHeight*0.1);
+            ctx.lineTo(-castleWidth*0.6, -castleHeight*0.1); ctx.lineTo(-castleWidth*0.6, 0);
+            
+            ctx.lineTo(-castleWidth/2, 0);
+            ctx.closePath();
             ctx.fill();
+            ctx.stroke();
+
+            // Brama
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.4)';
+            ctx.strokeRect(-castleWidth*0.15, castleHeight*0.15, castleWidth*0.3, castleHeight*0.35);
+
+            ctx.restore();
         }
 
-        // Funkcja rysująca obiekty na mapie
         function rysujKropke(x, y, kolor, promienKropki) {
             ctx.fillStyle = kolor;
             ctx.beginPath(); 
@@ -315,16 +414,19 @@ window.Grafika = (function() {
             ctx.fill();
         }
 
-        // Rysowanie botów (czerwone kropki)
+        // Boty (Czerwone / Fioletowe)
         if (stanSerwera.bots) {
-            Object.values(stanSerwera.bots).forEach(b => rysujKropke(b.x, b.y, '#e74c3c', czyMala ? 1 : 2));
+            Object.values(stanSerwera.bots).forEach(b => {
+                const kolorBota = b.skin === 'ninja' ? '#9b59b6' : '#e74c3c';
+                rysujKropke(b.x, b.y, kolorBota, czyMala ? 1 : 2);
+            });
         }
         
-        // Rysowanie innych graczy
+        // Gracze
         if (stanSerwera.players) {
             Object.values(stanSerwera.players).forEach(p => {
                 if (p.id !== mojGracz.id) {
-                    let kolorGracza = '#95a5a6'; // Neutralny szary w trybie FREE
+                    let kolorGracza = '#95a5a6'; 
                     if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
                         kolorGracza = p.team === 'RED' ? '#e74c3c' : '#3498db';
                     }
@@ -333,12 +435,16 @@ window.Grafika = (function() {
             });
         }
 
-        // Rysowanie gracza (Pulsująca biała kropka)
+        // Twój znacznik (Biały puls)
         let puls = 2 + Math.abs(Math.sin(Date.now() / 300)) * 2;
         rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
 
-        // Napis na dużej mapie
+        // Aura radaru
         if (!czyMala) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath(); ctx.arc(startX + (mojGracz.x * scale), startY + (mojGracz.y * scale), 300 * scale, 0, Math.PI*2); ctx.stroke();
+            
             ctx.fillStyle = '#fff';
             ctx.font = 'bold 24px Exo 2, sans-serif';
             ctx.textAlign = 'center';
