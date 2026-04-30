@@ -402,18 +402,29 @@ input:focus {
     animation-direction: reverse;
 }
 
-/* Jedzenie (Żółte kropki z aurą) */
+/* Cyfrowe Iskry (Digital Embers) w Menu */
 .food-yellow {
-    width: 15px; height: 15px;
-    background: #f1c40f;
-    box-shadow: 0 0 10px #f1c40f;
+    width: 6px; 
+    height: 12px;
+    background: #ff5722;
+    box-shadow: 0 0 15px #ff5722, 0 0 30px #ff9800, 0 0 45px #e74c3c;
+    border-radius: 50%;
+    animation: riseUp infinite ease-in;
 }
 
-.food-1 { top: 60%; left: 80%; animation-duration: 10s; }
-.food-2 { top: 15%; right: 20%; animation-duration: 12s; animation-direction: reverse; }
-.food-3 { bottom: 30%; left: 20%; animation-duration: 18s; }
+.food-1 { left: 80%; top: auto; bottom: 0; animation-duration: 6s; animation-delay: 0s; }
+.food-2 { left: 20%; top: auto; bottom: 0; animation-duration: 8s; animation-delay: 2s; }
+.food-3 { left: 50%; top: auto; bottom: 0; animation-duration: 5s; animation-delay: 4s; }
 
-/* Ruch cząsteczek na tytule - Wolne dryfowanie */
+/* Animacja iskierek lecących w górę */
+@keyframes riseUp {
+    0% { transform: translateY(100vh) scale(0.5); opacity: 0; }
+    20% { opacity: 0.8; }
+    80% { opacity: 0.8; }
+    100% { transform: translateY(-100px) scale(1.2); opacity: 0; }
+}
+
+/* Ruch cząsteczek na tytule - Wolne dryfowanie dla dronów */
 @keyframes floatShape {
     0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
     10% { opacity: 0.8; }

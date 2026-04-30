@@ -91,6 +91,64 @@ window.Grafika = (function() {
         });
     }
 
+    // Generator baz dla trybu TEAMS
+    function rysujZamek(x, y, kolorWiodacy, nazwa) {
+        if (!czyWidoczny(x, y, 600)) return;
+
+        const czas = Date.now();
+        ctx.save();
+        ctx.translate(x, y);
+
+        // Fosa / Pole Siłowe (Strefa Bezpieczna)
+        ctx.beginPath();
+        ctx.arc(0, 0, 400, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(${kolorWiodacy}, 0.05)`; // Delikatna poświata wewnątrz
+        ctx.fill();
+        ctx.lineWidth = 4;
+        ctx.strokeStyle = `rgba(${kolorWiodacy}, 0.6)`;
+        ctx.setLineDash([15, 20]); // Przerywany, technologiczny laser
+        ctx.stroke();
+
+        // Główna bryła bazy (Cyber-Bunkier)
+        ctx.beginPath();
+        ctx.rect(-150, -150, 300, 300);
+        ctx.fillStyle = '#0a0a0a';
+        ctx.fill();
+        ctx.setLineDash([]); 
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = `rgb(${kolorWiodacy})`;
+        if (!window.Flagi.Srodowisko.isMobile) {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = `rgb(${kolorWiodacy})`;
+        }
+        ctx.stroke();
+
+        // Rdzeń centralny zbrojowni
+        ctx.beginPath();
+        ctx.rect(-80, -80, 160, 160);
+        ctx.fillStyle = `rgba(${kolorWiodacy}, 0.2)`;
+        ctx.fill();
+
+        // Holograficzny podpis bazy
+        ctx.fillStyle = '#ffffff';
+        ctx.font = 'bold 24px Exo 2';
+        ctx.textAlign = 'center';
+        ctx.shadowBlur = 0;
+        ctx.fillText(nazwa, 0, -180);
+
+        // Hologram Sklepu (Pulsujący)
+        ctx.save();
+        ctx.rotate(czas / 1000);
+        ctx.strokeStyle = '#fff';
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#fff'; }
+        ctx.beginPath(); ctx.rect(-15, -15, 30, 30); ctx.rotate(Math.PI / 4); ctx.rect(-15, -15, 30, 30); 
+        ctx.fill(); ctx.stroke();
+        ctx.restore();
+
+        ctx.restore();
+    }
+
     function rysujMape(tryb, limitSwiata) {
         ctx.fillStyle = '#050505'; 
         ctx.fillRect(camera.x, camera.y, screenW, screenH);
@@ -114,7 +172,12 @@ window.Grafika = (function() {
 
         const czas = Date.now();
 
-        if (tryb === 'FREE') {
+        if (tryb === 'TEAMS') {
+            // Generowanie potężnych baz dla trybu drużynowego
+            rysujZamek(500, 3000, '231, 76, 60', 'BAZA CZERWONYCH');
+            rysujZamek(5500, 3000, '52, 152, 219', 'BAZA NIEBIESKICH');
+        } 
+        else if (tryb === 'FREE') {
             // Krzaki (Stealth)
             mapaObiekty.krzaki.forEach(k => {
                 if(czyWidoczny(k.x, k.y, k.r)) {
@@ -340,7 +403,19 @@ window.Grafika = (function() {
 
         ctx.restore(); 
 
-        if (postac.isShielding) { 
+        // Rysowanie Tarczy Ochronnej, gdy gracz jest w bezpiecznej strefie
+        if (postac.isSafe) { 
+            ctx.save();
+            ctx.translate(postac.x, postac.y);
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; // Neonowa Zieleń
+            ctx.lineWidth = 3; 
+            ctx.setLineDash([10, 15]); // Cyber-przerywana linia
+            ctx.rotate(Date.now() / 800); // Tarcza wolno się obraca
+            if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#2ecc71'; }
+            ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
+            ctx.restore();
+        } 
+        else if (postac.isShielding) { // Tarcza z klawisza Q
             ctx.save();
             ctx.translate(postac.x, postac.y);
             ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)'; 
@@ -361,7 +436,7 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    // --- RYSOWANIE MAPY TAKTYCZNEJ (Ze szczegółowym Zamkiem) ---
+    // --- RYSOWANIE MAPY TAKTYCZNEJ (Ze szczegółowym Zamkiem i Bazami) ---
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
         ctx.save();
         
@@ -376,7 +451,7 @@ window.Grafika = (function() {
         ctx.fillRect(startX, startY, mapSize, mapSize);
         ctx.strokeRect(startX, startY, mapSize, mapSize);
 
-        // Zamek na mapie taktycznej (skalowany rysunek)
+        // Zamek na mapie taktycznej (FREE)
         if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'FREE') {
             const castleX = startX + (2000 * scale);
             const castleY = startY + (2000 * scale);
@@ -420,6 +495,17 @@ window.Grafika = (function() {
             ctx.strokeRect(-castleWidth*0.15, castleHeight*0.15, castleWidth*0.3, castleHeight*0.35);
 
             ctx.restore();
+        } 
+        // Bazy na mapie taktycznej (TEAMS)
+        else if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
+            // Baza Czerwonych
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
+            ctx.strokeStyle = '#e74c3c';
+            ctx.beginPath(); ctx.arc(startX + (500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+            // Baza Niebieskich
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
+            ctx.strokeStyle = '#3498db';
+            ctx.beginPath(); ctx.arc(startX + (5500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
         }
 
         function rysujKropke(x, y, kolor, promienKropki) {

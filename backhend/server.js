@@ -176,19 +176,21 @@ class TrybTeams {
             }
         });
         
-        // Kolizje pancerza Generała z wrogą formacją (Generał dostaje obrażenia!)
-        nearby.bots.forEach(b => {
-            if(b.ownerId && b.team !== p.team) {
-                let dist = Math.hypot(p.x - b.x, p.y - b.y);
-                if(dist < 30) {
-                    p.score -= 2; // Armia wroga wysysa życie/zasoby z Dowódcy
-                    if(p.score <= 0) {
-                        io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
-                        triggerZgon(p.id, "Wroga Armia");
+        // Kolizje pancerza Generała z wrogą formacją (Generał dostaje obrażenia!) - TYLKO POZA BAZĄ
+        if (!p.isSafe) {
+            nearby.bots.forEach(b => {
+                if(b.ownerId && b.team !== p.team) {
+                    let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                    if(dist < 30) {
+                        p.score -= 2; // Armia wroga wysysa życie/zasoby z Dowódcy
+                        if(p.score <= 0) {
+                            io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
+                            triggerZgon(p.id, "Wroga Armia");
+                        }
                     }
                 }
-            }
-        });
+            });
+        }
     }
 
     static aktualizujRoj(b, lider, nearby) {
@@ -313,7 +315,7 @@ io.on('connection', (socket) => {
     // MIOTANIE OSZCZEPEM (Lewy Przycisk Myszy)
     socket.on('rzutOszczepem', (dane) => {
         let p = state.players[socket.id];
-        if (p) {
+        if (p && !p.isSafe) { // NIE MOŻNA RZUCAĆ BĘDĄC W BEZPIECZNEJ STREFIE
             let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
             if (p.score > koszt) {
                 p.score -= koszt;
@@ -341,7 +343,7 @@ io.on('connection', (socket) => {
     // ULEPSZANIE ZBROJOWNI I BOTÓW W BAZIE
     socket.on('buyShopItem', (item) => {
         let p = state.players[socket.id];
-        if (p) {
+        if (p && p.isSafe) { // ZAKUPY TYLKO W BEZPIECZNEJ STREFIE
             if (p.mode === 'TEAMS') {
                 let shopCost = 50; 
                 if (p.score >= shopCost) {
@@ -405,9 +407,35 @@ setInterval(() => {
         return nearby;
     }
 
-    // 2. LOGIKA GRACZY & RUCH MYSZKĄ
+    // 2. LOGIKA GRACZY & RUCH MYSZKĄ & STREFA BEZPIECZNA
     for (let pId in state.players) {
         let p = state.players[pId];
+        
+        p.isSafe = false; // Reset tarczy co klatkę
+
+        // LOGIKA BAZY I TARCZY OCHRONNEJ
+        if (p.mode === 'FREE') {
+            // Zamek na środku mapy
+            if (Math.hypot(p.x - 2000, p.y - 2000) < 400) { p.isSafe = true; }
+        } else if (p.mode === 'TEAMS') {
+            let mojaBazaX = p.team === 'RED' ? 500 : 5500;
+            let wrogaBazaX = p.team === 'RED' ? 5500 : 500;
+            let bazaY = 3000;
+
+            // Tarcza wewnątrz własnej bazy
+            if (Math.hypot(p.x - mojaBazaX, p.y - bazaY) < 400) { p.isSafe = true; }
+            
+            // Pole siłowe wrogiej bazy zadające potężne obrażenia
+            if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
+                p.score -= 2; // Płonie w wrogiej bazie!
+                if (p.score <= 0) {
+                    io.emit('killEvent', { zabojca: "System Obronny Bazy", ofiara: p.name });
+                    triggerZgon(p.id, "System Obronny Bazy");
+                    continue; // Jeśli umrze, przerywamy resztę logiki dla tego gracza
+                }
+            }
+        }
+
         let nearby = getNearby(p.x, p.y);
 
         // Aplikujemy hermetyczną logikę zależnie od wybranego wariantu
@@ -443,6 +471,7 @@ setInterval(() => {
         let hit = false;
 
         nearby.players.forEach(p => {
+            if (p.isSafe) return; // BLOKADA: Pociski ignorują graczy w bezpiecznej strefie
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
                 if (proj.mode === 'TEAMS' && p.team === proj.team) return; // Blokada Friendly Fire
                 if (!p.isShielding) p.score = Math.max(1, p.score - proj.damage);
@@ -483,7 +512,7 @@ setInterval(() => {
             let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
 
             nearby.players.forEach(p => {
-                if (p.isSafe) return;
+                if (p.isSafe) return; // AI Dzikich botów ignoruje graczy w strefie bezpiecznej
                 let dist = Math.hypot(p.x - b.x, p.y - b.y);
                 if (dist < 500) { 
                     if (b.score > p.score * 1.15) {

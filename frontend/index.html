@@ -24,13 +24,21 @@
             <h1><span class="paint-x">X</span>treme <span class="paint-d">D</span>estiny</h1>
             <p class="subtitle">Wybierz swoją ścieżkę</p>
 
-            <div style="background: rgba(0, 0, 0, 0.4); border-left: 3px solid #3498db; padding: 10px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #ccc;">
-                <strong>CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i armię. Przetrwaj ataki, werbuj drony i pożeraj słabszych.<br><br>
-                <strong style="color: #f1c40f;">STEROWANIE:</strong><br>
-                • <strong>Kursor Myszy:</strong> Kierunek ruchu i celowania<br>
-                • <strong>LPM (Kliknięcie):</strong> Rzut Oszczepem<br>
-                • <strong>SPACJA:</strong> Otwarcie Sklepu (tylko w Bazie/Zamku)<br>
-                • <strong>Klawisz E:</strong> Rozkaz Specjalny dla Roju (tylko tryb Drużyn)
+            <!-- ZAKTUALIZOWANY PANEL INSTRUKCJI Z EFEKTEM CRT I PŁOMIENIAMI -->
+            <div style="background: rgba(0, 0, 0, 0.6); border-left: 3px solid #e74c3c; padding: 15px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #ccc; position: relative; overflow: hidden; border-radius: 4px; box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.1);">
+                <!-- Subtelne Scanlines (Paski CRT) -->
+                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); background-size: 100% 2px, 3px 100%; pointer-events: none; z-index: 1;"></div>
+                
+                <div style="position: relative; z-index: 2;">
+                    <strong style="color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.5);">CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i armię. Przetrwaj ataki, werbuj drony i pożeraj słabszych.<br><br>
+                    <strong style="color: #f1c40f; text-shadow: 0 0 5px rgba(241, 196, 15, 0.6);">STEROWANIE:</strong>
+                    <ul class="instrukcja-lista" style="list-style: none; padding-left: 0; margin-top: 8px; margin-bottom: 0;">
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Kursor Myszy:</strong> Kierunek ruchu i celowania</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>LPM (Kliknięcie):</strong> Rzut Oszczepem</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>SPACJA:</strong> Otwarcie Sklepu (tylko w Bazie/Zamku)</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 0;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Klawisz E:</strong> Rozkaz Specjalny dla Roju (tylko tryb Drużyn)</li>
+                    </ul>
+                </div>
             </div>
 
             <div id="step-1">
