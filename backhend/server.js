@@ -22,13 +22,13 @@ app.use('/automatyzacja', express.static(path.join(__dirname, '../automatyzacja'
 async function getAIWellbeingMessage(mass) {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500); // Max 1.5s czekania, by nie lagować
+        const timeoutId = setTimeout(() => controller.abort(), 1500); // Max 1.5s czekania
         const response = await fetch('http://127.0.0.1:11434/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: 'qwen2.5:3b',
-                prompt: `Jesteś empatycznym asystentem w grze akcji. Gracz właśnie zginął i zdobył ${mass} punktów masy. Napisz jedno krótkie, pocieszające zdanie w klimatach cyberpunk/noir promujące oddech i relaks przed kolejną próbą. Nie witaj się.`,
+                prompt: `Jesteś empatycznym asystentem w grze akcji. Gracz właśnie zginął i zdobył ${mass} punktów. Napisz jedno krótkie, pocieszające zdanie w klimatach cyberpunk/noir promujące relaks przed kolejną próbą. Nie witaj się.`,
                 stream: false
             }),
             signal: controller.signal
@@ -47,7 +47,7 @@ async function getAIWellbeingMessage(mass) {
 const MAX_MASS = 600;
 const MAX_FOODS = 250;
 const MAX_BOTS = 60; 
-const CELL_SIZE = 400; // Do optymalizacji Spatial Hashing
+const CELL_SIZE = 400; // Spatial Hashing
 
 const state = {
     players: {}, bots: {}, foods: {}, projectiles: {},
@@ -57,7 +57,7 @@ const state = {
 
 let entityIdCounter = 0;
 
-// Słownik Broni (Zgodny z GDD)
+// Słownik Broni (Dla trybu FREE)
 const WEAPONS = {
     'sword': { dmg: 5, life: 15, speed: 18, cost: 2, piercing: false },
     'bow': { dmg: 8, life: 60, speed: 26, cost: 2, piercing: false },
@@ -65,12 +65,8 @@ const WEAPONS = {
     'shuriken': { dmg: 4, life: 30, speed: 20, cost: 2, piercing: false }
 };
 
-// ==========================================
-// SYSTEMY GENEROWANIA ŚWIATA
-// ==========================================
 function spawnFood() {
     let id = ++entityIdCounter;
-    // Jedzenie respi się na obszarze 6000x6000 (obejmuje oba tryby)
     state.foods[id] = { id: id, x: Math.random() * 6000, y: Math.random() * 6000 };
 }
 
@@ -79,12 +75,14 @@ function spawnBot() {
     let isBoss = Math.random() < 0.05;
     state.bots[id] = {
         id: id,
-        x: Math.random() * 6000, y: Math.random() * 6000, // Zwiększono zasięg dla obu trybów
+        x: Math.random() * 6000, y: Math.random() * 6000,
         score: isBoss ? (150 + Math.random() * 100) : (5 + Math.random() * 20),
         skin: isBoss ? 'ninja' : 'standard',
         name: isBoss ? 'Elita AI' : 'Dron AI',
         angle: Math.random() * Math.PI * 2,
-        state: 'IDLE' // IDLE, HUNT, FLEE
+        state: 'IDLE', // AI neutralne
+        ownerId: null, // Jeśli ma właściciela, wchodzi w formację TEAMS
+        typBroni: null // Typ dla "Army Draft"
     };
 }
 
@@ -92,44 +90,194 @@ for (let i = 0; i < MAX_FOODS; i++) spawnFood();
 for (let i = 0; i < MAX_BOTS; i++) spawnBot();
 
 // ==========================================
-// OBSŁUGA POŁĄCZEŃ KLIENCKICH (SOCKET.IO)
+// HERMETYCZNE KLASY TRYBÓW GRY (Zero Wycieków Logiki)
+// ==========================================
+class TrybFree {
+    static aktualizuj(p, nearby) {
+        let pRadius = 15 + Math.sqrt(p.score) * 1.5;
+        let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
+
+        // Jedzenie
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 1 * p.massMultiplier);
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        // Kolizje Graczy (PvP Zjadanie)
+        nearby.players.forEach(p2 => {
+            if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE') return;
+            let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+            let r2 = 15 + Math.sqrt(p2.score) * 1.5;
+            if (dist < pRadius && p.score > p2.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: p2.name });
+                dodajMase(p, Math.floor(p2.score * 0.5));
+                triggerZgon(p2.id, p.name);
+            }
+        });
+
+        // Kolizje z Dzikimi Botami (PvE Zjadanie)
+        nearby.bots.forEach(b => {
+            if (p.isSafe || b.ownerId) return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            let bRadius = 15 + Math.sqrt(b.score) * 1.5;
+            if (dist < pRadius && p.score > b.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: b.name });
+                dodajMase(p, Math.floor(b.score * 0.5));
+                delete state.bots[b.id]; spawnBot();
+            } else if (dist < bRadius && b.score > p.score * 1.15) {
+                io.emit('killEvent', { zabojca: b.name, ofiara: p.name });
+                b.score += Math.floor(p.score * 0.5);
+                triggerZgon(p.id, b.name);
+            }
+        });
+
+        // Atak obszarowy NOVA
+        if (p.overcharge >= 100) {
+            io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
+            p.overcharge = 0;
+            nearby.players.forEach(p2 => {
+                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) p2.score = Math.max(1, p2.score - 50);
+            });
+            nearby.bots.forEach(b => {
+                if (Math.hypot(p.x - b.x, p.y - b.y) < 300) b.score = Math.max(1, b.score - 100);
+            });
+        }
+    }
+}
+
+class TrybTeams {
+    static aktualizuj(p, nearby) {
+        let pRadius = 25; // Generał jest zwinną stałą wielkością
+        let magnetRange = pRadius + 20;
+
+        // Jedzenie (Zbieranie masy/waluty)
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 2 * p.massMultiplier); 
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        // Werbowanie (Hakowanie dzikich botów)
+        nearby.bots.forEach(b => {
+            if(b.ownerId) return; // Ten już ma właściciela
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            if(dist < 80) { // Zasięg wiązki hakującej
+                b.score -= 2; 
+                if(b.score <= 0) {
+                    b.ownerId = p.id;
+                    b.team = p.team;
+                    b.score = 25; // Standardowe HP rekruta
+                    b.typBroni = 'miecz'; // Rekrut zawsze zaczyna jako miecznik
+                    spawnBot(); // Natychmiastowe zrespienie dzikiego dla zachowania balansu na mapie
+                }
+            }
+        });
+        
+        // Kolizje pancerza Generała z wrogą formacją (Generał dostaje obrażenia!)
+        nearby.bots.forEach(b => {
+            if(b.ownerId && b.team !== p.team) {
+                let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                if(dist < 30) {
+                    p.score -= 2; // Armia wroga wysysa życie/zasoby z Dowódcy
+                    if(p.score <= 0) {
+                        io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
+                        triggerZgon(p.id, "Wroga Armia");
+                    }
+                }
+            }
+        });
+    }
+
+    static aktualizujRoj(b, lider, nearby) {
+        let targetX = lider.x;
+        let targetY = lider.y;
+        let distToLeader = Math.hypot(lider.x - b.x, lider.y - b.y);
+        let speed = 4.5;
+        
+        // REAKCJA NA ROZKAZ SPECJALNY (Klawisz 'E' / Ostrzał Skupiony)
+        if (lider.rozkazAktywny) {
+            if (b.typBroni === 'miecz') {
+                targetX = lider.x + Math.cos(lider.katRuchu) * 400; // Szarża przed Generała
+                targetY = lider.y + Math.sin(lider.katRuchu) * 400;
+                speed = 10;
+            } else if (b.typBroni === 'luk') {
+                speed = 0; // Łucznicy stają w miejscu i zasypują wroga ogniem
+                if (Math.random() < 0.05) {
+                     let pid = ++entityIdCounter;
+                     state.projectiles[pid] = {
+                         id: pid, ownerId: lider.id, team: lider.team, mode: lider.mode,
+                         x: b.x, y: b.y, dx: Math.cos(lider.katRuchu), dy: Math.sin(lider.katRuchu),
+                         life: 30, speed: 20, damage: 8, piercing: false, type: 'laser'
+                     };
+                }
+            }
+        } else {
+            // STANDARDOWA FORMACJA "MUR TARCZ"
+            if (distToLeader < 70) speed = 0; // Martwa strefa - robią miejsce Generałowi
+            else speed = Math.min(6, distToLeader * 0.08); 
+            
+            // Odpychanie Boids (żeby drony nie wchodziły w siebie)
+            nearby.bots.forEach(otherB => {
+                if (otherB.id !== b.id && otherB.ownerId === b.ownerId) {
+                    if (Math.hypot(otherB.x - b.x, otherB.y - b.y) < 25) {
+                        targetX -= (otherB.x - b.x) * 0.5;
+                        targetY -= (otherB.y - b.y) * 0.5;
+                    }
+                }
+            });
+        }
+        
+        // Zastosowanie wektora lotu
+        if(speed > 0) {
+            let moveAngle = Math.atan2(targetY - b.y, targetX - b.x);
+            b.x += Math.cos(moveAngle) * speed;
+            b.y += Math.sin(moveAngle) * speed;
+            b.angle = moveAngle;
+        }
+
+        // FIZYKA WALKI ROJU (Zderzenia 1na1 z wrogimi botami)
+        nearby.bots.forEach(enemyB => {
+            if (enemyB.ownerId && enemyB.team !== b.team) {
+                if (Math.hypot(b.x - enemyB.x, b.y - enemyB.y) < 25) {
+                    b.score -= 5;
+                    enemyB.score -= 5;
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// OBSŁUGA KLIENCKA (SOCKET.IO)
 // ==========================================
 io.on('connection', (socket) => {
     console.log(`[ połączono ] Terminal: ${socket.id}`);
 
     socket.on('joinGame', (data) => {
-        // Balans Klas według GDD
         let spd = 5.0, mult = 1.0, startMass = 5;
         if (data.skin === 'ninja') { spd = 5.5; mult = 0.9; }
         else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; startMass = 15; }
-        else { mult = 1.02; } // Standard ma stały lekki bonus
+        else { mult = 1.02; } 
 
-        // SYSTEM FRAKCJI I RESPAWNÓW (TEAMS vs FREE)
         let pTeam = 'NONE';
         let spawnX = 2000 + (Math.random() * 200 - 100);
         let spawnY = 2000 + (Math.random() * 200 - 100);
 
         if (data.mode === 'TEAMS') {
-            let redCount = 0;
-            let blueCount = 0;
+            let redCount = 0, blueCount = 0;
             for (let id in state.players) {
                 if (state.players[id].mode === 'TEAMS') {
                     if (state.players[id].team === 'RED') redCount++;
                     if (state.players[id].team === 'BLUE') blueCount++;
                 }
             }
-            
             pTeam = redCount <= blueCount ? 'RED' : 'BLUE';
-
-            if (pTeam === 'RED') {
-                spawnX = 500 + (Math.random() * 400 - 200); // Baza Lewa
-                spawnY = 3000 + (Math.random() * 400 - 200);
-            } else {
-                spawnX = 5500 + (Math.random() * 400 - 200); // Baza Prawa
-                spawnY = 3000 + (Math.random() * 400 - 200);
-            }
+            spawnX = pTeam === 'RED' ? 500 + (Math.random() * 400 - 200) : 5500 + (Math.random() * 400 - 200);
+            spawnY = 3000 + (Math.random() * 400 - 200);
         } else if (data.mode === 'FREE' && data.spawnZone) {
-            // OBSŁUGA SEKTORÓW ZRZUTU DLA TRYBU FREE
             if (data.spawnZone === 'nw') { spawnX = Math.random() * 2000; spawnY = Math.random() * 2000; }
             else if (data.spawnZone === 'ne') { spawnX = 2000 + Math.random() * 2000; spawnY = Math.random() * 2000; }
             else if (data.spawnZone === 'sw') { spawnX = Math.random() * 2000; spawnY = 2000 + Math.random() * 2000; }
@@ -142,82 +290,83 @@ io.on('connection', (socket) => {
             skin: data.skin || 'standard',
             mode: data.mode || 'FREE',
             team: pTeam,
-            x: spawnX,
-            y: spawnY,
+            x: spawnX, y: spawnY,
             score: startMass,
             baseSpeed: spd, massMultiplier: mult,
-            inventory: { bow: 0, knife: 0, shuriken: 0 },
             activeWeapon: 'sword',
-            overcharge: 0, // Pasek Nova na poziomie 600 masy
+            overcharge: 0,
             isShielding: false, isSafe: false,
-            lastTickX: spawnX, lastTickY: spawnY
+            katRuchu: 0, dystansKursora: 0, rozkazAktywny: false
         };
         socket.emit('init', { id: socket.id, team: pTeam });
     });
 
-    socket.on('playerInput', (keys) => {
-        const p = state.players[socket.id];
-        if (!p) return;
-
-        // AUTORYTET SERWERA: Fizyka i Ruch
-        let dx = 0, dy = 0;
-        if (keys.up) dy--; if (keys.down) dy++;
-        if (keys.left) dx--; if (keys.right) dx++;
-
-        // Zwolnienie przy dużej masie (balans!)
-        let weightPenalty = Math.max(0, (p.score - 50) / 600) * 2.0; 
-        let speed = Math.max(2.0, p.baseSpeed - weightPenalty);
-        if (keys.uzywaTarczy && p.score >= 50) { speed *= 0.5; p.isShielding = true; } 
-        else { p.isShielding = false; }
-
-        if (dx !== 0 || dy !== 0) {
-            let angle = Math.atan2(dy, dx);
-            let limit = p.mode === 'TEAMS' ? 6000 : 4000;
-            let nextX = p.x + Math.cos(angle) * speed;
-            let nextY = p.y + Math.sin(angle) * speed;
-
-            // NAPRAWA: ŚMIERĆ ZA MAPĄ (Krawędź)
-            if (nextX < 0 || nextX > limit || nextY < 0 || nextY > limit) {
-                triggerZgon(p.id, "Strefę Śmierci (Krawędź)");
-            } else {
-                p.x = nextX;
-                p.y = nextY;
-            }
+    // NOWE STEROWANIE MYSZKĄ 
+    socket.on('ruchGraczaMyszka', (dane) => {
+        let p = state.players[socket.id];
+        if (p) {
+            p.katRuchu = dane.kat;
+            p.dystansKursora = dane.dystans;
         }
+    });
 
-        // Strzelanie
-        if (keys.atakuje && p.score >= 30) {
-            let wp = WEAPONS[p.activeWeapon] || WEAPONS['sword'];
-            if (p.score > wp.cost) {
-                p.score -= wp.cost;
+    // MIOTANIE OSZCZEPEM (Lewy Przycisk Myszy)
+    socket.on('rzutOszczepem', (dane) => {
+        let p = state.players[socket.id];
+        if (p) {
+            let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
+            if (p.score > koszt) {
+                p.score -= koszt;
                 let pid = ++entityIdCounter;
                 state.projectiles[pid] = {
-                    id: pid, ownerId: p.id,
-                    team: p.team, mode: p.mode, // Dziedziczenie drużyny do Friendly Fire
+                    id: pid, ownerId: p.id, team: p.team, mode: p.mode,
                     x: p.x, y: p.y,
-                    dx: Math.cos(keys.katCelowania), dy: Math.sin(keys.katCelowania),
-                    life: wp.life, speed: wp.speed, damage: wp.dmg, piercing: wp.piercing
+                    dx: Math.cos(dane.kat), dy: Math.sin(dane.kat),
+                    life: 50, speed: 25, damage: p.mode === 'TEAMS' ? 25 : WEAPONS[p.activeWeapon].dmg, 
+                    piercing: true, type: 'oszczep'
                 };
             }
         }
     });
 
-    // NAPRAWA: Obsługa Sklepu
+    // ROZKAZ SPECJALNY DLA ROJU (Przycisk 'E' / Środkowy przycisk myszy)
+    socket.on('rozkazSpecjalny', () => {
+        let p = state.players[socket.id];
+        if (p && p.mode === 'TEAMS') {
+            p.rozkazAktywny = true;
+            setTimeout(() => { if(state.players[p.id]) p.rozkazAktywny = false; }, 2000); 
+        }
+    });
+
+    // ULEPSZANIE ZBROJOWNI I BOTÓW W BAZIE
     socket.on('buyShopItem', (item) => {
-        const p = state.players[socket.id];
-        if (p && WEAPONS[item]) {
-            // Sprawdź czy gracza stać na zakup w sklepie (np. koszt to cena * 10 dla stałej zmiany)
-            let shopCost = WEAPONS[item].cost * 25; 
-            if (p.score >= shopCost) {
-                p.score -= shopCost;
-                p.activeWeapon = item;
-                socket.emit('shopSuccess', { item: item });
+        let p = state.players[socket.id];
+        if (p) {
+            if (p.mode === 'TEAMS') {
+                let shopCost = 50; 
+                if (p.score >= shopCost) {
+                    p.score -= shopCost;
+                    // Draftujemy armię - zmieniamy połowę posiadanych botów na nową klasę
+                    Object.values(state.bots).forEach(b => {
+                        if (b.ownerId === p.id && Math.random() > 0.5) b.typBroni = item;
+                    });
+                    socket.emit('shopSuccess', { item: item });
+                }
+            } else {
+                let shopCost = (WEAPONS[item]?.cost || 2) * 25; 
+                if (p.score >= shopCost) {
+                    p.score -= shopCost;
+                    p.activeWeapon = item;
+                    socket.emit('shopSuccess', { item: item });
+                }
             }
         }
     });
 
     socket.on('disconnect', () => {
         console.log(`[ rozłączono ] Terminal: ${socket.id}`);
+        // W trybie TEAMS zwerbowane boty padają po wylogowaniu Generała
+        for(let bId in state.bots) { if(state.bots[bId].ownerId === socket.id) delete state.bots[bId]; }
         delete state.players[socket.id];
     });
 });
@@ -225,10 +374,10 @@ io.on('connection', (socket) => {
 // ==========================================
 // GŁÓWNA PĘTLA GRY (30 FPS)
 // ==========================================
-setInterval(async () => {
+setInterval(() => {
     state.tickCounter++;
 
-    // 1. SPATIAL HASHING (Optymalizacja kolizji)
+    // 1. SPATIAL HASHING (Optymalizacja)
     let grid = {};
     function addToGrid(entity, type) {
         if (!entity) return;
@@ -240,7 +389,6 @@ setInterval(async () => {
     Object.values(state.bots).forEach(b => addToGrid(b, 'bots'));
     Object.values(state.foods).forEach(f => addToGrid(f, 'foods'));
 
-    // Funkcja pomocnicza: pobierz obiekty z okolicznych 9 komórek
     function getNearby(x, y) {
         let cx = Math.floor(x / CELL_SIZE), cy = Math.floor(y / CELL_SIZE);
         let nearby = { players: [], bots: [], foods: [] };
@@ -257,81 +405,34 @@ setInterval(async () => {
         return nearby;
     }
 
-    // 2. LOGIKA GRACZY (Jedzenie i Overcharge)
+    // 2. LOGIKA GRACZY & RUCH MYSZKĄ
     for (let pId in state.players) {
         let p = state.players[pId];
-        let pRadius = 15 + Math.sqrt(p.score) * 1.5;
         let nearby = getNearby(p.x, p.y);
 
-        // Zbieranie jedzenia (Arystokrata ma większy magnes)
-        let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
-        nearby.foods.forEach(f => {
-            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
-                dodajMase(p, 1 * p.massMultiplier);
-                delete state.foods[f.id]; spawnFood();
-            }
-        });
+        // Aplikujemy hermetyczną logikę zależnie od wybranego wariantu
+        if (p.mode === 'FREE') TrybFree.aktualizuj(p, nearby);
+        else if (p.mode === 'TEAMS') TrybTeams.aktualizuj(p, nearby);
 
-        // Kolizje PvP
-        nearby.players.forEach(p2 => {
-            if (p.id === p2.id || p.isSafe || p2.isSafe) return;
-            // Blokada Friendly Fire
-            if (p.mode === 'TEAMS' && p.team === p2.team) return;
-
-            let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
-            let r2 = 15 + Math.sqrt(p2.score) * 1.5;
-
-            if (dist < pRadius && p.score > p2.score * 1.15) {
-                io.emit('killEvent', { zabojca: p.name, ofiara: p2.name }); // WYSYŁKA DO KILLFEEDU
-                dodajMase(p, Math.floor(p2.score * 0.5));
-                triggerZgon(p2.id, p.name);
-            } else if (dist < r2 && p2.score > p.score * 1.15) {
-                io.emit('killEvent', { zabojca: p2.name, ofiara: p.name }); // WYSYŁKA DO KILLFEEDU
-                dodajMase(p2, Math.floor(p.score * 0.5));
-                triggerZgon(p.id, p2.name);
-            }
-        });
-
-        // NAPRAWA: Kolizje PvE (Gracz vs Bot)
-        nearby.bots.forEach(b => {
-            if (p.isSafe) return;
-            let dist = Math.hypot(p.x - b.x, p.y - b.y);
-            let bRadius = 15 + Math.sqrt(b.score) * 1.5;
-
-            // Gracz zjada Bota
-            if (dist < pRadius && p.score > b.score * 1.15) {
-                io.emit('killEvent', { zabojca: p.name, ofiara: b.name }); // WYSYŁKA DO KILLFEEDU
-                dodajMase(p, Math.floor(b.score * 0.5)); // Zastrzyk masy dla gracza
-                delete state.bots[b.id]; // Usunięcie bota
-                spawnBot(); // Natychmiastowy respawn nowego drona
-            } 
-            // Bot zjada Gracza
-            else if (dist < bRadius && b.score > p.score * 1.15) {
-                io.emit('killEvent', { zabojca: b.name, ofiara: p.name }); // WYSYŁKA DO KILLFEEDU
-                b.score += Math.floor(p.score * 0.5); // Bot rośnie po zjedzeniu gracza!
-                triggerZgon(p.id, b.name);
-            }
-        });
+        // Autorytatywny Ruch oparty o kursor myszki
+        const MARTWA_STREFA = 30; 
+        let speed = Math.max(2.0, p.baseSpeed - (p.mode === 'FREE' ? Math.max(0, (p.score - 50) / 600) * 2.0 : 0));
         
-        // Atak obszarowy: OVERCHARGE NOVA
-        if (p.overcharge >= 100) {
-            io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
-            p.overcharge = 0;
-            // Odepchnij i zrań wszystko w promieniu 300px
-            nearby.players.forEach(p2 => {
-                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
-                    // Blokada Friendly Fire dla Nova
-                    if (p.mode === 'TEAMS' && p.team === p2.team) return;
-                    p2.score = Math.max(1, p2.score - 50);
-                }
-            });
-            nearby.bots.forEach(b => {
-                if (Math.hypot(p.x - b.x, p.y - b.y) < 300) b.score = Math.max(1, b.score - 100);
-            });
+        if (p.dystansKursora !== undefined && p.dystansKursora > MARTWA_STREFA) {
+            let limit = p.mode === 'TEAMS' ? 6000 : 4000;
+            let nextX = p.x + Math.cos(p.katRuchu) * speed;
+            let nextY = p.y + Math.sin(p.katRuchu) * speed;
+
+            if (nextX < 0 || nextX > limit || nextY < 0 || nextY > limit) {
+                triggerZgon(p.id, "Strefę Śmierci (Krawędź)");
+            } else {
+                p.x = nextX;
+                p.y = nextY;
+            }
         }
     }
 
-    // 3. LOGIKA POCISKÓW
+    // 3. LOGIKA POCISKÓW I OSZCZEPÓW
     for (let projId in state.projectiles) {
         let proj = state.projectiles[projId];
         proj.x += proj.dx * proj.speed;
@@ -343,10 +444,17 @@ setInterval(async () => {
 
         nearby.players.forEach(p => {
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
-                // Blokada Friendly Fire dla pocisków
-                if (proj.mode === 'TEAMS' && p.team === proj.team) return;
-
+                if (proj.mode === 'TEAMS' && p.team === proj.team) return; // Blokada Friendly Fire
                 if (!p.isShielding) p.score = Math.max(1, p.score - proj.damage);
+                hit = true;
+            }
+        });
+
+        // Oszczepy ranią drony
+        nearby.bots.forEach(b => {
+            if (Math.hypot(b.x - proj.x, b.y - proj.y) < 30) {
+                if (proj.mode === 'TEAMS' && b.team === proj.team) return;
+                b.score -= proj.damage;
                 hit = true;
             }
         });
@@ -355,91 +463,96 @@ setInterval(async () => {
         if (proj.life <= 0) delete state.projectiles[projId];
     }
 
-    // 4. LOGIKA BOTÓW (Agresywna maszyna sztucznej inteligencji)
+    // 4. LOGIKA DRONÓW (Klasyczne AI vs Rój Formacji)
     for (let bId in state.bots) {
         let b = state.bots[bId];
-        let nearby = getNearby(b.x, b.y);
-        let targetPlayer = null;
-        let predatorPlayer = null;
-        let closestDist = Infinity;
-
-        // System Skanowania Zagrożeń i Ofiar (Zasięg: 500px)
-        nearby.players.forEach(p => {
-            if (p.isSafe) return;
-            let dist = Math.hypot(p.x - b.x, p.y - b.y);
-            if (dist < 500) { 
-                if (b.score > p.score * 1.15) {
-                    // Gracz jest mniejszy i słabszy - NAMIERZANIE OFIARY
-                    if (dist < closestDist) { closestDist = dist; targetPlayer = p; }
-                } else if (p.score > b.score * 1.15) {
-                    // Gracz jest potężniejszy - WYKRYTO ZAGROŻENIE
-                    predatorPlayer = p;
-                }
-            }
-        });
-
-        // Podejmowanie decyzji
-        if (predatorPlayer) {
-            b.state = 'FLEE';
-            // Uciekaj dokładnie w przeciwną stronę niż drapieżnik
-            b.angle = Math.atan2(b.y - predatorPlayer.y, b.x - predatorPlayer.x); 
-        } else if (targetPlayer) {
-            b.state = 'HUNT';
-            // Pędź prosto na ofiarę
-            b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x); 
-        } else {
-            b.state = 'IDLE';
-            if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2; // Swobodne patrolowanie
+        
+        // Zdejmowanie botów o zerowym HP (niezależnie czy dzikie czy zwerbowane)
+        if (b.score <= 0) {
+            delete state.bots[bId];
+            continue;
         }
 
-        // Prędkość zależy od stanu i klasy
-        let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
-        if (b.skin === 'ninja') speed += 1.0; // Elita (Bossowie) jest znacznie szybsza!
+        if (b.ownerId && state.players[b.ownerId]) {
+            // Algorytm Formacji dla podbitych dronów
+            let nearby = getNearby(b.x, b.y);
+            TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby);
+        } else {
+            // Klasyczne, agresywne AI Dzikiego Bota
+            let nearby = getNearby(b.x, b.y);
+            let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
 
-        b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
-        b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
+            nearby.players.forEach(p => {
+                if (p.isSafe) return;
+                let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                if (dist < 500) { 
+                    if (b.score > p.score * 1.15) {
+                        if (dist < closestDist) { closestDist = dist; targetPlayer = p; }
+                    } else if (p.score > b.score * 1.15) {
+                        predatorPlayer = p;
+                    }
+                }
+            });
+
+            if (predatorPlayer) {
+                b.state = 'FLEE';
+                b.angle = Math.atan2(b.y - predatorPlayer.y, b.x - predatorPlayer.x); 
+            } else if (targetPlayer) {
+                b.state = 'HUNT';
+                b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x); 
+            } else {
+                b.state = 'IDLE';
+                if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2; 
+            }
+
+            let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
+            if (b.skin === 'ninja') speed += 1.0; 
+
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
+        }
     }
 
-    // 5. WYSYŁKA DANYCH DO KLIENTÓW
+    // 5. WYSYŁKA
     io.emit('serverTick', {
         players: state.players,
         bots: state.bots,
         projectiles: state.projectiles,
-        foods: state.tickCounter % 30 === 0 ? state.foods : null // Optymalizacja przesyłu masy
+        foods: state.tickCounter % 30 === 0 ? state.foods : null 
     });
 
-}, 33); // ~30 FPS
+}, 33); 
 
 // ==========================================
 // FUNKCJE POMOCNICZE
 // ==========================================
-
-// Inteligentne dodawanie masy (z obsługą Overcharge dla Tytanów)
 function dodajMase(gracz, ilosc) {
     if (gracz.score + ilosc <= MAX_MASS) {
         gracz.score += ilosc;
     } else {
         let nadwyzka = (gracz.score + ilosc) - MAX_MASS;
         gracz.score = MAX_MASS;
-        gracz.overcharge += nadwyzka; // Ładowanie ataku Nova
+        gracz.overcharge += nadwyzka; 
     }
 }
 
-// Procedura pożarcia z asystentem AI
 async function triggerZgon(deadId, killerName) {
     const p = state.players[deadId];
     if (p) {
         let score = Math.floor(p.score);
         console.log(`[ ŚMIERĆ ] ${p.name} poległ. Pytam Qwen o pocieszenie...`);
+        
+        // Zwerbowane drony w trybie TEAMS padają razem z poległym Generałem
+        if(p.mode === 'TEAMS') {
+            for(let bId in state.bots) { if(state.bots[bId].ownerId === deadId) delete state.bots[bId]; }
+        }
+
         let msg = await getAIWellbeingMessage(score);
         io.to(deadId).emit('gameOver', { finalScore: score, killerName: killerName, message: msg });
         delete state.players[deadId];
     }
 }
 
-// ==========================================
-// URUCHOMIENIE SERWERA
-// ==========================================
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
     console.log(`=========================================`);

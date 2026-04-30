@@ -131,72 +131,87 @@ window.Grafika = (function() {
                 }
             });
             
-            // Cyber-Zamek (Nowy, wyciągnięty ze szkicu z blankami)
+            // --- IKONICZNY ZAMEK Z PRZODU + FOSA ---
             if (czyWidoczny(2000, 2000, 400)) {
-                ctx.save(); ctx.translate(2000, 2000);
-                let puls = Math.abs(Math.sin(czas / 600)); 
+                ctx.save(); 
+                ctx.translate(2000, 2000); // Środek mapy
                 
-                // Baza twierdzy
-                ctx.fillStyle = 'rgba(10, 10, 15, 0.9)'; 
-                ctx.strokeStyle = '#f1c40f'; 
-                ctx.lineWidth = 4 + (puls * 2);
-                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15 + (puls * 10); ctx.shadowColor = '#f1c40f'; }
-                
-                const cW = 400; // Szerokość zamku
-                const cH = 300; // Wysokość zamku
-                
-                // Rysowanie ścieżki zgodnej ze szkicem (Wieże + Blanki)
-                ctx.beginPath();
-                ctx.moveTo(-cW/2, cH/2);
-                ctx.lineTo(cW/2, cH/2);
-                ctx.lineTo(cW/2, 0); // Ściana prawa
-                
-                // Blanki na prawej wieży
-                ctx.lineTo(cW*0.6, 0); ctx.lineTo(cW*0.6, -cH*0.1);
-                ctx.lineTo(cW*0.7, -cH*0.1); ctx.lineTo(cW*0.7, 0);
-                ctx.lineTo(cW/2, 0); 
-                
-                // Dach prawej wieży
-                ctx.lineTo(cW*0.4, -cH*0.35);
-                // Szczyt głównego budynku
-                ctx.lineTo(0, -cH*0.65);
-                // Dach lewej wieży
-                ctx.lineTo(-cW*0.4, -cH*0.35);
-                
-                // Lewa wieża zjazdem
-                ctx.lineTo(-cW/2, 0);
-                // Blanki na lewej wieży
-                ctx.lineTo(-cW*0.7, 0); ctx.lineTo(-cW*0.7, -cH*0.1);
-                ctx.lineTo(-cW*0.6, -cH*0.1); ctx.lineTo(-cW*0.6, 0);
-                ctx.lineTo(-cW/2, 0);
-                
-                ctx.closePath(); 
-                ctx.fill(); 
-                ctx.stroke();
-                
-                // Detale (okna i brama)
-                ctx.shadowBlur = 0; 
-                ctx.strokeStyle = 'rgba(241, 196, 15, 0.5)'; 
-                ctx.lineWidth = 2;
-                
-                // Brama
-                ctx.strokeRect(-cW*0.15, cH*0.15, cW*0.3, cH*0.35);
-                // Okno główne lewe
-                ctx.strokeRect(-cW*0.35, -cH*0.05, cW*0.1, cH*0.2);
-                // Okno główne prawe
-                ctx.strokeRect(cW*0.25, -cH*0.05, cW*0.1, cH*0.2);
-                // Okienko na lewej flance
-                ctx.strokeRect(-cW*0.68, -cH*0.05, cW*0.06, cH*0.08);
-                // Okienko na prawej flance
-                ctx.strokeRect(cW*0.62, -cH*0.05, cW*0.06, cH*0.08);
+                let puls = Math.abs(Math.sin(czas / 500)); 
 
-                // Holograficzny rdzeń na środku (sklep)
-                ctx.translate(0, cH * 0.1); 
+                // POPRAWIONE KOLORY (Wysoki kontrast!)
+                const kolorMuru = '#95a5a6';     // Jasny, kamienny szary (Super widoczny na czarnym tle)
+                const kolorKrawedzi = '#f1c40f'; // Neonowe złoto
+                const kolorDachu = '#e74c3c';    // Krwista czerwień
+                const kolorFosy = 'rgba(52, 152, 219, 0.3)'; // Woda / Energia fosy
+                const kolorFosyGlow = '#3498db';
+
+                // 0. FOSA (Błękitny, jarzący się basen wokół zamku)
+                ctx.beginPath();
+                ctx.arc(0, 0, 320, 0, Math.PI * 2);
+                ctx.fillStyle = kolorFosy;
+                ctx.fill();
+                ctx.lineWidth = 4;
+                ctx.strokeStyle = kolorFosyGlow;
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = kolorFosyGlow; }
+                ctx.stroke();
+                ctx.shadowBlur = 0; // Wyłączamy cień na chwilę
+
+                // 0.5 MOST ZWODZONY (Przez fosę do bramy)
+                ctx.fillStyle = '#7f8c8d'; 
+                ctx.fillRect(-50, 20, 100, 300); // Most prowadzący w dół mapy
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(-50, 20, 100, 300);
+
+                ctx.lineWidth = 4;
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#000'; } // Cień pod zamkiem
+
+                // 1. GŁÓWNY BUDYNEK (Środek)
+                ctx.fillStyle = kolorMuru;
+                ctx.strokeStyle = kolorKrawedzi;
+                ctx.fillRect(-150, -100, 300, 200);
+                ctx.strokeRect(-150, -100, 300, 200);
+
+                // 2. GŁÓWNY DACH (Czerwony trójkąt)
+                ctx.beginPath();
+                ctx.moveTo(-180, -100); 
+                ctx.lineTo(180, -100);  
+                ctx.lineTo(0, -250);    
+                ctx.closePath();
+                ctx.fillStyle = kolorDachu;
+                ctx.fill(); ctx.stroke();
+
+                // 3. LEWA WIEŻA
+                ctx.fillStyle = kolorMuru;
+                ctx.fillRect(-220, -50, 70, 150);
+                ctx.strokeRect(-220, -50, 70, 150);
+                ctx.beginPath(); ctx.moveTo(-240, -50); ctx.lineTo(-130, -50); ctx.lineTo(-185, -150); ctx.closePath();
+                ctx.fillStyle = kolorDachu; ctx.fill(); ctx.stroke();
+
+                // 4. PRAWA WIEŻA
+                ctx.fillStyle = kolorMuru;
+                ctx.fillRect(150, -50, 70, 150);
+                ctx.strokeRect(150, -50, 70, 150);
+                ctx.beginPath(); ctx.moveTo(130, -50); ctx.lineTo(240, -50); ctx.lineTo(185, -150); ctx.closePath();
+                ctx.fillStyle = kolorDachu; ctx.fill(); ctx.stroke();
+
+                // 5. OTWARTA BRAMA WEJŚCIOWA (Zaprasza do środka)
+                ctx.fillStyle = '#050505'; // Wnętrze bramy mroczne jak tło gry
+                ctx.fillRect(-60, 20, 120, 80);
+                ctx.strokeStyle = '#f1c40f';
+                ctx.strokeRect(-60, 20, 120, 80);
+
+                // 6. HOLOGRAM SKLEPU W BRAMIE (Pulsujący znacznik)
+                ctx.save();
+                ctx.translate(0, 60); // Środek bramy
                 ctx.rotate(czas / 1000); 
-                ctx.strokeStyle = '#ffffff'; 
-                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = '#fff'; }
-                ctx.beginPath(); ctx.rect(-25, -25, 50, 50); ctx.rotate(Math.PI / 4); ctx.rect(-25, -25, 50, 50); ctx.stroke();
-                
+                ctx.strokeStyle = '#fff'; 
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#fff'; }
+                ctx.beginPath(); ctx.rect(-15, -15, 30, 30); ctx.rotate(Math.PI / 4); ctx.rect(-15, -15, 30, 30); 
+                ctx.fill(); ctx.stroke();
+                ctx.restore();
+
                 ctx.restore();
             }
             

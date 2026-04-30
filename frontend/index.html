@@ -25,7 +25,12 @@
             <p class="subtitle">Wybierz swoją ścieżkę</p>
 
             <div style="background: rgba(0, 0, 0, 0.4); border-left: 3px solid #3498db; padding: 10px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #ccc;">
-                <strong>CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i broń. Przetrwaj deszcze meteorytów, chowaj się w zamkach i pożeraj słabszych. Cel jest jeden: osiągnąć 600 masy i stać się niepowstrzymanym Tytanem.
+                <strong>CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i armię. Przetrwaj ataki, werbuj drony i pożeraj słabszych.<br><br>
+                <strong style="color: #f1c40f;">STEROWANIE:</strong><br>
+                • <strong>Kursor Myszy:</strong> Kierunek ruchu i celowania<br>
+                • <strong>LPM (Kliknięcie):</strong> Rzut Oszczepem<br>
+                • <strong>SPACJA:</strong> Otwarcie Sklepu (tylko w Bazie/Zamku)<br>
+                • <strong>Klawisz E:</strong> Rozkaz Specjalny dla Roju (tylko tryb Drużyn)
             </div>
 
             <div id="step-1">
@@ -90,13 +95,16 @@
             <strong style="color: #f1c40f;">[Midas]:</strong> <span id="midas-text">Witaj na arenie! Zbieraj jedzenie, by rosnąć.</span>
         </div>
 
-        <div id="castle-shop" class="hidden" style="pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(5,5,5,0.95); border: 2px solid #3498db; padding: 20px; border-radius: 12px; width: 320px; text-align: center;">
-            <h2 style="color: #3498db; margin-top: 0;">ZBROJOWNIA MONOLITU</h2>
-            <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Wydaj masę na stałą broń.</p>
+        <div id="castle-shop" class="hidden" style="pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(5,5,5,0.95); border: 2px solid #3498db; padding: 20px; border-radius: 12px; width: 340px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);">
+            <h2 style="color: #3498db; margin-top: 0; margin-bottom: 5px;">ZBROJOWNIA / DRAFT</h2>
+            <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Wydaj masę na nową broń lub zwerbuj specjalistyczne drony.</p>
             
-            <button class="main-btn border-blue" style="font-size: 14px; padding: 10px;" onclick="kupBron('bow')">Łuk (Zasięg) - Koszt: 100 pkt</button>
-            <button class="main-btn border-purple" style="font-size: 14px; padding: 10px;" onclick="kupBron('knife')">Sztylet (Przebicie) - Koszt: 50 pkt</button>
-            <button class="main-btn border-red" style="font-size: 14px; padding: 10px;" onclick="zamknijSklep()">WYJŚCIE</button>
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                <button class="main-btn border-blue" style="font-size: 14px; padding: 12px;" onclick="kupBron('bow')">🏹 ŁUCZNICY / BLASTER - 50 MASY</button>
+                <button class="main-btn border-purple" style="font-size: 14px; padding: 12px;" onclick="kupBron('sword')">⚔️ MIECZNICY / OSTRZE - 50 MASY</button>
+            </div>
+            
+            <button class="main-btn border-red" style="font-size: 14px; padding: 10px; width: 100%;" onclick="zamknijSklep()">WYJŚCIE</button>
         </div>
     </div>
 

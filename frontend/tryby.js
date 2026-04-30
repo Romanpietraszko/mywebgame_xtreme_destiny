@@ -14,20 +14,20 @@
 
     let mojeId = null;
     let stanSerwera = null;
+    
+    // Zmienne Sklepu i Stref
     let czyWsklepie = false;
+    let czyWBazie = false;
+    let srodekBazyX = 2000;
+    let srodekBazyY = 2000;
     
     // Zmienne dla HUD i Zrzutu
     let wybranySpawn = 'random'; 
     let czasStart = 0;
     let interwalCzasu = null;
 
-    // Obiekt wejściowy (Input) wysyłany do Sędziego
-    let inputKlawiszy = {
-        up: false, down: false, left: false, right: false,
-        katCelowania: 0,
-        atakuje: false,
-        uzywaTarczy: false
-    };
+    // NOWE STEROWANIE: Pozycja kursora
+    let kursor = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
 
     // INICJALIZACJA DOPIERO PO ZAŁADOWANIU HTML (BEZPIECZEŃSTWO)
     document.addEventListener('DOMContentLoaded', () => {
@@ -35,17 +35,16 @@
 
         // 2. REFERENCJE UI
         const uiLayer = document.getElementById('ui-layer');
-        const bgLayer = document.getElementById('css-arena-bg'); // <-- Tło neonowe CSS
+        const bgLayer = document.getElementById('css-arena-bg'); 
         const step1 = document.getElementById('step-1');
         const step2 = document.getElementById('step-2');
         const step3 = document.getElementById('step-3');
-        const step4 = document.getElementById('step-4'); // Wybór sektora zrzutu
+        const step4 = document.getElementById('step-4'); 
         const inputNick = document.getElementById('playerName');
         const castleShop = document.getElementById('castle-shop');
         const midasTutorial = document.getElementById('midas-tutorial');
         const midasText = document.getElementById('midas-text');
         
-        // Referencje nowego HUD
         const killfeed = document.getElementById('killfeed');
         const timerDisplay = document.getElementById('time-display');
         const timerContainer = document.getElementById('survival-timer');
@@ -93,7 +92,6 @@
         document.getElementById('btn-enter-arena').addEventListener('click', () => {
             const mode = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
             
-            // W trybie drużynowym omijamy wybór spawnu (Serwer sam dzieli na bazy)
             if (mode === 'TEAMS') {
                 console.log("⚔️ Tryb Teams - wymuszony autospawn w bazie");
                 wejdzNaArene('random');
@@ -103,7 +101,6 @@
             }
         });
 
-        // Obsługa przycisków wyboru sektora (NAPRAWIONE)
         document.querySelectorAll('[data-spawn]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 document.querySelectorAll('[data-spawn]').forEach(b => b.classList.remove('selected'));
@@ -113,13 +110,11 @@
             });
         });
 
-        // Ostateczny start po wybraniu sektora (NAPRAWIONE)
         document.getElementById('btn-deploy').addEventListener('click', () => {
             console.log("🚀 Rozpoczynamy desant! Sektor:", wybranySpawn);
             wejdzNaArene(wybranySpawn);
         });
 
-        // Główna funkcja startowa
         function wejdzNaArene(sektor) {
             const data = {
                 name: inputNick.value.trim() || "Gracz",
@@ -130,12 +125,10 @@
 
             socket.emit('joinGame', data);
             
-            // Zarządzanie interfejsem - ROZWIĄZANIE PROBLEMU
             if (uiLayer) uiLayer.classList.add('hidden');
-            if (bgLayer) bgLayer.classList.add('hidden'); // <-- Twarde ukrycie zbugowanego tła
+            if (bgLayer) bgLayer.classList.add('hidden'); 
             if (timerContainer) timerContainer.classList.remove('hidden');
             
-            // Start Zegara Przetrwania
             czasStart = Date.now();
             if (interwalCzasu) clearInterval(interwalCzasu);
             interwalCzasu = setInterval(aktualizujCzas, 1000);
@@ -169,7 +162,6 @@
             
             killfeed.appendChild(wpis);
             
-            // Usuwanie wiadomości po 5 sekundach
             setTimeout(() => {
                 wpis.style.opacity = '0';
                 wpis.style.transition = 'opacity 0.5s ease';
@@ -177,36 +169,47 @@
             }, 5000);
         }
 
-        // 6. SYSTEM STEROWANIA (Klawiatura + Mysz)
-        window.addEventListener('keydown', (e) => {
-            if (e.code === 'KeyW' || e.code === 'ArrowUp') inputKlawiszy.up = true;
-            if (e.code === 'KeyS' || e.code === 'ArrowDown') inputKlawiszy.down = true;
-            if (e.code === 'KeyA' || e.code === 'ArrowLeft') inputKlawiszy.left = true;
-            if (e.code === 'KeyD' || e.code === 'ArrowRight') inputKlawiszy.right = true;
-            if (e.code === 'KeyQ') inputKlawiszy.uzywaTarczy = true;
-        });
-
-        window.addEventListener('keyup', (e) => {
-            if (e.code === 'KeyW' || e.code === 'ArrowUp') inputKlawiszy.up = false;
-            if (e.code === 'KeyS' || e.code === 'ArrowDown') inputKlawiszy.down = false;
-            if (e.code === 'KeyA' || e.code === 'ArrowLeft') inputKlawiszy.left = false;
-            if (e.code === 'KeyD' || e.code === 'ArrowRight') inputKlawiszy.right = false;
-            if (e.code === 'KeyQ') inputKlawiszy.uzywaTarczy = false;
-        });
-
+        // 6. NOWY SYSTEM STEROWANIA (Mysz/Touchpad + Umiejętności)
         window.addEventListener('mousemove', (e) => {
-            const centerX = window.innerWidth / 2;
-            const centerY = window.innerHeight / 2;
-            inputKlawiszy.katCelowania = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+            kursor.x = e.clientX;
+            kursor.y = e.clientY;
         });
 
-        window.addEventListener('mousedown', (e) => { if (e.button === 0) inputKlawiszy.atakuje = true; });
-        window.addEventListener('mouseup', (e) => { if (e.button === 0) inputKlawiszy.atakuje = false; });
+        window.addEventListener('touchmove', (e) => {
+            kursor.x = e.touches[0].clientX;
+            kursor.y = e.touches[0].clientY;
+        }, { passive: true });
+
+        window.addEventListener('keydown', (e) => {
+            // Sklep odpalany Spacją tylko w bezpiecznej strefie
+            if (e.code === 'Space' && czyWBazie) {
+                if (!czyWsklepie) {
+                    czyWsklepie = true;
+                    if (castleShop) castleShop.classList.remove('hidden');
+                } else {
+                    zamknijSklep();
+                }
+            }
+            // Rozkaz specjalny dla zwerbowanych botów
+            if (e.code === 'KeyE') {
+                socket.emit('rozkazSpecjalny');
+            }
+        });
+
+        // Miotanie Oszczepem
+        window.addEventListener('mousedown', (e) => {
+            if (e.button === 0 && !czyWsklepie) { // Zablokowane, jeśli okno sklepu jest otwarte
+                const centerX = window.innerWidth / 2;
+                const centerY = window.innerHeight / 2;
+                const katRzutu = Math.atan2(e.clientY - centerY, e.clientX - centerX);
+                socket.emit('rzutOszczepem', { kat: katRzutu });
+            }
+        });
 
         // 7. SYSTEM SKLEPU I MIDASA
         window.kupBron = function(typ) {
             socket.emit('buyShopItem', typ);
-            console.log("💰 Próba zakupu broni:", typ);
+            console.log("💰 Próba zakupu broni/draftu jednostki:", typ);
         };
 
         window.zamknijSklep = function() {
@@ -217,25 +220,31 @@
         function obslugaStref(mojGracz) {
             const tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
             
-            // Zamek i sklep na środku mapy
-            const dystansDoZamku = Math.hypot(mojGracz.x - 2000, mojGracz.y - 2000);
+            // Dynamiczne ustalanie środka bazy
+            srodekBazyX = 2000;
+            srodekBazyY = 2000;
+            if (tryb === 'TEAMS') {
+                if (mojGracz.team === 'RED') { srodekBazyX = 500; srodekBazyY = 3000; }
+                else if (mojGracz.team === 'BLUE') { srodekBazyX = 5500; srodekBazyY = 3000; }
+            }
+
+            const dystansDoBazy = Math.hypot(mojGracz.x - srodekBazyX, mojGracz.y - srodekBazyY);
             
-            if (dystansDoZamku < 300 && tryb === 'FREE') {
-                if (!czyWsklepie) {
-                    czyWsklepie = true;
-                    if (castleShop) castleShop.classList.remove('hidden');
-                }
-            } else {
-                if (czyWsklepie) zamknijSklep();
+            // Gracz znajduje się na terenie swojego Zamku
+            czyWBazie = dystansDoBazy < 400;
+
+            // Wymuszone zamknięcie sklepu, jeśli gracz ucieknie ze strefy (np. zostanie odepchnięty)
+            if (!czyWBazie && czyWsklepie) {
+                zamknijSklep();
             }
 
             // Midas (Tutorial na starcie)
             if (tryb === 'FREE' && midasTutorial && midasText) {
                 if (mojGracz.score < 15) {
                     midasTutorial.classList.remove('hidden');
-                    midasText.innerText = "Zbieraj masę, by ewoluować. Naciśnij 'M' by uruchomić skaner taktyczny.";
+                    midasText.innerText = "Zbieraj masę. Naciśnij 'M' by odpalić radar, kieruj myszką.";
                 } else if (mojGracz.score >= 30 && mojGracz.score < 50) {
-                    midasText.innerText = "Odblokowałeś miecz! Klikaj LPM, by atakować kosztem 2 masy.";
+                    midasText.innerText = "LPM rzuca oszczepem kosztem 2 masy! [Spacja] w bazie otwiera Sklep.";
                 } else {
                     midasTutorial.classList.add('hidden');
                 }
@@ -251,11 +260,10 @@
         });
 
         socket.on('shopSuccess', (data) => {
-            alert("Pomyślnie zakupiono: " + data.item.toUpperCase());
+            alert("Ukończono modyfikację: " + data.item.toUpperCase());
             zamknijSklep();
         });
 
-        // Odbiór wiadomości dla Killfeedu
         socket.on('killEvent', (data) => {
             if (data.zabojca && data.ofiara) {
                 dodajDoKillfeedu(data.zabojca, data.ofiara);
@@ -265,7 +273,6 @@
         socket.on('gameOver', (data) => {
             if (window.Flagi) window.Flagi.ustawStan('GAMEOVER');
             
-            // Zatrzymanie czasu i czyszczenie HUD
             clearInterval(interwalCzasu);
             if (timerContainer) timerContainer.classList.add('hidden');
             if (killfeed) killfeed.innerHTML = '';
@@ -285,10 +292,19 @@
             }
         });
 
-        // 9. PĘTLA GRY (RENDER + INPUT)
+        // 9. PĘTLA GRY (RENDER + INPUT WEKTOROWY)
         function pętlaGry() {
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-                socket.emit('playerInput', inputKlawiszy);
+                
+                // Emisja ruchu myszką tylko wtedy, gdy nie przeglądamy sklepu
+                if (!czyWsklepie) {
+                    const centerX = window.innerWidth / 2;
+                    const centerY = window.innerHeight / 2;
+                    const kat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
+                    const dystans = Math.hypot(kursor.y - centerY, kursor.x - centerX);
+                    
+                    socket.emit('ruchGraczaMyszka', { kat: kat, dystans: dystans });
+                }
 
                 if (stanSerwera && stanSerwera.players && mojeId) {
                     const mojGracz = stanSerwera.players[mojeId];
