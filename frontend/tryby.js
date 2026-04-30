@@ -70,10 +70,7 @@
         document.querySelectorAll('[data-mode]').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 const mode = e.target.getAttribute('data-mode');
-                if (mode === 'CAMPAIGN') {
-                    alert("Tryb Kampanii: AKT I - W BUDOWIE. Zapraszamy wkrótce!");
-                    return;
-                }
+                // BLOKADA ZDJĘTA - Tryb Kampanii jest teraz otwarty!
                 if (window.Flagi) window.Flagi.Stan.wybranyTryb = mode;
                 step2.classList.add('hidden');
                 step3.classList.remove('hidden');
@@ -95,6 +92,9 @@
             if (mode === 'TEAMS') {
                 console.log("⚔️ Tryb Teams - wymuszony autospawn w bazie");
                 wejdzNaArene('random');
+            } else if (mode === 'CAMPAIGN') {
+                console.log("👑 Tryb Kampanii - wymuszony autospawn na środku mapy");
+                wejdzNaArene('center'); // W kampanii gracz zawsze ląduje w centrum
             } else {
                 step3.classList.add('hidden');
                 step4.classList.remove('hidden');
@@ -198,7 +198,7 @@
 
         // Miotanie Oszczepem
         window.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && !czyWsklepie) { // Zablokowane, jeśli okno sklepu jest otwarte
+            if (e.button === 0 && !czyWsklepie) { 
                 const centerX = window.innerWidth / 2;
                 const centerY = window.innerHeight / 2;
                 const katRzutu = Math.atan2(e.clientY - centerY, e.clientX - centerX);
@@ -233,20 +233,29 @@
             // Gracz znajduje się na terenie swojego Zamku
             czyWBazie = dystansDoBazy < 400;
 
-            // Wymuszone zamknięcie sklepu, jeśli gracz ucieknie ze strefy (np. zostanie odepchnięty)
+            // Wymuszone zamknięcie sklepu, jeśli gracz ucieknie ze strefy
             if (!czyWBazie && czyWsklepie) {
                 zamknijSklep();
             }
 
             // Midas (Tutorial na starcie)
-            if (tryb === 'FREE' && midasTutorial && midasText) {
-                if (mojGracz.score < 15) {
-                    midasTutorial.classList.remove('hidden');
-                    midasText.innerText = "Zbieraj masę. Naciśnij 'M' by odpalić radar, kieruj myszką.";
-                } else if (mojGracz.score >= 30 && mojGracz.score < 50) {
-                    midasText.innerText = "LPM rzuca oszczepem kosztem 2 masy! [Spacja] w bazie otwiera Sklep.";
-                } else {
-                    midasTutorial.classList.add('hidden');
+            if (midasTutorial && midasText) {
+                if (tryb === 'CAMPAIGN') {
+                    if (mojGracz.score < 50) {
+                        midasTutorial.classList.remove('hidden');
+                        midasText.innerText = "AKT I: BUNT MASZYN. Przetrwaj hordę i zdobądź 300 masy, by wezwać Bossa!";
+                    } else {
+                        midasTutorial.classList.add('hidden');
+                    }
+                } else if (tryb === 'FREE') {
+                    if (mojGracz.score < 15) {
+                        midasTutorial.classList.remove('hidden');
+                        midasText.innerText = "Zbieraj masę. Naciśnij 'M' by odpalić radar, kieruj myszką.";
+                    } else if (mojGracz.score >= 30 && mojGracz.score < 50) {
+                        midasText.innerText = "LPM rzuca oszczepem kosztem 2 masy! [Spacja] w bazie otwiera Sklep.";
+                    } else {
+                        midasTutorial.classList.add('hidden');
+                    }
                 }
             }
         }
@@ -281,9 +290,18 @@
 
             if (uiLayer) {
                 uiLayer.classList.remove('hidden');
+                let tytul = "SYSTEM HALTED";
+                let kolorTytulu = "#e74c3c";
+                
+                // Specjalny ekran zwycięstwa dla Kampanii
+                if (data.killerName === "VICTORY") {
+                    tytul = "AKT I ZAKOŃCZONY";
+                    kolorTytulu = "#2ecc71";
+                }
+
                 uiLayer.innerHTML = `
-                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid #e74c3c; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999;">
-                        <h1 style="color: #e74c3c; font-size: 48px; font-family: 'Permanent Marker'; margin-bottom: 0;">SYSTEM HALTED</h1>
+                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolorTytulu}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999;">
+                        <h1 style="color: ${kolorTytulu}; font-size: 48px; font-family: 'Permanent Marker'; margin-bottom: 0;">${tytul}</h1>
                         <p style="color: #aaa; margin: 20px 0;">"${data.message}"</p>
                         <h2 style="color: #f1c40f;">MASA: ${data.finalScore} | CZAS: ${finalTime}</h2>
                         <button class="main-btn border-red" style="margin-top: 30px; font-size: 20px; font-weight: bold;" onclick="location.reload()">REBOOT SYSTEM</button>

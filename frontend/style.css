@@ -365,11 +365,13 @@ input:focus {
     position: absolute;
     inset: 0;
     z-index: 10; /* Pod ui-layer, ale nad Canvasem */
-    background: #050505;
+    background-color: #050505;
+    /* DODAŁEM ŁUNĘ OGNIA NA DOLE EKRANU */
     background-image: 
+        radial-gradient(ellipse at bottom, rgba(231, 76, 60, 0.15) 0%, transparent 60%),
         linear-gradient(rgba(52, 152, 219, 0.05) 1px, transparent 1px),
         linear-gradient(90deg, rgba(52, 152, 219, 0.05) 1px, transparent 1px);
-    background-size: 100px 100px;
+    background-size: 100% 100%, 100px 100px, 100px 100px;
     overflow: hidden;
 }
 
@@ -377,51 +379,59 @@ input:focus {
     position: absolute;
     border-radius: 50%;
     filter: blur(2px);
-    animation: floatShape 15s infinite linear;
 }
 
 /* Wirus / Dron (Czerwony Oktagon) */
 .bot-red {
     width: 80px; height: 80px;
     border: 4px solid #e74c3c;
-    box-shadow: 0 0 20px #e74c3c;
+    box-shadow: 0 0 25px #e74c3c, inset 0 0 15px #e74c3c;
     top: 20%; left: -10%;
     clip-path: polygon(30% 0%, 70% 0%, 100% 30%, 100% 70%, 70% 100%, 30% 100%, 0% 70%, 0% 30%); 
     border-radius: 0;
+    animation: floatShape 18s infinite linear;
 }
 
 /* Elita AI (Fioletowy Romb) */
 .bot-purple {
     width: 120px; height: 120px;
     border: 5px solid #9b59b6;
-    box-shadow: 0 0 25px #9b59b6;
+    box-shadow: 0 0 30px #9b59b6, inset 0 0 20px #9b59b6;
     bottom: -10%; right: 10%;
     clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%); 
     border-radius: 0;
-    animation-duration: 20s;
-    animation-direction: reverse;
+    animation: floatShape 25s infinite linear reverse;
 }
 
-/* Cyfrowe Iskry (Digital Embers) w Menu */
+/* CYFROWE ISKRY (MASOWE KLONOWANIE BOX-SHADOW) */
 .food-yellow {
-    width: 6px; 
+    width: 4px; 
     height: 12px;
-    background: #ff5722;
-    box-shadow: 0 0 15px #ff5722, 0 0 30px #ff9800, 0 0 45px #e74c3c;
+    background: #fff;
     border-radius: 50%;
-    animation: riseUp infinite ease-in;
+    /* Każda kropka generuje 8 potężnych iskier w różnych miejscach ekranu */
+    box-shadow: 
+        0 0 15px 3px #ff5722,
+        15vw 20vh 15px 2px #e74c3c,
+        -20vw 35vh 20px 3px #ff9800,
+        25vw 50vh 15px 2px #f1c40f,
+        -35vw 10vh 25px 4px #e74c3c,
+        30vw -20vh 15px 2px #ff5722,
+        -15vw -40vh 20px 3px #ff9800,
+        10vw -10vh 18px 2px #f1c40f;
+    animation: riseUp infinite linear;
 }
 
-.food-1 { left: 80%; top: auto; bottom: 0; animation-duration: 6s; animation-delay: 0s; }
-.food-2 { left: 20%; top: auto; bottom: 0; animation-duration: 8s; animation-delay: 2s; }
-.food-3 { left: 50%; top: auto; bottom: 0; animation-duration: 5s; animation-delay: 4s; }
+.food-1 { left: 50%; bottom: -50px; top: auto; animation-duration: 4s; animation-delay: 0s; }
+.food-2 { left: 30%; bottom: -50px; top: auto; animation-duration: 6s; animation-delay: 1.5s; }
+.food-3 { left: 70%; bottom: -50px; top: auto; animation-duration: 5s; animation-delay: 3s; }
 
-/* Animacja iskierek lecących w górę */
+/* Animacja iskierek lecących dynamicznie w górę */
 @keyframes riseUp {
-    0% { transform: translateY(100vh) scale(0.5); opacity: 0; }
-    20% { opacity: 0.8; }
-    80% { opacity: 0.8; }
-    100% { transform: translateY(-100px) scale(1.2); opacity: 0; }
+    0% { transform: translateY(110vh) scale(0.5); opacity: 0; }
+    5% { opacity: 1; }
+    90% { opacity: 1; }
+    100% { transform: translateY(-20vh) scale(1.2); opacity: 0; }
 }
 
 /* Ruch cząsteczek na tytule - Wolne dryfowanie dla dronów */

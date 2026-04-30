@@ -9,6 +9,10 @@ window.Guardian = (function() {
     let frameTimes = [];
     let isLowSpecMode = false;
     let warningElement = null;
+    
+    // Zmienne Anty-Lag / Anty-Spam
+    let historiaKlikniec = [];
+    let droppedFrames = 0;
 
     // --- Inicjalizacja UI Ostrzeżeń ---
     function initUI() {
@@ -86,12 +90,46 @@ window.Guardian = (function() {
         // Zabezpiecza przed "Białym Ekranem Śmierci" - gra się nie zawiesi, tylko zignoruje uszkodzoną klatkę
         event.preventDefault(); 
     });
+    
+    window.addEventListener('unhandledrejection', function(event) {
+        console.warn("🛡️ [GUARDIAN] Przechwycono cichy błąd asynchroniczny. Utrzymuję stabilność.");
+        event.preventDefault();
+    });
 
     // Publiczne API Guardiana (Do użycia w tryby.js i grafika.js)
     return {
         // 1. ZGŁASZANIE PULSU SERWERA
         odbierzTick: function() {
-            lastTickTime = Date.now();
+            let teraz = Date.now();
+            let roznica = teraz - lastTickTime;
+            lastTickTime = teraz;
+
+            // Cichy monitor spike'ów (Lag tracker)
+            if (roznica > 150) {
+                droppedFrames++;
+                if (droppedFrames % 10 === 0) {
+                    console.log(`🐌 [LAG SPIKE] Opóźnienie serwera: ${roznica}ms. System utrzymuje stabilność.`);
+                }
+            }
+        },
+
+        // Ochrona przed spamowaniem kliknięciami (Odciąża serwer)
+        rejestrujKlikniecie: function() {
+            let teraz = Date.now();
+            historiaKlikniec.push(teraz);
+            
+            // Pamiętamy ostatnie 6 kliknięć
+            if (historiaKlikniec.length > 6) historiaKlikniec.shift();
+
+            if (historiaKlikniec.length === 6) {
+                let czasTrwania = historiaKlikniec[5] - historiaKlikniec[0];
+                if (czasTrwania < 120) {
+                    console.warn("🛡️ [GUARDIAN] Zablokowano spam kliknięć (Lag Prevention).");
+                    historiaKlikniec = []; 
+                    return false; 
+                }
+            }
+            return true; 
         },
 
         // 2. BEZPIECZNA MATEMATYKA
@@ -108,11 +146,28 @@ window.Guardian = (function() {
             return start + (end - start) * factor;
         },
 
-        // 3. NOWOŚĆ: SANITYZACJA DANYCH (Autonaprawa w locie)
-        safeObj: function(data) {
-            // Jeśli dane to obiekt i nie jest null, oddaj je. W przeciwnym razie oddaj pusty obiekt.
-            if (typeof data === 'object' && data !== null && !Array.isArray(data)) return data;
-            return {};
+        // 3. SANITYZACJA DANYCH I KAGANIEC (Limitowanie renderowania by ratować FPS)
+        safeObj: function(data, typ = 'ogolne') {
+            // Jeśli dane to nie obiekt, oddaj pusty obiekt
+            if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+
+            let klucze = Object.keys(data);
+            
+            // Kaganiec obiektów (Lag Capper) - Ratujemy procesor na telefonach
+            let maxLimit = 300; 
+            if (typ === 'projectiles') maxLimit = 150;
+            else if (typ === 'foods') maxLimit = 250;
+            else if (typ === 'bots') maxLimit = 80;
+
+            if (klucze.length > maxLimit) {
+                let zredukowany = {};
+                for(let i = 0; i < maxLimit; i++) {
+                    zredukowany[klucze[i]] = data[klucze[i]];
+                }
+                return zredukowany; // Zwracamy bezpiecznie przyciętą wersję obiektu
+            }
+
+            return data;
         },
 
         safeArray: function(data) {

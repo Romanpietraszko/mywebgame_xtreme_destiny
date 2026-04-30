@@ -12,7 +12,7 @@ window.Grafika = (function() {
     let screenH = window.innerHeight;
     
     // Pule obiektów i efekty
-    let mapaObiekty = { drzewa: [], krzaki: [], mury: [] };
+    let mapaObiekty = { krzaki: [], mury: [] };
     let czyMapaWygenerowana = false;
     let czasteczkiTla = []; 
     let sladPostaci = {}; 
@@ -62,7 +62,7 @@ window.Grafika = (function() {
 
     // --- ŚRODOWISKO I MAPA ---
     function generujSrodowisko(tryb) {
-        mapaObiekty = { drzewa: [], krzaki: [], mury: [] };
+        mapaObiekty = { krzaki: [], mury: [] };
         czasteczkiTla = [];
 
         // Generowanie cząsteczek Vibe Noir
@@ -75,7 +75,6 @@ window.Grafika = (function() {
         }
         
         if (tryb === 'FREE') {
-            for(let i=0; i<30; i++) mapaObiekty.drzewa.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 45 });
             for(let i=0; i<45; i++) mapaObiekty.krzaki.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 70 });
         }
         czyMapaWygenerowana = true;
@@ -277,15 +276,6 @@ window.Grafika = (function() {
 
                 ctx.restore();
             }
-            
-            // Martwe Drzewa
-            mapaObiekty.drzewa.forEach(d => {
-                if(czyWidoczny(d.x, d.y, d.r)) {
-                    ctx.fillStyle = '#080808'; ctx.strokeStyle = '#222'; ctx.lineWidth = 3;
-                    ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-                    ctx.fillStyle = '#000'; ctx.beginPath(); ctx.arc(d.x, d.y, d.r * 0.4, 0, Math.PI*2); ctx.fill();
-                }
-            });
         }
     }
 
