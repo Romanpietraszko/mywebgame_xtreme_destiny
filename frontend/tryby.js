@@ -49,6 +49,19 @@
         const timerDisplay = document.getElementById('time-display');
         const timerContainer = document.getElementById('survival-timer');
 
+        // Referencje nowego menu w grze
+        const ingameControls = document.getElementById('ingame-controls');
+        const btnLeave = document.getElementById('btn-leave');
+
+        // --- OBSŁUGA NOWEGO PRZYCISKU WYJŚCIA ---
+        if (btnLeave) {
+            btnLeave.addEventListener('click', () => {
+                if (confirm("Czy na pewno chcesz opuścić pole bitwy i wrócić do menu głównego?")) {
+                    location.reload(); // Najczystszy reset dla gier .io w przeglądarce
+                }
+            });
+        }
+
         // 3. OBSŁUGA LOBBY I WYBORU KLAS
         document.getElementById('nextBtn').addEventListener('click', () => {
             if (inputNick.value.trim().length < 2) {
@@ -129,12 +142,15 @@
             if (bgLayer) bgLayer.classList.add('hidden'); 
             if (timerContainer) timerContainer.classList.remove('hidden');
             
+            // Odkrywamy przyciski wsparcia i wyjścia z gry
+            if (ingameControls) ingameControls.classList.remove('hidden');
+            
             czasStart = Date.now();
             if (interwalCzasu) clearInterval(interwalCzasu);
             interwalCzasu = setInterval(aktualizujCzas, 1000);
             
             if (window.Flagi) window.Flagi.ustawStan('PLAYING');
-            if (window.Guardian) window.Guardian.odbierzTick(); 
+            if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick(); 
 
             requestAnimationFrame(pętlaGry);
         }
@@ -199,6 +215,9 @@
         // Miotanie Oszczepem
         window.addEventListener('mousedown', (e) => {
             if (e.button === 0 && !czyWsklepie) { 
+                // GUARDIAN: Ochrona przed spamem / auto-clickerem
+                if (window.Guardian && window.Guardian.rejestrujKlikniecie && !window.Guardian.rejestrujKlikniecie()) return;
+
                 const centerX = window.innerWidth / 2;
                 const centerY = window.innerHeight / 2;
                 const katRzutu = Math.atan2(e.clientY - centerY, e.clientX - centerX);
@@ -265,7 +284,7 @@
 
         socket.on('serverTick', (data) => {
             stanSerwera = data;
-            if (window.Guardian) window.Guardian.odbierzTick();
+            if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick();
         });
 
         socket.on('shopSuccess', (data) => {
@@ -279,14 +298,17 @@
             }
         });
 
+        // BIZNES: VIRAL LOOP W EKRANIE KOŃCOWYM
         socket.on('gameOver', (data) => {
             if (window.Flagi) window.Flagi.ustawStan('GAMEOVER');
             
             clearInterval(interwalCzasu);
             if (timerContainer) timerContainer.classList.add('hidden');
+            if (ingameControls) ingameControls.classList.add('hidden'); // Ukrywamy menu z powrotem na ekranie śmierci
             if (killfeed) killfeed.innerHTML = '';
             
             const finalTime = timerDisplay ? timerDisplay.innerText : "00:00";
+            const tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
 
             if (uiLayer) {
                 uiLayer.classList.remove('hidden');
@@ -299,14 +321,38 @@
                     kolorTytulu = "#2ecc71";
                 }
 
+                // Generowanie tekstu do schowka
+                let viralText = `Osiągnąłem ${data.finalScore} masy i przetrwałem ${finalTime} w Vibe Noir (Tryb: ${tryb})! Zmierz się ze mną: ${window.location.href}`;
+
                 uiLayer.innerHTML = `
-                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolorTytulu}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999;">
+                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolorTytulu}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999; max-width: 500px;">
                         <h1 style="color: ${kolorTytulu}; font-size: 48px; font-family: 'Permanent Marker'; margin-bottom: 0;">${tytul}</h1>
                         <p style="color: #aaa; margin: 20px 0;">"${data.message}"</p>
                         <h2 style="color: #f1c40f;">MASA: ${data.finalScore} | CZAS: ${finalTime}</h2>
-                        <button class="main-btn border-red" style="margin-top: 30px; font-size: 20px; font-weight: bold;" onclick="location.reload()">REBOOT SYSTEM</button>
+                        
+                        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
+                            <button id="btn-share-score" class="main-btn border-blue" style="font-size: 18px; font-weight: bold; margin: 0;">📢 POCHWAL SIĘ WYNIKIEM</button>
+                            <button class="main-btn border-red" style="font-size: 18px; font-weight: bold; margin: 0;" onclick="location.reload()">REBOOT SYSTEM</button>
+                        </div>
                     </div>
                 `;
+
+                // Logika kopiowania do schowka zintegrowana z przyciskiem
+                setTimeout(() => {
+                    const btnShare = document.getElementById('btn-share-score');
+                    if (btnShare) {
+                        btnShare.addEventListener('click', () => {
+                            navigator.clipboard.writeText(viralText).then(() => {
+                                btnShare.innerText = "✔️ SKOPIOWANO DO SCHOWKA!";
+                                btnShare.style.background = "#2ecc71";
+                                btnShare.style.color = "#000";
+                            }).catch(err => {
+                                console.error('Błąd kopiowania', err);
+                                alert("Twój wynik: \n\n" + viralText);
+                            });
+                        });
+                    }
+                }, 100);
             }
         });
 

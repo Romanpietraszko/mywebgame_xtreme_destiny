@@ -5,11 +5,38 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Xtreme Destiny - Vibe Noir</title>
     
+    <!-- SEO & SOCIAL MEDIA TAGI (Open Graph) -->
+    <meta name="description" content="Przetrwaj hordę, zdobądź masę i załóż Koronę Władcy w darmowej, mrocznej grze przeglądarkowej Vibe Noir.">
+    <meta name="keywords" content="gra przeglądarkowa, mmo, io game, vibe noir, multiplayer, survival, arena">
+    <meta name="author" content="Roman Pietraszko">
+    <meta name="theme-color" content="#e74c3c">
+    
+    <!-- Tagi dla Facebooka / Discorda / Messengera -->
+    <meta property="og:title" content="Xtreme Destiny: Vibe Noir">
+    <meta property="og:description" content="Czy zdołasz pokonać Bossa i zdobyć 600 masy? Zmierz się ze mną!">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://twojadomena.pl/"> <!-- W przyszłości podmień na swoją docelową domenę -->
+    <!-- <meta property="og:image" content="https://twojadomena.pl/assety/baner.jpg"> Warto w przyszłości dodać link do ładnego obrazka! -->
+
+    <!-- PWA & MANIFEST (Instalacja jako aplikacja natywna) -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vibe Noir">
+    <!-- Ikona dla urządzeń Apple (iOS) -->
+    <link rel="apple-touch-icon" href="/assety/icon-192.png">
+
     <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;700&family=Permanent+Marker&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
     
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+
+    <!-- INTERFEJS W GRZE: Przyciski ucieczki i wsparcia (Pojawia się dopiero na mapie) -->
+    <div id="ingame-controls" class="hidden" style="position: absolute; top: 15px; left: 15px; z-index: 200; display: flex; flex-direction: column; gap: 8px;">
+        <button id="btn-leave" class="main-btn border-red" style="padding: 8px 12px; font-size: 14px; margin: 0; box-shadow: 0 0 10px rgba(0,0,0,0.8);">🚪 POWRÓT DO MENU</button>
+        <a href="mailto:roman.pietraszko@onet.eu" id="btn-support" class="main-btn border-blue" style="padding: 8px 12px; font-size: 14px; margin: 0; text-decoration: none; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.8);">🛠️ WSPARCIE</a>
+    </div>
 
     <div id="css-arena-bg">
         <div class="neon-shape bot-red"></div>
@@ -123,6 +150,21 @@
     <script src="flagi.js"></script>
     <script src="grafika.js"></script>
     <script src="tryby.js"></script>
+
+    <!-- REJESTRACJA SERVICE WORKERA DLA PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('🛡️ [PWA] Service Worker zarejestrowany:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('⚠️ [PWA] Rejestracja Service Workera nie powiodła się:', error);
+                    });
+            });
+        }
+    </script>
 
 </body>
 </html>

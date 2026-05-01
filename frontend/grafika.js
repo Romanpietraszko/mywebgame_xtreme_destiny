@@ -18,6 +18,9 @@ window.Grafika = (function() {
     let sladPostaci = {}; 
     let lokalnyBuforJedzenia = {};
     
+    // Zmienna śledząca czas wejścia graczy na arenę (do efektu zrzutu orbitalnego)
+    let czasWejsciaGraczy = {};
+    
     // Zmienna do obsługi mapy pod klawiszem M
     let pokazDuzaMape = false;
 
@@ -200,14 +203,12 @@ window.Grafika = (function() {
                 
                 let puls = Math.abs(Math.sin(czas / 500)); 
 
-                // POPRAWIONE KOLORY (Wysoki kontrast!)
-                const kolorMuru = '#95a5a6';     // Jasny, kamienny szary (Super widoczny na czarnym tle)
-                const kolorKrawedzi = '#f1c40f'; // Neonowe złoto
-                const kolorDachu = '#e74c3c';    // Krwista czerwień
-                const kolorFosy = 'rgba(52, 152, 219, 0.3)'; // Woda / Energia fosy
+                const kolorMuru = '#95a5a6';     
+                const kolorKrawedzi = '#f1c40f'; 
+                const kolorDachu = '#e74c3c';    
+                const kolorFosy = 'rgba(52, 152, 219, 0.3)'; 
                 const kolorFosyGlow = '#3498db';
 
-                // 0. FOSA (Błękitny, jarzący się basen wokół zamku)
                 ctx.beginPath();
                 ctx.arc(0, 0, 320, 0, Math.PI * 2);
                 ctx.fillStyle = kolorFosy;
@@ -216,25 +217,22 @@ window.Grafika = (function() {
                 ctx.strokeStyle = kolorFosyGlow;
                 if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = kolorFosyGlow; }
                 ctx.stroke();
-                ctx.shadowBlur = 0; // Wyłączamy cień na chwilę
+                ctx.shadowBlur = 0; 
 
-                // 0.5 MOST ZWODZONY (Przez fosę do bramy)
                 ctx.fillStyle = '#7f8c8d'; 
-                ctx.fillRect(-50, 20, 100, 300); // Most prowadzący w dół mapy
+                ctx.fillRect(-50, 20, 100, 300); 
                 ctx.strokeStyle = '#fff';
                 ctx.lineWidth = 2;
                 ctx.strokeRect(-50, 20, 100, 300);
 
                 ctx.lineWidth = 4;
-                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#000'; } // Cień pod zamkiem
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#000'; } 
 
-                // 1. GŁÓWNY BUDYNEK (Środek)
                 ctx.fillStyle = kolorMuru;
                 ctx.strokeStyle = kolorKrawedzi;
                 ctx.fillRect(-150, -100, 300, 200);
                 ctx.strokeRect(-150, -100, 300, 200);
 
-                // 2. GŁÓWNY DACH (Czerwony trójkąt)
                 ctx.beginPath();
                 ctx.moveTo(-180, -100); 
                 ctx.lineTo(180, -100);  
@@ -243,29 +241,25 @@ window.Grafika = (function() {
                 ctx.fillStyle = kolorDachu;
                 ctx.fill(); ctx.stroke();
 
-                // 3. LEWA WIEŻA
                 ctx.fillStyle = kolorMuru;
                 ctx.fillRect(-220, -50, 70, 150);
                 ctx.strokeRect(-220, -50, 70, 150);
                 ctx.beginPath(); ctx.moveTo(-240, -50); ctx.lineTo(-130, -50); ctx.lineTo(-185, -150); ctx.closePath();
                 ctx.fillStyle = kolorDachu; ctx.fill(); ctx.stroke();
 
-                // 4. PRAWA WIEŻA
                 ctx.fillStyle = kolorMuru;
                 ctx.fillRect(150, -50, 70, 150);
                 ctx.strokeRect(150, -50, 70, 150);
                 ctx.beginPath(); ctx.moveTo(130, -50); ctx.lineTo(240, -50); ctx.lineTo(185, -150); ctx.closePath();
                 ctx.fillStyle = kolorDachu; ctx.fill(); ctx.stroke();
 
-                // 5. OTWARTA BRAMA WEJŚCIOWA (Zaprasza do środka)
-                ctx.fillStyle = '#050505'; // Wnętrze bramy mroczne jak tło gry
+                ctx.fillStyle = '#050505'; 
                 ctx.fillRect(-60, 20, 120, 80);
                 ctx.strokeStyle = '#f1c40f';
                 ctx.strokeRect(-60, 20, 120, 80);
 
-                // 6. HOLOGRAM SKLEPU W BRAMIE (Pulsujący znacznik)
                 ctx.save();
-                ctx.translate(0, 60); // Środek bramy
+                ctx.translate(0, 60); 
                 ctx.rotate(czas / 1000); 
                 ctx.strokeStyle = '#fff'; 
                 ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
@@ -279,7 +273,7 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE DRONÓW AI (Kształty Taktyczne) ---
+    // --- RYSOWANIE DRONÓW AI ---
     function rysujBota(bot) {
         if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
 
@@ -305,7 +299,6 @@ window.Grafika = (function() {
 
         ctx.beginPath();
         if (isBoss) {
-            // Elita (Taktyczny kształt rombu)
             ctx.moveTo(promien * 0.8, -promien); 
             ctx.lineTo(promien, 0); 
             ctx.lineTo(promien * 0.8, promien); 
@@ -313,7 +306,6 @@ window.Grafika = (function() {
             ctx.lineTo(-promien, 0); 
             ctx.lineTo(-promien * 0.8, -promien);
         } else {
-            // Dron (Sześciokąt)
             for (let i = 0; i < 6; i++) {
                 ctx.lineTo(Math.cos(i * Math.PI/3) * promien, Math.sin(i * Math.PI/3) * promien);
             }
@@ -327,7 +319,6 @@ window.Grafika = (function() {
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(0, 0, promien * 0.4, 0, Math.PI*2); ctx.stroke();
         
-        // Siatka celownicza
         ctx.beginPath();
         ctx.moveTo(-promien*0.6, 0); ctx.lineTo(promien*0.6, 0);
         ctx.moveTo(promien*0.3, -promien*0.5); ctx.lineTo(promien*0.3, promien*0.5);
@@ -345,7 +336,7 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    // --- RYSOWANIE GRACZY (Własne Assety PNG) ---
+    // --- RYSOWANIE GRACZY (Z Systemem Visual Progression!) ---
     function rysujPostac(postac, id, isMe) {
         if (!postac || !czyWidoczny(postac.x, postac.y, 100)) return;
 
@@ -356,13 +347,41 @@ window.Grafika = (function() {
 
         if (wKrzaku && !isMe) return; 
 
-        let masa = Math.min(postac.score || 10, 600);
-        let promien = 20 + Math.sqrt(masa) * 2;
+        // TWARDY LIMIT WIELKOŚCI GRACZA (Żeby nie zasłaniał całego ekranu!)
+        let masa = Math.max(10, postac.score || 10);
+        let obliczonyPromien = 20 + Math.sqrt(masa) * 2;
+        let promien = Math.min(obliczonyPromien, 65); // Zablokowane na max 65 pikseli promienia
+        
         let skin = postac.skin || 'standard';
+        let currentTime = Date.now();
+
+        // Rejestrowanie czasu wejścia dla efektu zrzutu orbitalnego
+        if (!czasWejsciaGraczy[id]) {
+            czasWejsciaGraczy[id] = currentTime;
+        }
+        let czasOdWejscia = currentTime - czasWejsciaGraczy[id];
 
         ctx.save(); 
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4; 
 
+        // 1. DESANT ORBITALNY (Efekt WOW przez pierwsze 1.2 sekundy)
+        if (czasOdWejscia < 1200) {
+            let op = 1 - (czasOdWejscia / 1200);
+            ctx.save();
+            ctx.translate(postac.x, postac.y);
+            
+            // Filar światła
+            ctx.fillStyle = `rgba(52, 152, 219, ${op * 0.6})`;
+            ctx.fillRect(-promien, -screenH, promien*2, screenH);
+            
+            // Fala uderzeniowa (Shockwave)
+            ctx.strokeStyle = `rgba(52, 152, 219, ${op})`;
+            ctx.lineWidth = 15 * op;
+            ctx.beginPath(); ctx.arc(0, 0, promien + (czasOdWejscia * 0.3), 0, Math.PI*2); ctx.stroke();
+            ctx.restore();
+        }
+
+        // 2. ŚLAD RUCHU (Dla ciężkich postaci)
         if (masa >= 300 && !wKrzaku) {
             if (!sladPostaci[id]) sladPostaci[id] = [];
             sladPostaci[id].push({x: postac.x, y: postac.y});
@@ -375,13 +394,16 @@ window.Grafika = (function() {
             });
         }
 
+        // 3. RYSOWANIE SAMEJ POSTACI (Z rotacją)
+        ctx.save();
         ctx.translate(postac.x, postac.y);
-        if (postac.kat) ctx.rotate(postac.kat);
+        let postacKat = postac.kat || 0;
+        ctx.rotate(postacKat);
 
         let img = obrazyPostaci[skin] || obrazyPostaci['standard'];
         
         if (img.complete && img.naturalWidth !== 0) {
-            if (masa >= 100 && !window.Flagi.Srodowisko.isMobile) {
+            if (masa >= 100 && window.Flagi && !window.Flagi.Srodowisko.isMobile) {
                 ctx.shadowBlur = 15;
                 ctx.shadowColor = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
             }
@@ -390,22 +412,104 @@ window.Grafika = (function() {
             ctx.fillStyle = '#555';
             ctx.beginPath(); ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.fill();
         }
+        ctx.shadowBlur = 0; // Reset cienia dla nakładek
 
-        ctx.restore(); 
+        // ==========================================
+        // SYSTEM VISUAL PROGRESSION (NAKŁADKI)
+        // ==========================================
+        
+        // Definiowanie kolorów klasowych do pancerza
+        let kolorZbroi = '#3498db'; // Standard (Niebieski)
+        if (skin === 'ninja') kolorZbroi = '#9b59b6'; // Fioletowy
+        if (skin === 'arystokrata') kolorZbroi = '#e74c3c'; // Czerwony/Złoty
+        
+        // A. EWOLUCJA OSZCZEPU (Trzymany w prawej ręce)
+        ctx.save();
+        ctx.translate(promien * 0.7, promien * 0.2); // Przesunięcie do prawej dłoni
+        ctx.rotate(Math.PI / -4); // Wychylenie broni w przód
+        
+        // Obliczanie ewolucji od 10 do 49 masy
+        let progresOszczepu = Math.min(1, Math.max(0, (masa - 10) / 39)); 
+        let hue = Math.floor(0 + 280 * progresOszczepu); // Od szarości/czerwieni do fioletu (280)
+        let saturation = Math.floor(0 + 80 * progresOszczepu);
+        let lightness = Math.floor(60 - 10 * progresOszczepu);
+        
+        let kolorOszczepu = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+        
+        ctx.strokeStyle = kolorOszczepu;
+        ctx.lineWidth = 4 + (2 * progresOszczepu); // Oszczep grubieje
+        if (progresOszczepu > 0.8 && window.Flagi && !window.Flagi.Srodowisko.isMobile) {
+            ctx.shadowBlur = 10; ctx.shadowColor = kolorOszczepu;
+        }
+        // Drzewiec
+        ctx.beginPath(); ctx.moveTo(0, -promien); ctx.lineTo(0, promien); ctx.stroke();
+        // Grot
+        ctx.fillStyle = kolorOszczepu;
+        ctx.beginPath(); ctx.moveTo(-5, -promien); ctx.lineTo(5, -promien); ctx.lineTo(0, -promien - 15); ctx.closePath(); ctx.fill();
+        ctx.restore();
 
-        // Rysowanie Tarczy Ochronnej, gdy gracz jest w bezpiecznej strefie
+        // B. TIER 1: PUKLERZ / NARAMIENNIK (Masa >= 50)
+        if (masa >= 50) {
+            ctx.save();
+            ctx.translate(-promien * 0.8, 0); // Lewe ramię
+            ctx.fillStyle = '#111';
+            ctx.strokeStyle = kolorZbroi;
+            ctx.lineWidth = 3;
+            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = kolorZbroi; }
+            
+            // Kształt naramiennika
+            ctx.beginPath();
+            ctx.moveTo(-10, -15);
+            ctx.lineTo(-20, 0);
+            ctx.lineTo(-10, 15);
+            ctx.lineTo(5, 0);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+            
+            // C. TIER 4: WZMOCNIONY PUKLERZ ENERGETYCZNY (Masa >= 150)
+            if (masa >= 150) {
+                ctx.rotate(currentTime / 500); // Rotacja tarczy
+                ctx.strokeStyle = `rgba(${kolorZbroi === '#3498db' ? '52,152,219' : kolorZbroi === '#9b59b6' ? '155,89,182' : '231,76,60'}, 0.6)`;
+                ctx.setLineDash([5, 10]);
+                ctx.lineWidth = 4;
+                ctx.beginPath(); ctx.arc(0, 0, 25, 0, Math.PI*2); ctx.stroke();
+            }
+            ctx.restore();
+        }
+        ctx.restore(); // Koniec transformacji rotacji dla całej postaci
+
+        // D. TIER 5: KORONA WŁADCY (Masa >= 600)
+        if (masa >= 600) {
+            ctx.save();
+            ctx.translate(postac.x, postac.y - promien - 20); // Zawsze nad głową (nie obraca się z ciałem)
+            // Lekkie unoszenie się (Hover)
+            ctx.translate(0, Math.sin(currentTime / 200) * 5); 
+            
+            ctx.fillStyle = '#f1c40f'; // Czyste złoto
+            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#f1c40f'; }
+            
+            ctx.beginPath();
+            ctx.moveTo(-15, 0); ctx.lineTo(-20, -15); // Lewy róg
+            ctx.lineTo(-7, -5); ctx.lineTo(0, -20);   // Środek
+            ctx.lineTo(7, -5); ctx.lineTo(20, -15);   // Prawy róg
+            ctx.lineTo(15, 0); ctx.closePath();
+            ctx.fill();
+            ctx.restore();
+        }
+
+        // Tarcze Ochronne / Zdolności (Bezpieczna Strefa i Q)
         if (postac.isSafe) { 
             ctx.save();
             ctx.translate(postac.x, postac.y);
-            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; // Neonowa Zieleń
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; 
             ctx.lineWidth = 3; 
-            ctx.setLineDash([10, 15]); // Cyber-przerywana linia
-            ctx.rotate(Date.now() / 800); // Tarcza wolno się obraca
-            if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#2ecc71'; }
+            ctx.setLineDash([10, 15]); 
+            ctx.rotate(currentTime / 800); 
+            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#2ecc71'; }
             ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
             ctx.restore();
         } 
-        else if (postac.isShielding) { // Tarcza z klawisza Q
+        else if (postac.isShielding) { 
             ctx.save();
             ctx.translate(postac.x, postac.y);
             ctx.strokeStyle = 'rgba(52, 152, 219, 0.7)'; 
@@ -413,7 +517,10 @@ window.Grafika = (function() {
             ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
             ctx.restore();
         }
+        
+        ctx.restore(); // Całkowite zamknięcie głównego stanu (reset alpha itp)
 
+        // RENDEROWANIE NICKU I MASY
         ctx.save();
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4;
         ctx.translate(postac.x, postac.y);
@@ -422,11 +529,11 @@ window.Grafika = (function() {
         ctx.textAlign = 'center';
         
         let prefix = masa >= 600 ? "👑 " : "";
-        ctx.fillText(`${prefix}${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, promien + 25);
+        ctx.fillText(`${prefix}${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, promien + 25 + (masa >= 600 ? 5 : 0));
         ctx.restore();
     }
 
-    // --- RYSOWANIE MAPY TAKTYCZNEJ (Ze szczegółowym Zamkiem i Bazami) ---
+    // --- RYSOWANIE MAPY TAKTYCZNEJ ---
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
         ctx.save();
         
@@ -441,7 +548,6 @@ window.Grafika = (function() {
         ctx.fillRect(startX, startY, mapSize, mapSize);
         ctx.strokeRect(startX, startY, mapSize, mapSize);
 
-        // Zamek na mapie taktycznej (FREE)
         if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'FREE') {
             const castleX = startX + (2000 * scale);
             const castleY = startY + (2000 * scale);
@@ -452,16 +558,14 @@ window.Grafika = (function() {
             ctx.translate(castleX, castleY);
             ctx.strokeStyle = '#f1c40f';
             ctx.lineWidth = czyMala ? 1 : 3;
-            if (!window.Flagi.Srodowisko.isMobile && !czyMala) { ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f'; }
+            if (window.Flagi && !window.Flagi.Srodowisko.isMobile && !czyMala) { ctx.shadowBlur = 10; ctx.shadowColor = '#f1c40f'; }
             ctx.fillStyle = 'rgba(241, 196, 15, 0.05)';
 
-            // Bryła zamku
             ctx.beginPath();
             ctx.moveTo(-castleWidth/2, castleHeight/2);
             ctx.lineTo(castleWidth/2, castleHeight/2);
             ctx.lineTo(castleWidth/2, 0);
 
-            // Blanki na prawej
             ctx.lineTo(castleWidth*0.6, 0); ctx.lineTo(castleWidth*0.6, -castleHeight*0.1);
             ctx.lineTo(castleWidth*0.7, -castleHeight*0.1); ctx.lineTo(castleWidth*0.7, 0);
             
@@ -471,7 +575,6 @@ window.Grafika = (function() {
             ctx.lineTo(-castleWidth*0.4, -castleHeight*0.3);
 
             ctx.lineTo(-castleWidth/2, 0);
-            // Blanki na lewej
             ctx.lineTo(-castleWidth*0.7, 0); ctx.lineTo(-castleWidth*0.7, -castleHeight*0.1);
             ctx.lineTo(-castleWidth*0.6, -castleHeight*0.1); ctx.lineTo(-castleWidth*0.6, 0);
             
@@ -480,19 +583,15 @@ window.Grafika = (function() {
             ctx.fill();
             ctx.stroke();
 
-            // Brama
             ctx.strokeStyle = 'rgba(241, 196, 15, 0.4)';
             ctx.strokeRect(-castleWidth*0.15, castleHeight*0.15, castleWidth*0.3, castleHeight*0.35);
-
             ctx.restore();
         } 
-        // Bazy na mapie taktycznej (TEAMS)
         else if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
-            // Baza Czerwonych
             ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
             ctx.strokeStyle = '#e74c3c';
             ctx.beginPath(); ctx.arc(startX + (500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-            // Baza Niebieskich
+            
             ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
             ctx.strokeStyle = '#3498db';
             ctx.beginPath(); ctx.arc(startX + (5500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
@@ -505,7 +604,6 @@ window.Grafika = (function() {
             ctx.fill();
         }
 
-        // Boty (Czerwone / Fioletowe)
         if (stanSerwera.bots) {
             Object.values(stanSerwera.bots).forEach(b => {
                 const kolorBota = b.skin === 'ninja' ? '#9b59b6' : '#e74c3c';
@@ -513,7 +611,6 @@ window.Grafika = (function() {
             });
         }
         
-        // Gracze
         if (stanSerwera.players) {
             Object.values(stanSerwera.players).forEach(p => {
                 if (p.id !== mojGracz.id) {
@@ -526,11 +623,9 @@ window.Grafika = (function() {
             });
         }
 
-        // Twój znacznik (Biały puls)
         let puls = 2 + Math.abs(Math.sin(Date.now() / 300)) * 2;
         rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
 
-        // Aura radaru
         if (!czyMala) {
             ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
             ctx.lineWidth = 1;
@@ -564,7 +659,7 @@ window.Grafika = (function() {
             rysujMape(tryb, limitWielkosci);
 
             if (stanSerwera.foods) {
-                lokalnyBuforJedzenia = window.Guardian ? window.Guardian.safeObj(stanSerwera.foods) : stanSerwera.foods;
+                lokalnyBuforJedzenia = window.Guardian ? window.Guardian.safeObj(stanSerwera.foods, 'foods') : stanSerwera.foods;
             }
             
             ctx.fillStyle = '#f1c40f';
@@ -576,12 +671,12 @@ window.Grafika = (function() {
             });
 
             if (stanSerwera.projectiles) {
-                let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles) : stanSerwera.projectiles;
+                let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles, 'projectiles') : stanSerwera.projectiles;
                 Object.values(bezpiecznePociski).forEach(proj => {
                     if (czyWidoczny(proj.x, proj.y, 20)) {
                         ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(Math.atan2(proj.dy, proj.dx));
                         ctx.fillStyle = proj.piercing ? '#3498db' : '#bdc3c7';
-                        if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; }
+                        if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; }
                         ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5); ctx.closePath(); ctx.fill();
                         ctx.restore();
                     }
@@ -600,9 +695,8 @@ window.Grafika = (function() {
 
             rysujPostac(mojGracz, mojGracz.id, true);
 
-            ctx.restore(); // Koniec rysowania świata, powrót do warstwy UI
+            ctx.restore(); 
 
-            // Rysowanie UI na wierzchu ekranu
             if (pokazDuzaMape) {
                 rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, false);
             } else {

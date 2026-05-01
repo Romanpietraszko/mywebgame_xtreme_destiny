@@ -22,7 +22,7 @@ app.use('/automatyzacja', express.static(path.join(__dirname, '../automatyzacja'
 async function getAIWellbeingMessage(mass) {
     try {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 1500); // Max 1.5s czekania
+        const timeoutId = setTimeout(() => controller.abort(), 1500); 
         const response = await fetch('http://127.0.0.1:11434/api/generate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -55,6 +55,14 @@ const state = {
     tickCounter: 0
 };
 
+// Zmienne trybu Kampanii
+const stanKampanii = {
+    bossAktywny: false,
+    bossId: null,
+    liczbaDronow: 0,
+    ostatniSpawn: 0
+};
+
 let entityIdCounter = 0;
 
 // Słownik Broni (Dla trybu FREE)
@@ -74,15 +82,15 @@ function spawnBot() {
     let id = `bot_${++entityIdCounter}`;
     let isBoss = Math.random() < 0.05;
     state.bots[id] = {
-        id: id,
+        id: id, mode: 'FREE', // Wyraźne oznaczenie dla trybu FREE
         x: Math.random() * 6000, y: Math.random() * 6000,
         score: isBoss ? (150 + Math.random() * 100) : (5 + Math.random() * 20),
         skin: isBoss ? 'ninja' : 'standard',
         name: isBoss ? 'Elita AI' : 'Dron AI',
         angle: Math.random() * Math.PI * 2,
-        state: 'IDLE', // AI neutralne
-        ownerId: null, // Jeśli ma właściciela, wchodzi w formację TEAMS
-        typBroni: null // Typ dla "Army Draft"
+        state: 'IDLE', 
+        ownerId: null, 
+        typBroni: null 
     };
 }
 
@@ -90,14 +98,13 @@ for (let i = 0; i < MAX_FOODS; i++) spawnFood();
 for (let i = 0; i < MAX_BOTS; i++) spawnBot();
 
 // ==========================================
-// HERMETYCZNE KLASY TRYBÓW GRY (Zero Wycieków Logiki)
+// HERMETYCZNE KLASY TRYBÓW GRY
 // ==========================================
 class TrybFree {
     static aktualizuj(p, nearby) {
         let pRadius = 15 + Math.sqrt(p.score) * 1.5;
         let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
 
-        // Jedzenie
         nearby.foods.forEach(f => {
             if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
                 dodajMase(p, 1 * p.massMultiplier);
@@ -105,7 +112,6 @@ class TrybFree {
             }
         });
 
-        // Kolizje Graczy (PvP Zjadanie)
         nearby.players.forEach(p2 => {
             if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE') return;
             let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
@@ -117,9 +123,8 @@ class TrybFree {
             }
         });
 
-        // Kolizje z Dzikimi Botami (PvE Zjadanie)
         nearby.bots.forEach(b => {
-            if (p.isSafe || b.ownerId) return;
+            if (p.isSafe || b.ownerId || b.mode !== 'FREE') return;
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
             let bRadius = 15 + Math.sqrt(b.score) * 1.5;
             if (dist < pRadius && p.score > b.score * 1.15) {
@@ -133,7 +138,6 @@ class TrybFree {
             }
         });
 
-        // Atak obszarowy NOVA
         if (p.overcharge >= 100) {
             io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
             p.overcharge = 0;
@@ -149,10 +153,9 @@ class TrybFree {
 
 class TrybTeams {
     static aktualizuj(p, nearby) {
-        let pRadius = 25; // Generał jest zwinną stałą wielkością
+        let pRadius = 25; 
         let magnetRange = pRadius + 20;
 
-        // Jedzenie (Zbieranie masy/waluty)
         nearby.foods.forEach(f => {
             if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
                 dodajMase(p, 2 * p.massMultiplier); 
@@ -160,29 +163,27 @@ class TrybTeams {
             }
         });
 
-        // Werbowanie (Hakowanie dzikich botów)
         nearby.bots.forEach(b => {
-            if(b.ownerId) return; // Ten już ma właściciela
+            if(b.ownerId || b.mode !== 'FREE') return; 
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
-            if(dist < 80) { // Zasięg wiązki hakującej
+            if(dist < 80) { 
                 b.score -= 2; 
                 if(b.score <= 0) {
                     b.ownerId = p.id;
                     b.team = p.team;
-                    b.score = 25; // Standardowe HP rekruta
-                    b.typBroni = 'miecz'; // Rekrut zawsze zaczyna jako miecznik
-                    spawnBot(); // Natychmiastowe zrespienie dzikiego dla zachowania balansu na mapie
+                    b.score = 25; 
+                    b.typBroni = 'miecz'; 
+                    spawnBot(); 
                 }
             }
         });
         
-        // Kolizje pancerza Generała z wrogą formacją (Generał dostaje obrażenia!) - TYLKO POZA BAZĄ
         if (!p.isSafe) {
             nearby.bots.forEach(b => {
                 if(b.ownerId && b.team !== p.team) {
                     let dist = Math.hypot(p.x - b.x, p.y - b.y);
                     if(dist < 30) {
-                        p.score -= 2; // Armia wroga wysysa życie/zasoby z Dowódcy
+                        p.score -= 2; 
                         if(p.score <= 0) {
                             io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
                             triggerZgon(p.id, "Wroga Armia");
@@ -199,14 +200,13 @@ class TrybTeams {
         let distToLeader = Math.hypot(lider.x - b.x, lider.y - b.y);
         let speed = 4.5;
         
-        // REAKCJA NA ROZKAZ SPECJALNY (Klawisz 'E' / Ostrzał Skupiony)
         if (lider.rozkazAktywny) {
             if (b.typBroni === 'miecz') {
-                targetX = lider.x + Math.cos(lider.katRuchu) * 400; // Szarża przed Generała
+                targetX = lider.x + Math.cos(lider.katRuchu) * 400; 
                 targetY = lider.y + Math.sin(lider.katRuchu) * 400;
                 speed = 10;
             } else if (b.typBroni === 'luk') {
-                speed = 0; // Łucznicy stają w miejscu i zasypują wroga ogniem
+                speed = 0; 
                 if (Math.random() < 0.05) {
                      let pid = ++entityIdCounter;
                      state.projectiles[pid] = {
@@ -217,11 +217,9 @@ class TrybTeams {
                 }
             }
         } else {
-            // STANDARDOWA FORMACJA "MUR TARCZ"
-            if (distToLeader < 70) speed = 0; // Martwa strefa - robią miejsce Generałowi
+            if (distToLeader < 70) speed = 0; 
             else speed = Math.min(6, distToLeader * 0.08); 
             
-            // Odpychanie Boids (żeby drony nie wchodziły w siebie)
             nearby.bots.forEach(otherB => {
                 if (otherB.id !== b.id && otherB.ownerId === b.ownerId) {
                     if (Math.hypot(otherB.x - b.x, otherB.y - b.y) < 25) {
@@ -232,7 +230,6 @@ class TrybTeams {
             });
         }
         
-        // Zastosowanie wektora lotu
         if(speed > 0) {
             let moveAngle = Math.atan2(targetY - b.y, targetX - b.x);
             b.x += Math.cos(moveAngle) * speed;
@@ -240,7 +237,6 @@ class TrybTeams {
             b.angle = moveAngle;
         }
 
-        // FIZYKA WALKI ROJU (Zderzenia 1na1 z wrogimi botami)
         nearby.bots.forEach(enemyB => {
             if (enemyB.ownerId && enemyB.team !== b.team) {
                 if (Math.hypot(b.x - enemyB.x, b.y - enemyB.y) < 25) {
@@ -249,6 +245,161 @@ class TrybTeams {
                 }
             }
         });
+    }
+}
+
+// ==========================================
+// NOWA KLASA: TRYB KAMPANII (PvE)
+// ==========================================
+class TrybCampaign {
+    static aktualizuj(p, nearby) {
+        let pRadius = 15 + Math.sqrt(p.score) * 1.5;
+        let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
+
+        // PvE Zbieranie jedzenia
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 1 * p.massMultiplier);
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        // Kolizje z rojem
+        nearby.bots.forEach(b => {
+            if (b.mode !== 'CAMPAIGN') return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            let bRadius = b.isBoss ? 50 : 25; // Znacznie większy hitbox Bossa
+            
+            if (dist < pRadius + bRadius) {
+                if (!b.isBoss) {
+                    // Obrażenia od Kamikaze
+                    p.score = Math.max(1, p.score - 5);
+                    b.score = 0; // Dron ginie przy zderzeniu
+                    stanKampanii.liczbaDronow--;
+                    if (p.score <= 1) triggerZgon(p.id, "Rój Maszyn");
+                } else {
+                    // Miażdżące obrażenia od Bossa przy kontakcie
+                    p.score = Math.max(1, p.score - 2);
+                    if (p.score <= 1) triggerZgon(p.id, "TYTAN AKT 1");
+                }
+            }
+        });
+    }
+
+    static zarzadzajFalami() {
+        let zyjacyGracze = Object.values(state.players).filter(p => p.mode === 'CAMPAIGN');
+        if (zyjacyGracze.length === 0) {
+            // Czyszczenie mapy z roju, gdy wszyscy przegrają
+            stanKampanii.bossAktywny = false;
+            stanKampanii.bossId = null;
+            stanKampanii.liczbaDronow = 0;
+            for (let id in state.bots) {
+                if (state.bots[id].mode === 'CAMPAIGN') delete state.bots[id];
+            }
+            return;
+        }
+
+        let maxScore = Math.max(...zyjacyGracze.map(p => p.score));
+        let targetPlayer = zyjacyGracze.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+
+        // Wywołanie Bossa, gdy przekroczysz 300 masy
+        if (maxScore >= 300 && !stanKampanii.bossAktywny) {
+            this.wezwijBossa(targetPlayer.x, targetPlayer.y);
+            stanKampanii.bossAktywny = true;
+            
+            // Czyszczenie pomniejszych dronów przed walką z bossem
+            for (let id in state.bots) {
+                if (state.bots[id].mode === 'CAMPAIGN' && !state.bots[id].isBoss) delete state.bots[id];
+            }
+            stanKampanii.liczbaDronow = 0;
+        } 
+        
+        // Spawn dronów narastający w czasie, dopóki nie ma Bossa
+        if (!stanKampanii.bossAktywny && stanKampanii.liczbaDronow < (maxScore / 5) + 5 && Date.now() - stanKampanii.ostatniSpawn > 1000) {
+            this.spawnKamikaze(targetPlayer);
+            stanKampanii.ostatniSpawn = Date.now();
+        }
+    }
+
+    static spawnKamikaze(cel) {
+        let id = `bot_camp_${++entityIdCounter}`;
+        let angle = Math.random() * Math.PI * 2;
+        let x = cel.x + Math.cos(angle) * 1200; // Respią się poza ekranem gracza
+        let y = cel.y + Math.sin(angle) * 1200;
+
+        state.bots[id] = {
+            id: id, mode: 'CAMPAIGN', isBoss: false,
+            x: Math.max(0, Math.min(6000, x)), y: Math.max(0, Math.min(6000, y)),
+            score: 15, skin: 'standard', name: 'Dron Roju',
+            angle: 0, state: 'HUNT', targetId: cel.id
+        };
+        stanKampanii.liczbaDronow++;
+    }
+
+    static wezwijBossa(x, y) {
+        let id = `boss_${++entityIdCounter}`;
+        stanKampanii.bossId = id;
+        state.bots[id] = {
+            id: id, mode: 'CAMPAIGN', isBoss: true,
+            x: x, y: y - 800, // Zlatuje z góry
+            score: 1500, // Twardy skurczybyk
+            maxScore: 1500,
+            skin: 'ninja', name: 'TYTAN: OMEGA',
+            angle: 0, state: 'BOSS_PHASE_1',
+            ostatniStrzal: 0, katObrotu: 0
+        };
+        io.emit('killEvent', { zabojca: "SYSTEM", ofiara: "TYTAN OMEGA WSZEDŁ DO SEKTORA!" });
+    }
+
+    static aktualizujBossa(boss, players) {
+        let targets = players.filter(p => p.mode === 'CAMPAIGN');
+        if (targets.length === 0) return;
+        
+        let closest = targets[0];
+        let minDist = Math.hypot(boss.x - closest.x, boss.y - closest.y);
+        for(let i=1; i<targets.length; i++) {
+            let d = Math.hypot(boss.x - targets[i].x, boss.y - targets[i].y);
+            if (d < minDist) { minDist = d; closest = targets[i]; }
+        }
+
+        let katDoGracza = Math.atan2(closest.y - boss.y, closest.x - boss.x);
+
+        // FAZA 2: Poniżej 50% zdrowia zaczyna strzelać laserami dookoła
+        if (boss.score < boss.maxScore / 2) {
+            boss.state = 'BOSS_PHASE_2';
+            boss.katObrotu += 0.08; // Powolny obrót dział
+            boss.angle = boss.katObrotu;
+            
+            if (Date.now() - boss.ostatniStrzal > 500) {
+                for(let i=0; i<4; i++) { // 4 lasery w 4 strony
+                    let pid = ++entityIdCounter;
+                    let fireAngle = boss.katObrotu + (i * Math.PI / 2);
+                    state.projectiles[pid] = {
+                        id: pid, ownerId: boss.id, team: 'BOSS', mode: 'CAMPAIGN',
+                        x: boss.x, y: boss.y,
+                        dx: Math.cos(fireAngle), dy: Math.sin(fireAngle),
+                        life: 80, speed: 12, damage: 20, piercing: true, type: 'laser'
+                    };
+                }
+                boss.ostatniStrzal = Date.now();
+            }
+        } else {
+            // FAZA 1: Agresywny pościg
+            let speed = 3.5;
+            boss.x += Math.cos(katDoGracza) * speed;
+            boss.y += Math.sin(katDoGracza) * speed;
+            boss.angle = katDoGracza;
+        }
+
+        // Śmierć Bossa
+        if (boss.score <= 0) {
+            targets.forEach(p => {
+                io.to(p.id).emit('gameOver', { finalScore: p.score, killerName: "VICTORY", message: "Pokonałeś Tytana. Dostęp do Aktu II przyznany." });
+                delete state.players[p.id];
+            });
+            stanKampanii.bossAktywny = false;
+            stanKampanii.bossId = null;
+        }
     }
 }
 
@@ -279,6 +430,9 @@ io.on('connection', (socket) => {
             pTeam = redCount <= blueCount ? 'RED' : 'BLUE';
             spawnX = pTeam === 'RED' ? 500 + (Math.random() * 400 - 200) : 5500 + (Math.random() * 400 - 200);
             spawnY = 3000 + (Math.random() * 400 - 200);
+        } else if (data.mode === 'CAMPAIGN') {
+            spawnX = 3000; // Środek mapy dla Kampanii
+            spawnY = 3000;
         } else if (data.mode === 'FREE' && data.spawnZone) {
             if (data.spawnZone === 'nw') { spawnX = Math.random() * 2000; spawnY = Math.random() * 2000; }
             else if (data.spawnZone === 'ne') { spawnX = 2000 + Math.random() * 2000; spawnY = Math.random() * 2000; }
@@ -303,7 +457,6 @@ io.on('connection', (socket) => {
         socket.emit('init', { id: socket.id, team: pTeam });
     });
 
-    // NOWE STEROWANIE MYSZKĄ 
     socket.on('ruchGraczaMyszka', (dane) => {
         let p = state.players[socket.id];
         if (p) {
@@ -312,10 +465,9 @@ io.on('connection', (socket) => {
         }
     });
 
-    // MIOTANIE OSZCZEPEM (Lewy Przycisk Myszy)
     socket.on('rzutOszczepem', (dane) => {
         let p = state.players[socket.id];
-        if (p && !p.isSafe) { // NIE MOŻNA RZUCAĆ BĘDĄC W BEZPIECZNEJ STREFIE
+        if (p && !p.isSafe) { 
             let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
             if (p.score > koszt) {
                 p.score -= koszt;
@@ -331,7 +483,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ROZKAZ SPECJALNY DLA ROJU (Przycisk 'E' / Środkowy przycisk myszy)
     socket.on('rozkazSpecjalny', () => {
         let p = state.players[socket.id];
         if (p && p.mode === 'TEAMS') {
@@ -340,15 +491,13 @@ io.on('connection', (socket) => {
         }
     });
 
-    // ULEPSZANIE ZBROJOWNI I BOTÓW W BAZIE
     socket.on('buyShopItem', (item) => {
         let p = state.players[socket.id];
-        if (p && p.isSafe) { // ZAKUPY TYLKO W BEZPIECZNEJ STREFIE
+        if (p && p.isSafe) { 
             if (p.mode === 'TEAMS') {
                 let shopCost = 50; 
                 if (p.score >= shopCost) {
                     p.score -= shopCost;
-                    // Draftujemy armię - zmieniamy połowę posiadanych botów na nową klasę
                     Object.values(state.bots).forEach(b => {
                         if (b.ownerId === p.id && Math.random() > 0.5) b.typBroni = item;
                     });
@@ -367,7 +516,6 @@ io.on('connection', (socket) => {
 
     socket.on('disconnect', () => {
         console.log(`[ rozłączono ] Terminal: ${socket.id}`);
-        // W trybie TEAMS zwerbowane boty padają po wylogowaniu Generała
         for(let bId in state.bots) { if(state.bots[bId].ownerId === socket.id) delete state.bots[bId]; }
         delete state.players[socket.id];
     });
@@ -411,38 +559,33 @@ setInterval(() => {
     for (let pId in state.players) {
         let p = state.players[pId];
         
-        p.isSafe = false; // Reset tarczy co klatkę
+        p.isSafe = false; 
 
-        // LOGIKA BAZY I TARCZY OCHRONNEJ
         if (p.mode === 'FREE') {
-            // Zamek na środku mapy
             if (Math.hypot(p.x - 2000, p.y - 2000) < 400) { p.isSafe = true; }
         } else if (p.mode === 'TEAMS') {
             let mojaBazaX = p.team === 'RED' ? 500 : 5500;
             let wrogaBazaX = p.team === 'RED' ? 5500 : 500;
             let bazaY = 3000;
 
-            // Tarcza wewnątrz własnej bazy
             if (Math.hypot(p.x - mojaBazaX, p.y - bazaY) < 400) { p.isSafe = true; }
             
-            // Pole siłowe wrogiej bazy zadające potężne obrażenia
             if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
-                p.score -= 2; // Płonie w wrogiej bazie!
+                p.score -= 2; 
                 if (p.score <= 0) {
                     io.emit('killEvent', { zabojca: "System Obronny Bazy", ofiara: p.name });
                     triggerZgon(p.id, "System Obronny Bazy");
-                    continue; // Jeśli umrze, przerywamy resztę logiki dla tego gracza
+                    continue; 
                 }
             }
         }
 
         let nearby = getNearby(p.x, p.y);
 
-        // Aplikujemy hermetyczną logikę zależnie od wybranego wariantu
         if (p.mode === 'FREE') TrybFree.aktualizuj(p, nearby);
         else if (p.mode === 'TEAMS') TrybTeams.aktualizuj(p, nearby);
+        else if (p.mode === 'CAMPAIGN') TrybCampaign.aktualizuj(p, nearby);
 
-        // Autorytatywny Ruch oparty o kursor myszki
         const MARTWA_STREFA = 30; 
         let speed = Math.max(2.0, p.baseSpeed - (p.mode === 'FREE' ? Math.max(0, (p.score - 50) / 600) * 2.0 : 0));
         
@@ -460,6 +603,9 @@ setInterval(() => {
         }
     }
 
+    // 2.5 ZARZĄDZANIE KAMPANIĄ
+    TrybCampaign.zarzadzajFalami();
+
     // 3. LOGIKA POCISKÓW I OSZCZEPÓW
     for (let projId in state.projectiles) {
         let proj = state.projectiles[projId];
@@ -471,18 +617,20 @@ setInterval(() => {
         let hit = false;
 
         nearby.players.forEach(p => {
-            if (p.isSafe) return; // BLOKADA: Pociski ignorują graczy w bezpiecznej strefie
+            if (p.isSafe) return; 
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
-                if (proj.mode === 'TEAMS' && p.team === proj.team) return; // Blokada Friendly Fire
+                if (proj.mode === 'TEAMS' && p.team === proj.team) return; 
+                if (proj.mode === 'CAMPAIGN' && proj.team === 'BOSS') return; // Strzały bossa nie ranią bossa
                 if (!p.isShielding) p.score = Math.max(1, p.score - proj.damage);
                 hit = true;
             }
         });
 
-        // Oszczepy ranią drony
         nearby.bots.forEach(b => {
-            if (Math.hypot(b.x - proj.x, b.y - proj.y) < 30) {
+            let hitbox = 30 + (b.isBoss ? 40 : 0); // Boss ma ogromny hitbox
+            if (Math.hypot(b.x - proj.x, b.y - proj.y) < hitbox) {
                 if (proj.mode === 'TEAMS' && b.team === proj.team) return;
+                if (proj.mode === 'CAMPAIGN' && b.isBoss && proj.team === 'BOSS') return; 
                 b.score -= proj.damage;
                 hit = true;
             }
@@ -492,27 +640,43 @@ setInterval(() => {
         if (proj.life <= 0) delete state.projectiles[projId];
     }
 
-    // 4. LOGIKA DRONÓW (Klasyczne AI vs Rój Formacji)
+    // 4. LOGIKA DRONÓW
     for (let bId in state.bots) {
         let b = state.bots[bId];
         
-        // Zdejmowanie botów o zerowym HP (niezależnie czy dzikie czy zwerbowane)
         if (b.score <= 0) {
             delete state.bots[bId];
             continue;
         }
 
+        // Nowość: Obsługa logiki Kampanii
+        if (b.mode === 'CAMPAIGN') {
+            if (b.isBoss) {
+                TrybCampaign.aktualizujBossa(b, Object.values(state.players));
+            } else {
+                let cel = state.players[b.targetId];
+                if (cel && cel.mode === 'CAMPAIGN') {
+                    let speed = 5.0;
+                    b.angle = Math.atan2(cel.y - b.y, cel.x - b.x);
+                    b.x += Math.cos(b.angle) * speed;
+                    b.y += Math.sin(b.angle) * speed;
+                } else {
+                    b.score = 0; // Jeśli cel zginął, dron też ulega autodestrukcji
+                    stanKampanii.liczbaDronow--;
+                }
+            }
+            continue; // Pomijamy zwykłą logikę dla dronów kampanii
+        }
+
         if (b.ownerId && state.players[b.ownerId]) {
-            // Algorytm Formacji dla podbitych dronów
             let nearby = getNearby(b.x, b.y);
             TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby);
         } else {
-            // Klasyczne, agresywne AI Dzikiego Bota
             let nearby = getNearby(b.x, b.y);
             let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
 
             nearby.players.forEach(p => {
-                if (p.isSafe) return; // AI Dzikich botów ignoruje graczy w strefie bezpiecznej
+                if (p.isSafe || p.mode !== 'FREE') return; // Dzikie boty atakują tylko we FREE
                 let dist = Math.hypot(p.x - b.x, p.y - b.y);
                 if (dist < 500) { 
                     if (b.score > p.score * 1.15) {
@@ -571,7 +735,6 @@ async function triggerZgon(deadId, killerName) {
         let score = Math.floor(p.score);
         console.log(`[ ŚMIERĆ ] ${p.name} poległ. Pytam Qwen o pocieszenie...`);
         
-        // Zwerbowane drony w trybie TEAMS padają razem z poległym Generałem
         if(p.mode === 'TEAMS') {
             for(let bId in state.bots) { if(state.bots[bId].ownerId === deadId) delete state.bots[bId]; }
         }
