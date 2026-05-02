@@ -12,7 +12,7 @@ window.Grafika = (function() {
     let screenH = window.innerHeight;
     
     // Pule obiektów i efekty
-    let mapaObiekty = { krzaki: [], mury: [] };
+    let mapaObiekty = { krzaki: [], mury: [], swiatla: [] };
     let czyMapaWygenerowana = false;
     let czasteczkiTla = []; 
     let sladPostaci = {}; 
@@ -64,7 +64,7 @@ window.Grafika = (function() {
 
     // --- ŚRODOWISKO I MAPA Z POGODĄ ---
     function generujSrodowisko(tryb) {
-        mapaObiekty = { krzaki: [], mury: [] };
+        mapaObiekty = { krzaki: [], mury: [], swiatla: [] };
         czasteczkiTla = [];
 
         // Dynamiczna pogoda zależna od trybu gry
@@ -98,6 +98,15 @@ window.Grafika = (function() {
         
         if (tryb === 'FREE') {
             for(let i=0; i<45; i++) mapaObiekty.krzaki.push({ x: Math.random() * 4000, y: Math.random() * 4000, r: 70 });
+            
+            for(let i=0; i<40; i++) {
+                mapaObiekty.swiatla.push({ 
+                    x: Math.random() * 4000, 
+                    y: Math.random() * 4000, 
+                    r: Math.random() * 100 + 50,
+                    color: ['rgba(231,76,60,0.05)', 'rgba(52,152,219,0.05)', 'rgba(155,89,182,0.05)'][Math.floor(Math.random()*3)]
+                });
+            }
         }
         czyMapaWygenerowana = true;
     }
@@ -201,6 +210,17 @@ window.Grafika = (function() {
         for(let x = startX; x < camera.x + screenW; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH); }
         for(let y = startY; y < camera.y + screenH; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW, y); }
         ctx.stroke();
+
+        if (mapaObiekty.swiatla) {
+            mapaObiekty.swiatla.forEach(s => {
+                if(czyWidoczny(s.x, s.y, s.r)) {
+                    ctx.beginPath();
+                    ctx.arc(s.x, s.y, s.r, 0, Math.PI*2);
+                    ctx.fillStyle = s.color;
+                    ctx.fill();
+                }
+            });
+        }
 
         // Granice Świata
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 6;
@@ -790,13 +810,12 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    // Publiczne API wstrząsu dla tryby.js
-    window.Grafika.wywolajWstrzas = function(moc) {
-        wstrzasEkranu.moc = moc;
-    };
-
     // --- GŁÓWNA PĘTLA RENDERUJĄCA ---
     return {
+        // Publiczne API wstrząsu przeniesione w bezpieczne miejsce
+        wywolajWstrzas: function(moc) {
+            wstrzasEkranu.moc = moc;
+        },
         rysujKlatke: function(stanSerwera, mojGracz) {
             if (!stanSerwera || !mojGracz) return;
 
