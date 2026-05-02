@@ -50,18 +50,46 @@ canvas {
     z-index: 100;
 }
 
-/* GLASSMORPHISM - MROŻONE SZKŁO (MENU GŁÓWNE) */
+/* GLASSMORPHISM - MROŻONE SZKŁO I WYBUCHOWE WEJŚCIE (MENU GŁÓWNE) */
 #menu {
+    position: relative; /* Wymagane do płonącej ramki */
     background: rgba(10, 10, 15, 0.45);
     backdrop-filter: blur(12px);
     -webkit-backdrop-filter: blur(12px);
     padding: 30px;
     border-radius: 12px;
     border: 2px solid rgba(52, 152, 219, 0.5);
-    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(52, 152, 219, 0.1);
+    /* Animacja potężnego wejścia */
+    animation: menuExplosion 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     text-align: center;
     width: 90%;
     max-width: 450px;
+}
+
+/* Animacja rozbłysku przy wejściu na stronę */
+@keyframes menuExplosion {
+    0% { transform: scale(0.7) translateY(100px); opacity: 0; box-shadow: 0 0 0px #ff5722; }
+    40% { box-shadow: 0 0 120px 30px rgba(255, 87, 34, 0.8); } /* BŁYSK! */
+    100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(52, 152, 219, 0.1); }
+}
+
+/* Krążąca, ognista plazma wokół ramki menu */
+#menu::before {
+    content: '';
+    position: absolute;
+    top: -3px; left: -3px; right: -3px; bottom: -3px;
+    border-radius: 14px; /* Dopasowane do #menu */
+    background: linear-gradient(45deg, rgba(17,17,17,0), #e74c3c, #ff9800, #e74c3c, rgba(17,17,17,0));
+    background-size: 400%;
+    z-index: -1;
+    animation: fireBorder 3s linear infinite;
+    opacity: 0.8;
+}
+
+@keyframes fireBorder {
+    0% { background-position: 0% 0%; }
+    50% { background-position: 100% 100%; }
+    100% { background-position: 0% 0%; }
 }
 
 h1 {
@@ -362,18 +390,41 @@ input:focus {
    ========================================== */
 
 #css-arena-bg {
-    position: absolute;
+    position: fixed; /* Zmiana na fixed by ogień pokrył tło zza ui-layer */
     inset: 0;
     z-index: 10; /* Pod ui-layer, ale nad Canvasem */
+    /* Głębokie, hutnicze tło zamiast starych kształtów */
     background-color: #050505;
-    /* Pogłębiona, bardziej intensywna łuna ognia z samego dołu */
     background-image: 
-        radial-gradient(ellipse at bottom, rgba(231, 76, 60, 0.25) 0%, rgba(231, 76, 60, 0.05) 40%, transparent 70%),
+        radial-gradient(ellipse at bottom, rgba(43, 5, 5, 0.9) 0%, rgba(5, 5, 5, 0.9) 60%),
         linear-gradient(rgba(52, 152, 219, 0.05) 1px, transparent 1px),
         linear-gradient(90deg, rgba(52, 152, 219, 0.05) 1px, transparent 1px);
     background-size: 100% 100%, 100px 100px, 100px 100px;
     overflow: hidden;
 }
+
+/* AGRESYWNE ISKRY (Ogień generowany skryptem) */
+.ember {
+    position: absolute;
+    bottom: -20px;
+    background: #fff; /* Gorący, biały rdzeń */
+    border-radius: 50%;
+    /* Wielka, ognista poświata wokół małego rdzenia */
+    box-shadow: 0 0 10px #ffeb3b, 0 0 20px #ff9800, 0 0 40px #e74c3c; 
+    animation: rise 5s infinite cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    opacity: 0;
+}
+
+@keyframes rise {
+    0% { transform: translateY(0) translateX(0) scale(1.5); opacity: 1; }
+    50% { opacity: 0.8; }
+    100% { transform: translateY(-100vh) translateX(100px) scale(0); opacity: 0; }
+}
+
+/* -------------------------------------------------------------
+   PONIŻEJ STARE KLASY TŁA - Zostawione w razie potrzeby
+   (Skrypt w index.html renderuje teraz główny efekt ognia) 
+   ------------------------------------------------------------- */
 
 .neon-shape {
     position: absolute;
@@ -381,7 +432,6 @@ input:focus {
     filter: blur(2px);
 }
 
-/* Przerobione brzydkie figury geometryczne na pulsujące źródła ognia w rogach! */
 .bot-red {
     width: 50vw; height: 50vh;
     background: radial-gradient(circle, rgba(231,76,60,0.1) 0%, transparent 70%);
@@ -396,13 +446,11 @@ input:focus {
     animation: pulseAmbientFire 8s infinite alternate-reverse ease-in-out;
 }
 
-/* Cyfrowe Iskry (Bardziej naturalne, urozmaicone cienie) */
 .food-yellow {
     width: 4px; 
     height: 10px;
     background: #fff;
     border-radius: 50%;
-    /* Dodatkowe iskry rzucone szerzej i w różnych kolorach (pomarańcz, czerwień, złoto) */
     box-shadow: 
         0 0 10px 2px #ff5722,
         12vw 15vh 12px 1px #e74c3c,
@@ -419,7 +467,6 @@ input:focus {
 .food-2 { left: 35%; bottom: -50px; top: auto; animation-duration: 6s; animation-delay: 1.2s; }
 .food-3 { left: 65%; bottom: -50px; top: auto; animation-duration: 5.5s; animation-delay: 2.5s; }
 
-/* Zaktualizowana animacja - Iskry płyną i lekko falują na boki (Sway effect) */
 @keyframes riseUpSway {
     0% { transform: translateY(110vh) translateX(0px) scale(0.5); opacity: 0; }
     10% { opacity: 1; }
@@ -428,13 +475,11 @@ input:focus {
     100% { transform: translateY(-20vh) translateX(-20px) scale(1.2); opacity: 0; }
 }
 
-/* Animacja tła (Pulsujący żar zamiast latających kwadratów) */
 @keyframes pulseAmbientFire {
     0% { transform: scale(1); opacity: 0.5; }
     100% { transform: scale(1.2); opacity: 1; }
 }
 
-/* Ruch cząsteczek na tytule - Pozostawione dla pewności (np. jeśli powrócą drony) */
 @keyframes floatShape {
     0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
     10% { opacity: 0.8; }

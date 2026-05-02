@@ -18,11 +18,10 @@ window.Grafika = (function() {
     let sladPostaci = {}; 
     let lokalnyBuforJedzenia = {};
     
-    // Zmienna śledząca czas wejścia graczy na arenę (do efektu zrzutu orbitalnego)
+    // Zmienne efektów specjalnych i śledzenia
     let czasWejsciaGraczy = {};
-    
-    // Zmienna do obsługi mapy pod klawiszem M
     let pokazDuzaMape = false;
+    let wstrzasEkranu = { moc: 0, wygasanie: 0.9 }; // System trzęsienia kamery
 
     // Nasłuchiwanie klawisza M
     window.addEventListener('keydown', (e) => {
@@ -63,17 +62,37 @@ window.Grafika = (function() {
         );
     }
 
-    // --- ŚRODOWISKO I MAPA ---
+    // --- ŚRODOWISKO I MAPA Z POGODĄ ---
     function generujSrodowisko(tryb) {
         mapaObiekty = { krzaki: [], mury: [] };
         czasteczkiTla = [];
 
-        // Generowanie cząsteczek Vibe Noir
-        for(let i = 0; i < 100; i++) {
+        // Dynamiczna pogoda zależna od trybu gry
+        let iloscCzasteczek = tryb === 'CAMPAIGN' ? 150 : (tryb === 'TEAMS' ? 200 : 100);
+        
+        for(let i = 0; i < iloscCzasteczek; i++) {
+            let predkoscX = (Math.random() - 0.5) * 0.5;
+            let predkoscY = (Math.random() - 0.5) * 0.5;
+            let rozmiar = Math.random() * 2;
+
+            if (tryb === 'TEAMS') {
+                // Szybki wojenny deszcz popiołu
+                predkoscX = (Math.random() * 2 + 1); 
+                predkoscY = (Math.random() * 3 + 2);
+            } else if (tryb === 'CAMPAIGN') {
+                // Powolne, mroczne zarodniki
+                rozmiar = Math.random() * 4 + 1;
+                predkoscX = (Math.random() - 0.5) * 0.2;
+                predkoscY = (Math.random() - 0.5) * 0.2;
+            }
+
             czasteczkiTla.push({
-                x: Math.random() * screenW, y: Math.random() * screenH,
-                speedX: (Math.random() - 0.5) * 0.5, speedY: (Math.random() - 0.5) * 0.5,
-                r: Math.random() * 2
+                x: Math.random() * screenW, 
+                y: Math.random() * screenH,
+                speedX: predkoscX, 
+                speedY: predkoscY,
+                r: rozmiar,
+                alpha: Math.random() * 0.5 + 0.1
             });
         }
         
@@ -83,13 +102,30 @@ window.Grafika = (function() {
         czyMapaWygenerowana = true;
     }
 
-    function aktualizujCząsteczki() {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.1)';
+    function aktualizujCząsteczki(tryb) {
         czasteczkiTla.forEach(c => {
             c.x += c.speedX; c.y += c.speedY;
             if (c.x < 0) c.x = screenW; if (c.x > screenW) c.x = 0;
             if (c.y < 0) c.y = screenH; if (c.y > screenH) c.y = 0;
-            ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+            
+            if (tryb === 'TEAMS') {
+                // Rysowanie dynamicznych linii iskier/deszczu
+                ctx.fillStyle = `rgba(200, 200, 200, ${c.alpha})`;
+                ctx.beginPath(); 
+                ctx.moveTo(camera.x + c.x, camera.y + c.y); 
+                ctx.lineTo(camera.x + c.x - c.speedX * 3, camera.y + c.y - c.speedY * 3); 
+                ctx.strokeStyle = ctx.fillStyle; 
+                ctx.lineWidth = 1.5; 
+                ctx.stroke();
+            } else if (tryb === 'CAMPAIGN') {
+                // Rozmyte, niepokojące plamy
+                ctx.fillStyle = `rgba(180, 20, 20, ${c.alpha * 0.4})`;
+                ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+            } else {
+                // Standardowe białe neonowe pyłki
+                ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
+                ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+            }
         });
     }
 
@@ -154,7 +190,7 @@ window.Grafika = (function() {
     function rysujMape(tryb, limitSwiata) {
         ctx.fillStyle = '#050505'; 
         ctx.fillRect(camera.x, camera.y, screenW, screenH);
-        aktualizujCząsteczki();
+        aktualizujCząsteczki(tryb);
 
         // Siatka
         ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)'; ctx.lineWidth = 1;
@@ -273,7 +309,7 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE DRONÓW AI ---
+    // --- RYSOWANIE DRONÓW AI (AURY FRAKCYJNE) ---
     function rysujBota(bot) {
         if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
 
@@ -283,18 +319,43 @@ window.Grafika = (function() {
 
         let masa = Math.min(bot.score || 10, 600);
         let promien = 15 + Math.sqrt(masa) * 1.5;
-        let isBoss = bot.skin === 'ninja';
+        let isBoss = bot.isBoss || bot.skin === 'ninja';
 
         ctx.save();
         ctx.translate(bot.x, bot.y);
         ctx.rotate(bot.angle || 0);
 
-        if (!window.Flagi.Srodowisko.isMobile) {
-            ctx.shadowBlur = 15; ctx.shadowColor = isBoss ? '#9b59b6' : '#e74c3c';
+        // KONTROLA KOLORU I AURY (Zależne od bycia w Drużynie)
+        let mainColor = isBoss ? '#9b59b6' : '#e74c3c';
+        let strokeColor = mainColor;
+        
+        if (bot.ownerId && bot.team) {
+            // Jeśli bot został zwerbowany do armii - nadpisujemy wygląd!
+            strokeColor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
+            
+            // Rysowanie pulsującej Aury na ziemi dla zwerbowanych
+            ctx.save();
+            ctx.beginPath();
+            ctx.arc(0, 0, promien + 8, 0, Math.PI * 2);
+            ctx.fillStyle = bot.team === 'RED' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(52, 152, 219, 0.2)';
+            ctx.fill();
+            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) {
+                ctx.shadowBlur = 20; 
+                ctx.shadowColor = strokeColor;
+            }
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = strokeColor;
+            ctx.setLineDash([5, 5]); 
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        if (window.Flagi && !window.Flagi.Srodowisko.isMobile) {
+            ctx.shadowBlur = 15; ctx.shadowColor = strokeColor;
         }
 
         ctx.fillStyle = '#050505';
-        ctx.strokeStyle = isBoss ? '#9b59b6' : '#e74c3c';
+        ctx.strokeStyle = strokeColor;
         ctx.lineWidth = 3;
 
         ctx.beginPath();
@@ -315,7 +376,9 @@ window.Grafika = (function() {
         ctx.stroke();
 
         ctx.shadowBlur = 0;
-        ctx.strokeStyle = isBoss ? 'rgba(155, 89, 182, 0.5)' : 'rgba(231, 76, 60, 0.5)';
+        ctx.strokeStyle = `rgba(${strokeColor === '#3498db' ? '52, 152, 219' : '231, 76, 60'}, 0.5)`;
+        if (isBoss) ctx.strokeStyle = 'rgba(155, 89, 182, 0.5)';
+        
         ctx.lineWidth = 1;
         ctx.beginPath(); ctx.arc(0, 0, promien * 0.4, 0, Math.PI*2); ctx.stroke();
         
@@ -327,13 +390,21 @@ window.Grafika = (function() {
 
         ctx.restore();
 
-        ctx.save();
-        ctx.translate(bot.x, bot.y);
-        ctx.fillStyle = isBoss ? '#9b59b6' : '#e74c3c';
-        ctx.font = 'bold 12px Exo 2, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`${bot.name} (${Math.floor(masa)})`, 0, -promien - 10);
-        ctx.restore();
+        // Nie rysujemy nicku Bossa na samej postaci, bo ma teraz wielki pasek u góry ekranu w kampanii
+        if (!isBoss) {
+            ctx.save();
+            ctx.translate(bot.x, bot.y);
+            ctx.fillStyle = strokeColor;
+            ctx.font = 'bold 12px Exo 2, sans-serif';
+            ctx.textAlign = 'center';
+            
+            // Dodawanie tagu frakcji do nazwy bota
+            let factionTag = "";
+            if (bot.ownerId) factionTag = bot.team === 'RED' ? "[RED] " : "[BLUE] ";
+            
+            ctx.fillText(`${factionTag}${bot.name} (${Math.floor(masa)})`, 0, -promien - 15);
+            ctx.restore();
+        }
     }
 
     // --- RYSOWANIE GRACZY (Z Systemem Visual Progression!) ---
@@ -533,6 +604,85 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
+    // --- ZAKTUALIZOWANE EFEKTY WIZUALNE I PASKI BOSSA ---
+    function rysujEfektyEkranu(tryb, stanSerwera, mojGracz) {
+        if (tryb === 'TEAMS' && mojGracz.team) {
+            // Poświata na krawędziach zależna od drużyny
+            let gradient = ctx.createRadialGradient(screenW/2, screenH/2, screenH/1.5, screenW/2, screenH/2, screenW);
+            let teamColor = mojGracz.team === 'RED' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(52, 152, 219, 0.2)';
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(1, teamColor);
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, screenW, screenH);
+        } 
+        else if (tryb === 'CAMPAIGN') {
+            // Prawdziwa Mgła Wojny (Tylko otoczenie gracza jest widoczne)
+            ctx.save();
+            ctx.setTransform(1, 0, 0, 1, 0, 0); 
+            
+            let masaDoŚwiatła = Math.max(10, mojGracz.score || 10);
+            let promienSwiatla = 250 + Math.sqrt(masaDoŚwiatła) * 8; // Światło rośnie z masą
+            
+            // Tworzenie ciemnego płótna z wyciętą dziurą (Światło latarki)
+            let gradient = ctx.createRadialGradient(screenW/2, screenH/2, promienSwiatla * 0.4, screenW/2, screenH/2, promienSwiatla);
+            gradient.addColorStop(0, 'rgba(0,0,0,0)'); // Środek jest przeźroczysty
+            gradient.addColorStop(1, 'rgba(5,5,5,0.96)'); // Krawędzie ucinają widoczność do czerni
+            
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, screenW, screenH);
+            
+            // Dorysowanie absolutnej czerni poza okręgiem
+            ctx.beginPath();
+            ctx.rect(0, 0, screenW, screenH);
+            ctx.arc(screenW/2, screenH/2, promienSwiatla, 0, Math.PI*2, true);
+            ctx.fillStyle = 'rgba(5,5,5,0.96)';
+            ctx.fill();
+
+            // Rysowanie UI Bossa (Jeśli istnieje)
+            let bossAlive = null;
+            if (stanSerwera.bots) {
+                Object.values(stanSerwera.bots).forEach(b => { if (b.isBoss || b.skin === 'ninja') bossAlive = b; });
+            }
+            
+            if (bossAlive) {
+                // Alarm na krawędziach
+                let alarmAlpha = Math.abs(Math.sin(Date.now() / 300)) * 0.2;
+                ctx.fillStyle = `rgba(231, 76, 60, ${alarmAlpha})`;
+                ctx.fillRect(0, 0, screenW, screenH);
+
+                // GIGANTYCZNY PASEK ZDROWIA BOSSA
+                let barW = Math.min(screenW * 0.7, 800);
+                let barH = 22;
+                let barX = (screenW - barW) / 2;
+                let barY = 50;
+                
+                // Obliczanie % HP (Boss w serwerze zaczyna od 1500 masy)
+                let maxBossHp = bossAlive.maxScore || 1500;
+                let hpPercent = Math.max(0, bossAlive.score / maxBossHp);
+                
+                // Tło Paska
+                ctx.fillStyle = 'rgba(15, 0, 0, 0.8)';
+                ctx.fillRect(barX, barY, barW, barH);
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 3;
+                ctx.strokeRect(barX, barY, barW, barH);
+                
+                // Wypełnienie Czerwienią
+                ctx.fillStyle = '#e74c3c';
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = '#e74c3c'; }
+                ctx.fillRect(barX, barY, barW * hpPercent, barH);
+                ctx.shadowBlur = 0;
+
+                // Tytuł nad paskiem
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 22px Permanent Marker, sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText(`TYTAN OMEGA`, screenW / 2, barY - 12);
+            }
+            ctx.restore();
+        }
+    }
+
     // --- RYSOWANIE MAPY TAKTYCZNEJ ---
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
         ctx.save();
@@ -640,6 +790,11 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
+    // Publiczne API wstrząsu dla tryby.js
+    window.Grafika.wywolajWstrzas = function(moc) {
+        wstrzasEkranu.moc = moc;
+    };
+
     // --- GŁÓWNA PĘTLA RENDERUJĄCA ---
     return {
         rysujKlatke: function(stanSerwera, mojGracz) {
@@ -647,6 +802,13 @@ window.Grafika = (function() {
 
             camera.x = mojGracz.x - screenW / 2; 
             camera.y = mojGracz.y - screenH / 2;
+            
+            // Aplikacja Trzęsienia Kamery
+            if (wstrzasEkranu.moc > 0.5) {
+                camera.x += (Math.random() - 0.5) * wstrzasEkranu.moc;
+                camera.y += (Math.random() - 0.5) * wstrzasEkranu.moc;
+                wstrzasEkranu.moc *= wstrzasEkranu.wygasanie;
+            }
             
             let tryb = (window.Flagi && window.Flagi.Stan.wybranyTryb) ? window.Flagi.Stan.wybranyTryb : 'FREE';
             let limitWielkosci = tryb === 'TEAMS' ? 6000 : 4000;
@@ -670,14 +832,66 @@ window.Grafika = (function() {
                 }
             });
 
+            // ==========================================
+            // ZAKTUALIZOWANE RYSOWANIE POCISKÓW (OSZCZEPY I LASERY)
+            // ==========================================
             if (stanSerwera.projectiles) {
                 let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles, 'projectiles') : stanSerwera.projectiles;
                 Object.values(bezpiecznePociski).forEach(proj => {
-                    if (czyWidoczny(proj.x, proj.y, 20)) {
-                        ctx.save(); ctx.translate(proj.x, proj.y); ctx.rotate(Math.atan2(proj.dy, proj.dx));
-                        ctx.fillStyle = proj.piercing ? '#3498db' : '#bdc3c7';
-                        if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; }
-                        ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5); ctx.closePath(); ctx.fill();
+                    if (czyWidoczny(proj.x, proj.y, 30)) {
+                        ctx.save(); 
+                        ctx.translate(proj.x, proj.y); 
+                        ctx.rotate(Math.atan2(proj.dy, proj.dx));
+                        
+                        if (proj.type === 'oszczep') {
+                            let kolorOszczepu = proj.piercing ? '#9b59b6' : '#bdc3c7'; 
+                            if (proj.mode === 'TEAMS') kolorOszczepu = proj.team === 'RED' ? '#e74c3c' : '#3498db';
+                            
+                            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { 
+                                ctx.shadowBlur = 15; 
+                                ctx.shadowColor = kolorOszczepu; 
+                            }
+                            
+                            // Drzewiec (kij)
+                            ctx.strokeStyle = '#555';
+                            ctx.lineWidth = 3;
+                            ctx.beginPath(); 
+                            ctx.moveTo(-20, 0); 
+                            ctx.lineTo(10, 0); 
+                            ctx.stroke();
+                            
+                            // Grot (ostrze)
+                            ctx.fillStyle = kolorOszczepu;
+                            ctx.beginPath(); 
+                            ctx.moveTo(10, -5); 
+                            ctx.lineTo(25, 0); 
+                            ctx.lineTo(10, 5); 
+                            ctx.closePath(); 
+                            ctx.fill();
+
+                            // Smuga światła na końcu
+                            ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                            ctx.beginPath(); ctx.arc(-20, 0, 2, 0, Math.PI*2); ctx.fill();
+
+                        } else if (proj.type === 'laser') {
+                            let kolorLasera = proj.team === 'BOSS' ? '#e74c3c' : '#f1c40f';
+                            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { 
+                                ctx.shadowBlur = 15; 
+                                ctx.shadowColor = kolorLasera; 
+                            }
+                            ctx.strokeStyle = kolorLasera;
+                            ctx.lineWidth = 5;
+                            ctx.lineCap = 'round';
+                            ctx.beginPath(); 
+                            ctx.moveTo(-15, 0); 
+                            ctx.lineTo(15, 0); 
+                            ctx.stroke();
+                        } else {
+                            // Wariant podstawowy
+                            ctx.fillStyle = proj.piercing ? '#3498db' : '#bdc3c7';
+                            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; }
+                            ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5); ctx.closePath(); ctx.fill();
+                        }
                         ctx.restore();
                     }
                 });
@@ -696,6 +910,9 @@ window.Grafika = (function() {
             rysujPostac(mojGracz, mojGracz.id, true);
 
             ctx.restore(); 
+
+            // NAKŁADANIE EFEKTÓW WIZUALNYCH (Niezależne od przesunięcia kamery)
+            rysujEfektyEkranu(tryb, stanSerwera, mojGracz);
 
             if (pokazDuzaMape) {
                 rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, false);

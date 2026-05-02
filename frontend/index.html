@@ -38,13 +38,8 @@
         <a href="mailto:roman.pietraszko@onet.eu" id="btn-support" class="main-btn border-blue" style="padding: 8px 12px; font-size: 14px; margin: 0; text-decoration: none; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.8);">🛠️ WSPARCIE</a>
     </div>
 
-    <div id="css-arena-bg">
-        <div class="neon-shape bot-red"></div>
-        <div class="neon-shape bot-purple"></div>
-        <div class="neon-shape food-yellow food-1"></div>
-        <div class="neon-shape food-yellow food-2"></div>
-        <div class="neon-shape food-yellow food-3"></div>
-    </div>
+    <!-- TŁO DLA DYNAMICZNEGO OGNIA (Wyczyszczone ze starych kółek, by skrypt mógł zadziałać) -->
+    <div id="css-arena-bg"></div>
 
     <div id="ui-layer">
         <div id="menu">
@@ -60,7 +55,7 @@
                     <strong style="color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.5);">CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i armię. Przetrwaj ataki, werbuj drony i pożeraj słabszych.<br><br>
                     <strong style="color: #f1c40f; text-shadow: 0 0 5px rgba(241, 196, 15, 0.6);">STEROWANIE:</strong>
                     <ul class="instrukcja-lista" style="list-style: none; padding-left: 0; margin-top: 8px; margin-bottom: 0;">
-                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Kursor Myszy:</strong> Kierunek ruchu i celowania</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Kursor Myszy / WASD:</strong> Kierunek ruchu i celowania</li>
                         <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>LPM (Kliknięcie):</strong> Rzut Oszczepem</li>
                         <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>SPACJA:</strong> Otwarcie Sklepu (tylko w Bazie/Zamku)</li>
                         <li style="position: relative; padding-left: 25px; margin-bottom: 0;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Klawisz E:</strong> Rozkaz Specjalny dla Roju (tylko tryb Drużyn)</li>
@@ -119,12 +114,29 @@
         
         <img id="uni-logo" src="/assety/logo.png" alt="Logo Uczelni" onerror="this.style.display='none'" style="position: absolute; top: 20px; left: 20px; width: 80px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); z-index: 100;">
 
-        <div id="survival-timer" class="hidden" style="position: absolute; top: 20px; left: 50%; transform: translateX(-50%); background: rgba(5,5,5,0.8); border: 2px solid #2ecc71; padding: 5px 15px; border-radius: 5px; color: #2ecc71; font-family: 'Exo 2', sans-serif; font-weight: bold; font-size: 18px;">
+        <!-- PASEK SIŁY DRUŻYN (Pojawia się tylko w TEAMS) -->
+        <div id="team-power-bar" class="hidden" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 400px; height: 25px; background: #111; border: 2px solid #555; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 0 15px rgba(0,0,0,0.8);">
+            <div id="bar-red" style="width: 50%; background: linear-gradient(90deg, #c0392b, #e74c3c); box-shadow: 0 0 15px #e74c3c; transition: width 0.4s ease-out; display: flex; align-items: center; padding-left: 10px; font-weight: bold; color: white; font-size: 12px; font-family: 'Exo 2', sans-serif;">RED</div>
+            <div id="bar-blue" style="width: 50%; background: linear-gradient(90deg, #3498db, #2980b9); box-shadow: 0 0 15px #3498db; transition: width 0.4s ease-out; display: flex; justify-content: flex-end; align-items: center; padding-right: 10px; font-weight: bold; color: white; font-size: 12px; font-family: 'Exo 2', sans-serif;">BLUE</div>
+        </div>
+
+        <div id="survival-timer" class="hidden" style="position: absolute; top: 45px; left: 50%; transform: translateX(-50%); background: rgba(5,5,5,0.8); border: 2px solid #2ecc71; padding: 5px 15px; border-radius: 5px; color: #2ecc71; font-family: 'Exo 2', sans-serif; font-weight: bold; font-size: 18px;">
             CZAS: <span id="time-display">00:00</span>
         </div>
 
         <div id="killfeed" style="position: absolute; top: 20px; right: 200px; width: 250px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; pointer-events: none;">
             </div>
+
+        <!-- PANEL FORMACJI (Pojawia się tylko w TEAMS) -->
+        <div id="formation-panel" class="hidden" style="position: absolute; bottom: 20px; right: 20px; background: rgba(10,10,15,0.9); border: 2px solid #9b59b6; padding: 15px; border-radius: 8px; color: #fff; font-family: 'Exo 2', sans-serif; box-shadow: 0 0 15px rgba(155, 89, 182, 0.4);">
+            <h3 style="margin: 0 0 10px 0; color: #9b59b6; font-size: 16px; text-transform: uppercase;">Zarządzanie Rujem</h3>
+            <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.8;">
+                <li><strong style="color:#f1c40f;">[1]</strong> Mur Tarcz <span style="color:#aaa; font-size: 11px;">(Defensywa)</span></li>
+                <li><strong style="color:#f1c40f;">[2]</strong> Klin <span style="color:#aaa; font-size: 11px;">(Szarża)</span></li>
+                <li><strong style="color:#f1c40f;">[3]</strong> Tyraliera <span style="color:#aaa; font-size: 11px;">(Oskrzydlenie)</span></li>
+                <li><strong style="color:#f1c40f;">[4]</strong> Tryb Manualny <span id="current-form-4" style="color:#2ecc71; margin-left: 5px;">[Aktywny]</span></li>
+            </ul>
+        </div>
 
         <div id="midas-tutorial" class="hidden" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,10,15,0.9); border: 2px solid #f1c40f; padding: 15px 25px; border-radius: 8px; color: #fff; font-size: 16px; text-align: center; box-shadow: 0 0 15px rgba(241,196,15,0.3);">
             <strong style="color: #f1c40f;">[Midas]:</strong> <span id="midas-text">Witaj na arenie! Zbieraj jedzenie, by rosnąć.</span>
@@ -163,6 +175,29 @@
                         console.log('⚠️ [PWA] Rejestracja Service Workera nie powiodła się:', error);
                     });
             });
+        }
+    </script>
+
+    <!-- POTEŻNY GENERATOR ISKIER W TLE -->
+    <script>
+        const bg = document.getElementById('css-arena-bg');
+        // Tworzymy aż 100 gęstych iskier!
+        for (let i = 0; i < 100; i++) {
+            let ember = document.createElement('div');
+            ember.classList.add('ember');
+            
+            ember.style.left = Math.random() * 100 + 'vw';
+            
+            // Różne grubości dla perspektywy (od 2px do 7px)
+            let size = Math.random() * 5 + 2;
+            ember.style.width = size + 'px';
+            ember.style.height = size + 'px';
+            
+            // Ekstremalne różnice w prędkości lotu iskier
+            ember.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            ember.style.animationDelay = Math.random() * 5 + 's';
+            
+            bg.appendChild(ember);
         }
     </script>
 
