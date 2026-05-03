@@ -50,46 +50,47 @@ canvas {
     z-index: 100;
 }
 
-/* GLASSMORPHISM - MROŻONE SZKŁO I WYBUCHOWE WEJŚCIE (MENU GŁÓWNE) */
+/* ==========================================
+   NOWE MROCZNE MENU Z WIRUJĄCYM PŁOMIENIEM
+   ========================================== */
 #menu {
     position: relative; /* Wymagane do płonącej ramki */
-    background: rgba(10, 10, 15, 0.45);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    background: #080808; /* CAŁKOWICIE NIEPRZEZROCZYSTA CZERŃ - ogień nie wchodzi do środka! */
     padding: 30px;
     border-radius: 12px;
-    border: 2px solid rgba(52, 152, 219, 0.5);
+    border: none; /* Usuwamy statyczną ramkę, bo będzie animowana */
     /* Animacja potężnego wejścia */
     animation: menuExplosion 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
     text-align: center;
     width: 90%;
     max-width: 450px;
+    z-index: 1; /* Utrzymuje zawartość nad płomieniem */
 }
 
 /* Animacja rozbłysku przy wejściu na stronę */
 @keyframes menuExplosion {
     0% { transform: scale(0.7) translateY(100px); opacity: 0; box-shadow: 0 0 0px #ff5722; }
     40% { box-shadow: 0 0 120px 30px rgba(255, 87, 34, 0.8); } /* BŁYSK! */
-    100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), inset 0 0 20px rgba(52, 152, 219, 0.1); }
+    100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9); }
 }
 
 /* Krążąca, ognista plazma wokół ramki menu */
 #menu::before {
     content: '';
     position: absolute;
-    top: -3px; left: -3px; right: -3px; bottom: -3px;
+    top: -4px; left: -4px; right: -4px; bottom: -4px; /* Grubość ognia */
     border-radius: 14px; /* Dopasowane do #menu */
-    background: linear-gradient(45deg, rgba(17,17,17,0), #e74c3c, #ff9800, #e74c3c, rgba(17,17,17,0));
-    background-size: 400%;
+    background: linear-gradient(60deg, #111 0%, #e74c3c 25%, #ff9800 50%, #e74c3c 75%, #111 100%);
+    background-size: 300% 300%;
     z-index: -1;
-    animation: fireBorder 3s linear infinite;
-    opacity: 0.8;
+    animation: fireBorder 1.5s linear infinite;
+    box-shadow: 0 0 20px rgba(231, 76, 60, 0.8), 0 0 40px rgba(255, 152, 0, 0.5); /* Mocna łuna rzucana na zewnątrz */
 }
 
 @keyframes fireBorder {
-    0% { background-position: 0% 0%; }
-    50% { background-position: 100% 100%; }
-    100% { background-position: 0% 0%; }
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
 }
 
 h1 {
@@ -114,9 +115,9 @@ h1 {
 input {
     width: 100%;
     padding: 15px;
-    background: rgba(5, 5, 5, 0.8);
+    background: rgba(15, 15, 15, 0.9); /* Ciemniejsze, by pasowały do nowego menu */
     color: #ffffff;
-    border: 2px solid #444;
+    border: 2px solid #333;
     border-radius: 8px;
     font-family: inherit;
     font-size: 20px;
@@ -126,13 +127,13 @@ input {
 }
 
 input:focus {
-    border-color: #3498db;
+    border-color: #e74c3c;
     outline: none;
-    box-shadow: 0 0 15px rgba(52, 152, 219, 0.4);
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.6);
 }
 
 .main-btn {
-    background: rgba(5, 5, 5, 0.8);
+    background: rgba(15, 15, 15, 0.9);
     color: #ffffff;
     padding: 15px;
     width: 100%;
@@ -403,22 +404,29 @@ input:focus {
     overflow: hidden;
 }
 
-/* AGRESYWNE ISKRY (Ogień generowany skryptem) */
+/* ==========================================
+   ZAAWANSOWANE ISKRY (Realistyczne Kolory Bez Bieli!)
+   ========================================== */
 .ember {
     position: absolute;
-    bottom: -20px;
-    background: #fff; /* Gorący, biały rdzeń */
+    bottom: -50px;
     border-radius: 50%;
-    /* Wielka, ognista poświata wokół małego rdzenia */
-    box-shadow: 0 0 10px #ffeb3b, 0 0 20px #ff9800, 0 0 40px #e74c3c; 
-    animation: rise 5s infinite cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    background: transparent; /* Brak białego rdzenia! */
+    /* Nakładające się na siebie gorące cienie - żółty, pomarańcz i czerwień */
+    box-shadow: 
+        0 0 10px 4px #ff9800,  
+        0 0 20px 8px #ff5722,  
+        0 0 30px 12px #e74c3c; 
+    filter: blur(2px); /* Lekkie optyczne rozmycie soczewki */
+    animation: rise 5s infinite ease-in;
     opacity: 0;
+    mix-blend-mode: screen; /* Efekt światła - ładnie miesza się z tłem */
 }
 
 @keyframes rise {
-    0% { transform: translateY(0) translateX(0) scale(1.5); opacity: 1; }
-    50% { opacity: 0.8; }
-    100% { transform: translateY(-100vh) translateX(100px) scale(0); opacity: 0; }
+    0% { transform: translateY(0) translateX(0) scale(0.5); opacity: 1; }
+    50% { opacity: 0.8; transform: translateY(-50vh) translateX(30px) scale(1.3); }
+    100% { transform: translateY(-100vh) translateX(-30px) scale(0.3); opacity: 0; }
 }
 
 /* -------------------------------------------------------------

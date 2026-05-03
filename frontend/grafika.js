@@ -8,6 +8,7 @@ window.Grafika = (function() {
     
     // --- ZMIENNE SYSTEMOWE ---
     let camera = { x: 0, y: 0 };
+    let cameraScale = 1.0; // NOWOŚĆ: Dynamiczny Zoom
     let screenW = window.innerWidth;
     let screenH = window.innerHeight;
     
@@ -22,6 +23,11 @@ window.Grafika = (function() {
     let czasWejsciaGraczy = {};
     let pokazDuzaMape = false;
     let wstrzasEkranu = { moc: 0, wygasanie: 0.9 }; // System trzęsienia kamery
+    
+    // NOWOŚĆ: System fizycznych cząsteczek i Pływającego Tekstu (Gore & Combat Text)
+    let efektyWizualne = [];
+    let powiadomieniaLiczbowe = []; 
+    let poprzedniePozycje = { players: {}, bots: {} };
 
     // Nasłuchiwanie klawisza M
     window.addEventListener('keydown', (e) => {
@@ -51,15 +57,85 @@ window.Grafika = (function() {
     window.addEventListener('resize', resize);
     resize();
 
-    // Optymalizacja: Culling (Rysuje tylko to, co widzi kamera)
+    // Optymalizacja: Culling (Rysuje tylko to, co widzi kamera z uwzględnieniem zooma)
     function czyWidoczny(x, y, promien) {
-        const margines = 150;
+        const margines = 250 / cameraScale; // Margines rośnie, gdy oddalamy kamerę
         return (
             x + promien + margines > camera.x &&
-            x - promien - margines < camera.x + screenW &&
+            x - promien - margines < camera.x + screenW / cameraScale &&
             y + promien + margines > camera.y &&
-            y - promien - margines < camera.y + screenH
+            y - promien - margines < camera.y + screenH / cameraScale
         );
+    }
+
+    // --- SYSTEM FX (Cząsteczki Wybuchów i Liczby Obrażeń) ---
+    function generujWybuch(x, y, kolor, moc) {
+        let ilosc = Math.min(moc, 60); // Max 60 iskier, żeby chronić starsze telefony
+        for(let i=0; i<ilosc; i++) {
+            let kat = Math.random() * Math.PI * 2;
+            let predkosc = Math.random() * 12 + 3;
+            efektyWizualne.push({
+                x: x, y: y,
+                vx: Math.cos(kat) * predkosc, vy: Math.sin(kat) * predkosc,
+                zycie: 1.0, kolor: kolor, rozmiar: Math.random() * 5 + 2
+            });
+        }
+    }
+
+    function dodajPowiadomienie(x, y, roznica) {
+        if (roznica === 0) return;
+        let znak = roznica > 0 ? '+' : '';
+        let kolor = roznica > 0 ? '#2ecc71' : '#e74c3c';
+        powiadomieniaLiczbowe.push({
+            x: x + (Math.random() * 30 - 15), // Lekkie rozproszenie na boki
+            y: y - 40,
+            vy: -2 - Math.random(), // Leci do góry
+            tekst: znak + Math.floor(roznica),
+            kolor: kolor,
+            zycie: 1.0
+        });
+    }
+
+    function aktualizujEfektyZniszczen() {
+        // Cząsteczki fizyczne (Gore)
+        for(let i = efektyWizualne.length - 1; i >= 0; i--) {
+            let p = efektyWizualne[i];
+            p.x += p.vx; p.y += p.vy;
+            p.vx *= 0.92; p.vy *= 0.92; // Tarcie - zwalniają z czasem
+            p.zycie -= 0.03;
+            
+            if (p.zycie <= 0) { efektyWizualne.splice(i, 1); continue; }
+            
+            if (czyWidoczny(p.x, p.y, p.rozmiar)) {
+                ctx.globalAlpha = p.zycie;
+                ctx.fillStyle = p.kolor;
+                if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = p.kolor; }
+                ctx.beginPath(); ctx.arc(p.x, p.y, p.rozmiar * p.zycie, 0, Math.PI*2); ctx.fill();
+                ctx.shadowBlur = 0; ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // Floating Text (Obrażenia i leczenie)
+        ctx.font = 'bold 20px Exo 2, sans-serif';
+        ctx.textAlign = 'center';
+        for(let i = powiadomieniaLiczbowe.length - 1; i >= 0; i--) {
+            let txt = powiadomieniaLiczbowe[i];
+            txt.y += txt.vy;
+            txt.vy *= 0.95; 
+            txt.zycie -= 0.02;
+
+            if (txt.zycie <= 0) { powiadomieniaLiczbowe.splice(i, 1); continue; }
+
+            if (czyWidoczny(txt.x, txt.y, 20)) {
+                ctx.globalAlpha = txt.zycie;
+                ctx.fillStyle = txt.kolor;
+                ctx.strokeStyle = '#000';
+                ctx.lineWidth = 3;
+                ctx.strokeText(txt.tekst, txt.x, txt.y);
+                ctx.fillText(txt.tekst, txt.x, txt.y);
+                ctx.globalAlpha = 1.0;
+            }
+        }
     }
 
     // --- ŚRODOWISKO I MAPA Z POGODĄ ---
@@ -76,11 +152,9 @@ window.Grafika = (function() {
             let rozmiar = Math.random() * 2;
 
             if (tryb === 'TEAMS') {
-                // Szybki wojenny deszcz popiołu
                 predkoscX = (Math.random() * 2 + 1); 
                 predkoscY = (Math.random() * 3 + 2);
             } else if (tryb === 'CAMPAIGN') {
-                // Powolne, mroczne zarodniki
                 rozmiar = Math.random() * 4 + 1;
                 predkoscX = (Math.random() - 0.5) * 0.2;
                 predkoscY = (Math.random() - 0.5) * 0.2;
@@ -114,26 +188,28 @@ window.Grafika = (function() {
     function aktualizujCząsteczki(tryb) {
         czasteczkiTla.forEach(c => {
             c.x += c.speedX; c.y += c.speedY;
-            if (c.x < 0) c.x = screenW; if (c.x > screenW) c.x = 0;
-            if (c.y < 0) c.y = screenH; if (c.y > screenH) c.y = 0;
             
+            // Poprawka dla Zooma: Zapewnia, by pyłki renderowały się na całym powiększonym obszarze kamery
+            if (c.x < 0) c.x = screenW / cameraScale; if (c.x > screenW / cameraScale) c.x = 0;
+            if (c.y < 0) c.y = screenH / cameraScale; if (c.y > screenH / cameraScale) c.y = 0;
+            
+            let drawX = camera.x + c.x;
+            let drawY = camera.y + c.y;
+
             if (tryb === 'TEAMS') {
-                // Rysowanie dynamicznych linii iskier/deszczu
                 ctx.fillStyle = `rgba(200, 200, 200, ${c.alpha})`;
                 ctx.beginPath(); 
-                ctx.moveTo(camera.x + c.x, camera.y + c.y); 
-                ctx.lineTo(camera.x + c.x - c.speedX * 3, camera.y + c.y - c.speedY * 3); 
+                ctx.moveTo(drawX, drawY); 
+                ctx.lineTo(drawX - c.speedX * 3, drawY - c.speedY * 3); 
                 ctx.strokeStyle = ctx.fillStyle; 
                 ctx.lineWidth = 1.5; 
                 ctx.stroke();
             } else if (tryb === 'CAMPAIGN') {
-                // Rozmyte, niepokojące plamy
                 ctx.fillStyle = `rgba(180, 20, 20, ${c.alpha * 0.4})`;
-                ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(drawX, drawY, c.r, 0, Math.PI*2); ctx.fill();
             } else {
-                // Standardowe białe neonowe pyłki
                 ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
-                ctx.beginPath(); ctx.arc(camera.x + c.x, camera.y + c.y, c.r, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(drawX, drawY, c.r, 0, Math.PI*2); ctx.fill();
             }
         });
     }
@@ -146,17 +222,15 @@ window.Grafika = (function() {
         ctx.save();
         ctx.translate(x, y);
 
-        // Fosa / Pole Siłowe (Strefa Bezpieczna)
         ctx.beginPath();
         ctx.arc(0, 0, 400, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(${kolorWiodacy}, 0.05)`; // Delikatna poświata wewnątrz
+        ctx.fillStyle = `rgba(${kolorWiodacy}, 0.05)`; 
         ctx.fill();
         ctx.lineWidth = 4;
         ctx.strokeStyle = `rgba(${kolorWiodacy}, 0.6)`;
-        ctx.setLineDash([15, 20]); // Przerywany, technologiczny laser
+        ctx.setLineDash([15, 20]); 
         ctx.stroke();
 
-        // Główna bryła bazy (Cyber-Bunkier)
         ctx.beginPath();
         ctx.rect(-150, -150, 300, 300);
         ctx.fillStyle = '#0a0a0a';
@@ -170,20 +244,17 @@ window.Grafika = (function() {
         }
         ctx.stroke();
 
-        // Rdzeń centralny zbrojowni
         ctx.beginPath();
         ctx.rect(-80, -80, 160, 160);
         ctx.fillStyle = `rgba(${kolorWiodacy}, 0.2)`;
         ctx.fill();
 
-        // Holograficzny podpis bazy
         ctx.fillStyle = '#ffffff';
         ctx.font = 'bold 24px Exo 2';
         ctx.textAlign = 'center';
         ctx.shadowBlur = 0;
         ctx.fillText(nazwa, 0, -180);
 
-        // Hologram Sklepu (Pulsujący)
         ctx.save();
         ctx.rotate(czas / 1000);
         ctx.strokeStyle = '#fff';
@@ -196,19 +267,19 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    function rysujMape(tryb, limitSwiata) {
-        ctx.fillStyle = '#050505'; 
-        ctx.fillRect(camera.x, camera.y, screenW, screenH);
+    function rysujMape(tryb, limitSwiata, stanSerwera) {
+        ctx.fillStyle = '#08080a'; 
+        // Wypełniamy tło z uwzględnieniem zooma
+        ctx.fillRect(camera.x, camera.y, screenW / cameraScale, screenH / cameraScale);
         aktualizujCząsteczki(tryb);
 
-        // Siatka
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)'; ctx.lineWidth = 1;
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.1)'; ctx.lineWidth = 1.5;
         const siatkaRozmiar = 200;
         const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar;
         const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
         ctx.beginPath();
-        for(let x = startX; x < camera.x + screenW; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH); }
-        for(let y = startY; y < camera.y + screenH; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW, y); }
+        for(let x = startX; x < camera.x + screenW / cameraScale; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH / cameraScale); }
+        for(let y = startY; y < camera.y + screenH / cameraScale; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW / cameraScale, y); }
         ctx.stroke();
 
         if (mapaObiekty.swiatla) {
@@ -222,7 +293,6 @@ window.Grafika = (function() {
             });
         }
 
-        // Granice Świata
         ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 6;
         if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#e74c3c'; }
         ctx.strokeRect(0, 0, limitSwiata, limitSwiata);
@@ -231,15 +301,21 @@ window.Grafika = (function() {
         const czas = Date.now();
 
         if (tryb === 'TEAMS') {
-            // Generowanie potężnych baz dla trybu drużynowego
             rysujZamek(500, 3000, '231, 76, 60', 'BAZA CZERWONYCH');
             rysujZamek(5500, 3000, '52, 152, 219', 'BAZA NIEBIESKICH');
         } 
         else if (tryb === 'FREE') {
-            // Krzaki (Stealth)
             mapaObiekty.krzaki.forEach(k => {
                 if(czyWidoczny(k.x, k.y, k.r)) {
-                    ctx.save(); ctx.translate(k.x, k.y);
+                    // NOWOŚĆ: Interaktywne krzaki (szelest, jeśli ktoś tam siedzi)
+                    let drganie = 0;
+                    if (stanSerwera) {
+                        let ktosJestWKrzaku = Object.values(stanSerwera.players).some(p => Math.hypot(p.x - k.x, p.y - k.y) < k.r) || 
+                                              Object.values(stanSerwera.bots).some(b => Math.hypot(b.x - k.x, b.y - k.y) < k.r);
+                        if (ktosJestWKrzaku) drganie = Math.sin(czas / 40) * 4;
+                    }
+
+                    ctx.save(); ctx.translate(k.x + drganie, k.y);
                     let krzakGrad = ctx.createRadialGradient(0, 0, 0, 0, 0, k.r);
                     krzakGrad.addColorStop(0, 'rgba(46, 204, 113, 0.05)'); krzakGrad.addColorStop(1, 'rgba(10, 30, 15, 0.8)');
                     ctx.fillStyle = krzakGrad; ctx.strokeStyle = 'rgba(46, 204, 113, 0.4)'; ctx.lineWidth = 4;
@@ -252,10 +328,9 @@ window.Grafika = (function() {
                 }
             });
             
-            // --- IKONICZNY ZAMEK Z PRZODU + FOSA ---
             if (czyWidoczny(2000, 2000, 400)) {
                 ctx.save(); 
-                ctx.translate(2000, 2000); // Środek mapy
+                ctx.translate(2000, 2000); 
                 
                 let puls = Math.abs(Math.sin(czas / 500)); 
 
@@ -329,7 +404,6 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE DRONÓW AI (AURY FRAKCYJNE) ---
     function rysujBota(bot) {
         if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
 
@@ -345,15 +419,12 @@ window.Grafika = (function() {
         ctx.translate(bot.x, bot.y);
         ctx.rotate(bot.angle || 0);
 
-        // KONTROLA KOLORU I AURY (Zależne od bycia w Drużynie)
         let mainColor = isBoss ? '#9b59b6' : '#e74c3c';
         let strokeColor = mainColor;
         
         if (bot.ownerId && bot.team) {
-            // Jeśli bot został zwerbowany do armii - nadpisujemy wygląd!
             strokeColor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
             
-            // Rysowanie pulsującej Aury na ziemi dla zwerbowanych
             ctx.save();
             ctx.beginPath();
             ctx.arc(0, 0, promien + 8, 0, Math.PI * 2);
@@ -410,24 +481,31 @@ window.Grafika = (function() {
 
         ctx.restore();
 
-        // Nie rysujemy nicku Bossa na samej postaci, bo ma teraz wielki pasek u góry ekranu w kampanii
+        // Pierścień zdrowia dla bota
+        ctx.save();
+        ctx.translate(bot.x, bot.y);
+        let massPercent = Math.min(1, masa / 600);
+        ctx.beginPath();
+        ctx.arc(0, 0, promien + 6, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * massPercent));
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.5;
+        ctx.stroke();
+        ctx.restore();
+
         if (!isBoss) {
             ctx.save();
             ctx.translate(bot.x, bot.y);
             ctx.fillStyle = strokeColor;
             ctx.font = 'bold 12px Exo 2, sans-serif';
             ctx.textAlign = 'center';
-            
-            // Dodawanie tagu frakcji do nazwy bota
             let factionTag = "";
             if (bot.ownerId) factionTag = bot.team === 'RED' ? "[RED] " : "[BLUE] ";
-            
             ctx.fillText(`${factionTag}${bot.name} (${Math.floor(masa)})`, 0, -promien - 15);
             ctx.restore();
         }
     }
 
-    // --- RYSOWANIE GRACZY (Z Systemem Visual Progression!) ---
     function rysujPostac(postac, id, isMe) {
         if (!postac || !czyWidoczny(postac.x, postac.y, 100)) return;
 
@@ -438,15 +516,13 @@ window.Grafika = (function() {
 
         if (wKrzaku && !isMe) return; 
 
-        // TWARDY LIMIT WIELKOŚCI GRACZA (Żeby nie zasłaniał całego ekranu!)
         let masa = Math.max(10, postac.score || 10);
         let obliczonyPromien = 20 + Math.sqrt(masa) * 2;
-        let promien = Math.min(obliczonyPromien, 65); // Zablokowane na max 65 pikseli promienia
+        let promien = Math.min(obliczonyPromien, 65); 
         
         let skin = postac.skin || 'standard';
         let currentTime = Date.now();
 
-        // Rejestrowanie czasu wejścia dla efektu zrzutu orbitalnego
         if (!czasWejsciaGraczy[id]) {
             czasWejsciaGraczy[id] = currentTime;
         }
@@ -455,24 +531,18 @@ window.Grafika = (function() {
         ctx.save(); 
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4; 
 
-        // 1. DESANT ORBITALNY (Efekt WOW przez pierwsze 1.2 sekundy)
         if (czasOdWejscia < 1200) {
             let op = 1 - (czasOdWejscia / 1200);
             ctx.save();
             ctx.translate(postac.x, postac.y);
-            
-            // Filar światła
             ctx.fillStyle = `rgba(52, 152, 219, ${op * 0.6})`;
             ctx.fillRect(-promien, -screenH, promien*2, screenH);
-            
-            // Fala uderzeniowa (Shockwave)
             ctx.strokeStyle = `rgba(52, 152, 219, ${op})`;
             ctx.lineWidth = 15 * op;
             ctx.beginPath(); ctx.arc(0, 0, promien + (czasOdWejscia * 0.3), 0, Math.PI*2); ctx.stroke();
             ctx.restore();
         }
 
-        // 2. ŚLAD RUCHU (Dla ciężkich postaci)
         if (masa >= 300 && !wKrzaku) {
             if (!sladPostaci[id]) sladPostaci[id] = [];
             sladPostaci[id].push({x: postac.x, y: postac.y});
@@ -485,7 +555,6 @@ window.Grafika = (function() {
             });
         }
 
-        // 3. RYSOWANIE SAMEJ POSTACI (Z rotacją)
         ctx.save();
         ctx.translate(postac.x, postac.y);
         let postacKat = postac.kat || 0;
@@ -503,52 +572,41 @@ window.Grafika = (function() {
             ctx.fillStyle = '#555';
             ctx.beginPath(); ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.fill();
         }
-        ctx.shadowBlur = 0; // Reset cienia dla nakładek
+        ctx.shadowBlur = 0; 
 
-        // ==========================================
-        // SYSTEM VISUAL PROGRESSION (NAKŁADKI)
-        // ==========================================
+        let kolorZbroi = '#3498db'; 
+        if (skin === 'ninja') kolorZbroi = '#9b59b6'; 
+        if (skin === 'arystokrata') kolorZbroi = '#e74c3c'; 
         
-        // Definiowanie kolorów klasowych do pancerza
-        let kolorZbroi = '#3498db'; // Standard (Niebieski)
-        if (skin === 'ninja') kolorZbroi = '#9b59b6'; // Fioletowy
-        if (skin === 'arystokrata') kolorZbroi = '#e74c3c'; // Czerwony/Złoty
-        
-        // A. EWOLUCJA OSZCZEPU (Trzymany w prawej ręce)
         ctx.save();
-        ctx.translate(promien * 0.7, promien * 0.2); // Przesunięcie do prawej dłoni
-        ctx.rotate(Math.PI / -4); // Wychylenie broni w przód
+        ctx.translate(promien * 0.7, promien * 0.2); 
+        ctx.rotate(Math.PI / -4); 
         
-        // Obliczanie ewolucji od 10 do 49 masy
         let progresOszczepu = Math.min(1, Math.max(0, (masa - 10) / 39)); 
-        let hue = Math.floor(0 + 280 * progresOszczepu); // Od szarości/czerwieni do fioletu (280)
+        let hue = Math.floor(0 + 280 * progresOszczepu); 
         let saturation = Math.floor(0 + 80 * progresOszczepu);
         let lightness = Math.floor(60 - 10 * progresOszczepu);
         
         let kolorOszczepu = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
         
         ctx.strokeStyle = kolorOszczepu;
-        ctx.lineWidth = 4 + (2 * progresOszczepu); // Oszczep grubieje
+        ctx.lineWidth = 4 + (2 * progresOszczepu); 
         if (progresOszczepu > 0.8 && window.Flagi && !window.Flagi.Srodowisko.isMobile) {
             ctx.shadowBlur = 10; ctx.shadowColor = kolorOszczepu;
         }
-        // Drzewiec
         ctx.beginPath(); ctx.moveTo(0, -promien); ctx.lineTo(0, promien); ctx.stroke();
-        // Grot
         ctx.fillStyle = kolorOszczepu;
         ctx.beginPath(); ctx.moveTo(-5, -promien); ctx.lineTo(5, -promien); ctx.lineTo(0, -promien - 15); ctx.closePath(); ctx.fill();
         ctx.restore();
 
-        // B. TIER 1: PUKLERZ / NARAMIENNIK (Masa >= 50)
         if (masa >= 50) {
             ctx.save();
-            ctx.translate(-promien * 0.8, 0); // Lewe ramię
+            ctx.translate(-promien * 0.8, 0); 
             ctx.fillStyle = '#111';
             ctx.strokeStyle = kolorZbroi;
             ctx.lineWidth = 3;
             if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = kolorZbroi; }
             
-            // Kształt naramiennika
             ctx.beginPath();
             ctx.moveTo(-10, -15);
             ctx.lineTo(-20, 0);
@@ -557,9 +615,8 @@ window.Grafika = (function() {
             ctx.closePath();
             ctx.fill(); ctx.stroke();
             
-            // C. TIER 4: WZMOCNIONY PUKLERZ ENERGETYCZNY (Masa >= 150)
             if (masa >= 150) {
-                ctx.rotate(currentTime / 500); // Rotacja tarczy
+                ctx.rotate(currentTime / 500); 
                 ctx.strokeStyle = `rgba(${kolorZbroi === '#3498db' ? '52,152,219' : kolorZbroi === '#9b59b6' ? '155,89,182' : '231,76,60'}, 0.6)`;
                 ctx.setLineDash([5, 10]);
                 ctx.lineWidth = 4;
@@ -567,28 +624,23 @@ window.Grafika = (function() {
             }
             ctx.restore();
         }
-        ctx.restore(); // Koniec transformacji rotacji dla całej postaci
+        ctx.restore(); 
 
-        // D. TIER 5: KORONA WŁADCY (Masa >= 600)
         if (masa >= 600) {
             ctx.save();
-            ctx.translate(postac.x, postac.y - promien - 20); // Zawsze nad głową (nie obraca się z ciałem)
-            // Lekkie unoszenie się (Hover)
+            ctx.translate(postac.x, postac.y - promien - 20); 
             ctx.translate(0, Math.sin(currentTime / 200) * 5); 
-            
-            ctx.fillStyle = '#f1c40f'; // Czyste złoto
+            ctx.fillStyle = '#f1c40f'; 
             if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 15; ctx.shadowColor = '#f1c40f'; }
-            
             ctx.beginPath();
-            ctx.moveTo(-15, 0); ctx.lineTo(-20, -15); // Lewy róg
-            ctx.lineTo(-7, -5); ctx.lineTo(0, -20);   // Środek
-            ctx.lineTo(7, -5); ctx.lineTo(20, -15);   // Prawy róg
+            ctx.moveTo(-15, 0); ctx.lineTo(-20, -15); 
+            ctx.lineTo(-7, -5); ctx.lineTo(0, -20);   
+            ctx.lineTo(7, -5); ctx.lineTo(20, -15);   
             ctx.lineTo(15, 0); ctx.closePath();
             ctx.fill();
             ctx.restore();
         }
 
-        // Tarcze Ochronne / Zdolności (Bezpieczna Strefa i Q)
         if (postac.isSafe) { 
             ctx.save();
             ctx.translate(postac.x, postac.y);
@@ -608,10 +660,20 @@ window.Grafika = (function() {
             ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, Math.PI*2); ctx.stroke(); 
             ctx.restore();
         }
-        
-        ctx.restore(); // Całkowite zamknięcie głównego stanu (reset alpha itp)
+        ctx.restore(); 
 
-        // RENDEROWANIE NICKU I MASY
+        // Pierścień HP gracza
+        ctx.save();
+        ctx.translate(postac.x, postac.y);
+        let massPercent = Math.min(1, masa / 600);
+        ctx.beginPath();
+        ctx.arc(0, 0, promien + 6, -Math.PI/2, (-Math.PI/2) + (Math.PI * 2 * massPercent));
+        ctx.strokeStyle = (postac.team === 'RED') ? '#e74c3c' : ((postac.team === 'BLUE') ? '#3498db' : '#f1c40f');
+        ctx.lineWidth = 3;
+        ctx.globalAlpha = 0.8;
+        ctx.stroke();
+        ctx.restore();
+
         ctx.save();
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4;
         ctx.translate(postac.x, postac.y);
@@ -624,10 +686,8 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    // --- ZAKTUALIZOWANE EFEKTY WIZUALNE I PASKI BOSSA ---
     function rysujEfektyEkranu(tryb, stanSerwera, mojGracz) {
         if (tryb === 'TEAMS' && mojGracz.team) {
-            // Poświata na krawędziach zależna od drużyny
             let gradient = ctx.createRadialGradient(screenW/2, screenH/2, screenH/1.5, screenW/2, screenH/2, screenW);
             let teamColor = mojGracz.team === 'RED' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(52, 152, 219, 0.2)';
             gradient.addColorStop(0, 'rgba(0,0,0,0)');
@@ -636,64 +696,53 @@ window.Grafika = (function() {
             ctx.fillRect(0, 0, screenW, screenH);
         } 
         else if (tryb === 'CAMPAIGN') {
-            // Prawdziwa Mgła Wojny (Tylko otoczenie gracza jest widoczne)
             ctx.save();
             ctx.setTransform(1, 0, 0, 1, 0, 0); 
-            
             let masaDoŚwiatła = Math.max(10, mojGracz.score || 10);
-            let promienSwiatla = 250 + Math.sqrt(masaDoŚwiatła) * 8; // Światło rośnie z masą
+            let promienSwiatla = 250 + Math.sqrt(masaDoŚwiatła) * 8; 
             
-            // Tworzenie ciemnego płótna z wyciętą dziurą (Światło latarki)
             let gradient = ctx.createRadialGradient(screenW/2, screenH/2, promienSwiatla * 0.4, screenW/2, screenH/2, promienSwiatla);
-            gradient.addColorStop(0, 'rgba(0,0,0,0)'); // Środek jest przeźroczysty
-            gradient.addColorStop(1, 'rgba(5,5,5,0.96)'); // Krawędzie ucinają widoczność do czerni
+            gradient.addColorStop(0, 'rgba(0,0,0,0)'); 
+            gradient.addColorStop(1, 'rgba(5,5,5,0.96)'); 
             
             ctx.fillStyle = gradient;
             ctx.fillRect(0, 0, screenW, screenH);
             
-            // Dorysowanie absolutnej czerni poza okręgiem
             ctx.beginPath();
             ctx.rect(0, 0, screenW, screenH);
             ctx.arc(screenW/2, screenH/2, promienSwiatla, 0, Math.PI*2, true);
             ctx.fillStyle = 'rgba(5,5,5,0.96)';
             ctx.fill();
 
-            // Rysowanie UI Bossa (Jeśli istnieje)
             let bossAlive = null;
             if (stanSerwera.bots) {
                 Object.values(stanSerwera.bots).forEach(b => { if (b.isBoss || b.skin === 'ninja') bossAlive = b; });
             }
             
             if (bossAlive) {
-                // Alarm na krawędziach
                 let alarmAlpha = Math.abs(Math.sin(Date.now() / 300)) * 0.2;
                 ctx.fillStyle = `rgba(231, 76, 60, ${alarmAlpha})`;
                 ctx.fillRect(0, 0, screenW, screenH);
 
-                // GIGANTYCZNY PASEK ZDROWIA BOSSA
                 let barW = Math.min(screenW * 0.7, 800);
                 let barH = 22;
                 let barX = (screenW - barW) / 2;
                 let barY = 50;
                 
-                // Obliczanie % HP (Boss w serwerze zaczyna od 1500 masy)
                 let maxBossHp = bossAlive.maxScore || 1500;
                 let hpPercent = Math.max(0, bossAlive.score / maxBossHp);
                 
-                // Tło Paska
                 ctx.fillStyle = 'rgba(15, 0, 0, 0.8)';
                 ctx.fillRect(barX, barY, barW, barH);
                 ctx.strokeStyle = '#333';
                 ctx.lineWidth = 3;
                 ctx.strokeRect(barX, barY, barW, barH);
                 
-                // Wypełnienie Czerwienią
                 ctx.fillStyle = '#e74c3c';
                 if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 20; ctx.shadowColor = '#e74c3c'; }
                 ctx.fillRect(barX, barY, barW * hpPercent, barH);
                 ctx.shadowBlur = 0;
 
-                // Tytuł nad paskiem
                 ctx.fillStyle = '#fff';
                 ctx.font = 'bold 22px Permanent Marker, sans-serif';
                 ctx.textAlign = 'center';
@@ -703,10 +752,8 @@ window.Grafika = (function() {
         }
     }
 
-    // --- RYSOWANIE MAPY TAKTYCZNEJ ---
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
         ctx.save();
-        
         let mapSize = czyMala ? 160 : Math.min(screenW, screenH) * 0.7;
         let startX = czyMala ? screenW - mapSize - 20 : (screenW - mapSize) / 2;
         let startY = czyMala ? 20 : (screenH - mapSize) / 2;
@@ -732,46 +779,25 @@ window.Grafika = (function() {
             ctx.fillStyle = 'rgba(241, 196, 15, 0.05)';
 
             ctx.beginPath();
-            ctx.moveTo(-castleWidth/2, castleHeight/2);
-            ctx.lineTo(castleWidth/2, castleHeight/2);
-            ctx.lineTo(castleWidth/2, 0);
-
-            ctx.lineTo(castleWidth*0.6, 0); ctx.lineTo(castleWidth*0.6, -castleHeight*0.1);
-            ctx.lineTo(castleWidth*0.7, -castleHeight*0.1); ctx.lineTo(castleWidth*0.7, 0);
-            
-            ctx.lineTo(castleWidth/2, 0);
-            ctx.lineTo(castleWidth*0.4, -castleHeight*0.3);
-            ctx.lineTo(0, -castleHeight/2); 
-            ctx.lineTo(-castleWidth*0.4, -castleHeight*0.3);
-
-            ctx.lineTo(-castleWidth/2, 0);
-            ctx.lineTo(-castleWidth*0.7, 0); ctx.lineTo(-castleWidth*0.7, -castleHeight*0.1);
-            ctx.lineTo(-castleWidth*0.6, -castleHeight*0.1); ctx.lineTo(-castleWidth*0.6, 0);
-            
+            ctx.moveTo(-castleWidth/2, castleHeight/2); ctx.lineTo(castleWidth/2, castleHeight/2); ctx.lineTo(castleWidth/2, 0);
+            ctx.lineTo(castleWidth*0.6, 0); ctx.lineTo(castleWidth*0.6, -castleHeight*0.1); ctx.lineTo(castleWidth*0.7, -castleHeight*0.1); ctx.lineTo(castleWidth*0.7, 0);
+            ctx.lineTo(castleWidth/2, 0); ctx.lineTo(castleWidth*0.4, -castleHeight*0.3); ctx.lineTo(0, -castleHeight/2); ctx.lineTo(-castleWidth*0.4, -castleHeight*0.3);
+            ctx.lineTo(-castleWidth/2, 0); ctx.lineTo(-castleWidth*0.7, 0); ctx.lineTo(-castleWidth*0.7, -castleHeight*0.1); ctx.lineTo(-castleWidth*0.6, -castleHeight*0.1); ctx.lineTo(-castleWidth*0.6, 0);
             ctx.lineTo(-castleWidth/2, 0);
             ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
-
-            ctx.strokeStyle = 'rgba(241, 196, 15, 0.4)';
-            ctx.strokeRect(-castleWidth*0.15, castleHeight*0.15, castleWidth*0.3, castleHeight*0.35);
+            ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = 'rgba(241, 196, 15, 0.4)'; ctx.strokeRect(-castleWidth*0.15, castleHeight*0.15, castleWidth*0.3, castleHeight*0.35);
             ctx.restore();
         } 
         else if (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
-            ctx.fillStyle = 'rgba(231, 76, 60, 0.3)';
-            ctx.strokeStyle = '#e74c3c';
+            ctx.fillStyle = 'rgba(231, 76, 60, 0.3)'; ctx.strokeStyle = '#e74c3c';
             ctx.beginPath(); ctx.arc(startX + (500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
-            
-            ctx.fillStyle = 'rgba(52, 152, 219, 0.3)';
-            ctx.strokeStyle = '#3498db';
+            ctx.fillStyle = 'rgba(52, 152, 219, 0.3)'; ctx.strokeStyle = '#3498db';
             ctx.beginPath(); ctx.arc(startX + (5500 * scale), startY + (3000 * scale), 400 * scale, 0, Math.PI*2); ctx.fill(); ctx.stroke();
         }
 
         function rysujKropke(x, y, kolor, promienKropki) {
-            ctx.fillStyle = kolor;
-            ctx.beginPath(); 
-            ctx.arc(startX + (x * scale), startY + (y * scale), promienKropki, 0, Math.PI*2); 
-            ctx.fill();
+            ctx.fillStyle = kolor; ctx.beginPath(); ctx.arc(startX + (x * scale), startY + (y * scale), promienKropki, 0, Math.PI*2); ctx.fill();
         }
 
         if (stanSerwera.bots) {
@@ -797,35 +823,45 @@ window.Grafika = (function() {
         rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
 
         if (!czyMala) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-            ctx.lineWidth = 1;
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)'; ctx.lineWidth = 1;
             ctx.beginPath(); ctx.arc(startX + (mojGracz.x * scale), startY + (mojGracz.y * scale), 300 * scale, 0, Math.PI*2); ctx.stroke();
-            
-            ctx.fillStyle = '#fff';
-            ctx.font = 'bold 24px Exo 2, sans-serif';
-            ctx.textAlign = 'center';
+            ctx.fillStyle = '#fff'; ctx.font = 'bold 24px Exo 2, sans-serif'; ctx.textAlign = 'center';
             ctx.fillText("MAPA TAKTYCZNA", startX + mapSize/2, startY - 20);
         }
-        
         ctx.restore();
     }
 
     // --- GŁÓWNA PĘTLA RENDERUJĄCA ---
     return {
-        // Publiczne API wstrząsu przeniesione w bezpieczne miejsce
         wywolajWstrzas: function(moc) {
             wstrzasEkranu.moc = moc;
         },
         rysujKlatke: function(stanSerwera, mojGracz) {
             if (!stanSerwera || !mojGracz) return;
 
-            camera.x = mojGracz.x - screenW / 2; 
-            camera.y = mojGracz.y - screenH / 2;
+            // 1. Płynna Kamera (Lerp)
+            let docelowaKameraX = mojGracz.x - screenW / 2;
+            let docelowaKameraY = mojGracz.y - screenH / 2;
             
-            // Aplikacja Trzęsienia Kamery
+            if (Math.hypot(docelowaKameraX - camera.x, docelowaKameraY - camera.y) > 1000) {
+                camera.x = docelowaKameraX;
+                camera.y = docelowaKameraY;
+            } else {
+                camera.x += (docelowaKameraX - camera.x) * 0.1;
+                camera.y += (docelowaKameraY - camera.y) * 0.1;
+            }
+
+            // 2. NOWOŚĆ: Dynamiczny Zoom oparty na masie gracza
+            let masaDoZooma = Math.max(10, mojGracz.score);
+            let docelowaSkala = Math.max(0.4, 1.15 - Math.sqrt(masaDoZooma) * 0.015);
+            cameraScale += (docelowaSkala - cameraScale) * 0.05;
+
+            let drawCamX = camera.x;
+            let drawCamY = camera.y;
+
             if (wstrzasEkranu.moc > 0.5) {
-                camera.x += (Math.random() - 0.5) * wstrzasEkranu.moc;
-                camera.y += (Math.random() - 0.5) * wstrzasEkranu.moc;
+                drawCamX += (Math.random() - 0.5) * wstrzasEkranu.moc;
+                drawCamY += (Math.random() - 0.5) * wstrzasEkranu.moc;
                 wstrzasEkranu.moc *= wstrzasEkranu.wygasanie;
             }
             
@@ -835,9 +871,63 @@ window.Grafika = (function() {
             if (!czyMapaWygenerowana) generujSrodowisko(tryb);
 
             ctx.save(); 
-            ctx.translate(-camera.x, -camera.y);
+            // Implementacja zooma wyśrodkowanego na graczu
+            ctx.translate(screenW / 2, screenH / 2);
+            ctx.scale(cameraScale, cameraScale);
+            ctx.translate(-screenW / 2, -screenH / 2);
+            ctx.translate(-drawCamX, -drawCamY);
 
-            rysujMape(tryb, limitWielkosci);
+            rysujMape(tryb, limitWielkosci, stanSerwera);
+
+            // ==========================================
+            // LOGIKA ŚLEDZENIA ZMIAN (Gore i Floating Text)
+            // ==========================================
+            if (stanSerwera.players) {
+                Object.keys(poprzedniePozycje.players).forEach(id => {
+                    // Wykrywanie śmierci gracza (Gore)
+                    if (!stanSerwera.players[id] && id !== mojGracz.id) {
+                        generujWybuch(poprzedniePozycje.players[id].x, poprzedniePozycje.players[id].y, '#e74c3c', 40);
+                    }
+                    // Wykrywanie obrażeń/leczenia gracza (Liczby)
+                    else if (stanSerwera.players[id]) {
+                        let roznica = stanSerwera.players[id].score - poprzedniePozycje.players[id].score;
+                        if (Math.abs(roznica) >= 1) {
+                            dodajPowiadomienie(stanSerwera.players[id].x, stanSerwera.players[id].y, roznica);
+                        }
+                    }
+                });
+                poprzedniePozycje.players = {};
+                Object.keys(stanSerwera.players).forEach(id => {
+                    poprzedniePozycje.players[id] = {x: stanSerwera.players[id].x, y: stanSerwera.players[id].y, score: stanSerwera.players[id].score};
+                });
+            }
+
+            if (stanSerwera.bots) {
+                Object.keys(poprzedniePozycje.bots).forEach(id => {
+                    // Wykrywanie śmierci bota (Gore)
+                    if (!stanSerwera.bots[id]) {
+                        let kolorWybuchu = poprzedniePozycje.bots[id].isBoss ? '#9b59b6' : '#e74c3c';
+                        generujWybuch(poprzedniePozycje.bots[id].x, poprzedniePozycje.bots[id].y, kolorWybuchu, 25);
+                    } 
+                    // Wykrywanie obrażeń/leczenia bota (Liczby)
+                    else if (stanSerwera.bots[id]) {
+                        let roznica = stanSerwera.bots[id].score - poprzedniePozycje.bots[id].score;
+                        if (Math.abs(roznica) >= 1) {
+                            dodajPowiadomienie(stanSerwera.bots[id].x, stanSerwera.bots[id].y, roznica);
+                        }
+                    }
+                });
+                poprzedniePozycje.bots = {};
+                Object.keys(stanSerwera.bots).forEach(id => {
+                    poprzedniePozycje.bots[id] = {
+                        x: stanSerwera.bots[id].x, y: stanSerwera.bots[id].y,
+                        score: stanSerwera.bots[id].score, isBoss: stanSerwera.bots[id].isBoss || stanSerwera.bots[id].skin === 'ninja'
+                    };
+                });
+            }
+
+            // Rysowanie zniszczeń na mapie przed resztą obiektów
+            aktualizujEfektyZniszczen();
 
             if (stanSerwera.foods) {
                 lokalnyBuforJedzenia = window.Guardian ? window.Guardian.safeObj(stanSerwera.foods, 'foods') : stanSerwera.foods;
@@ -851,9 +941,6 @@ window.Grafika = (function() {
                 }
             });
 
-            // ==========================================
-            // ZAKTUALIZOWANE RYSOWANIE POCISKÓW (OSZCZEPY I LASERY)
-            // ==========================================
             if (stanSerwera.projectiles) {
                 let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles, 'projectiles') : stanSerwera.projectiles;
                 Object.values(bezpiecznePociski).forEach(proj => {
@@ -871,7 +958,6 @@ window.Grafika = (function() {
                                 ctx.shadowColor = kolorOszczepu; 
                             }
                             
-                            // Drzewiec (kij)
                             ctx.strokeStyle = '#555';
                             ctx.lineWidth = 3;
                             ctx.beginPath(); 
@@ -879,7 +965,6 @@ window.Grafika = (function() {
                             ctx.lineTo(10, 0); 
                             ctx.stroke();
                             
-                            // Grot (ostrze)
                             ctx.fillStyle = kolorOszczepu;
                             ctx.beginPath(); 
                             ctx.moveTo(10, -5); 
@@ -888,7 +973,6 @@ window.Grafika = (function() {
                             ctx.closePath(); 
                             ctx.fill();
 
-                            // Smuga światła na końcu
                             ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
                             ctx.beginPath(); ctx.arc(-20, 0, 2, 0, Math.PI*2); ctx.fill();
 
@@ -906,7 +990,6 @@ window.Grafika = (function() {
                             ctx.lineTo(15, 0); 
                             ctx.stroke();
                         } else {
-                            // Wariant podstawowy
                             ctx.fillStyle = proj.piercing ? '#3498db' : '#bdc3c7';
                             if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = ctx.fillStyle; }
                             ctx.beginPath(); ctx.moveTo(15, 0); ctx.lineTo(-10, 5); ctx.lineTo(-10, -5); ctx.closePath(); ctx.fill();
@@ -930,7 +1013,7 @@ window.Grafika = (function() {
 
             ctx.restore(); 
 
-            // NAKŁADANIE EFEKTÓW WIZUALNYCH (Niezależne od przesunięcia kamery)
+            // NAKŁADANIE EFEKTÓW WIZUALNYCH (Niezależne od przesunięcia kamery i zooma)
             rysujEfektyEkranu(tryb, stanSerwera, mojGracz);
 
             if (pokazDuzaMape) {

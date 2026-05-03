@@ -31,38 +31,67 @@
     let ostatniaWysylkaRuchu = 0; 
     let aktywnaFormacja = 4; // Domyślnie manualna
     
-    // Progresja Kampanii
+    // Progresja Kampanii i Statystyki
     let etapKampanii = 0;
+    let ostatniaMasa = 0; // Śledzenie masy do efektu Hit Flash
+    let ostatniCzasJedzenia = 0; // Zapobiega "strzelaniu z karabinu" dźwiękiem jedzenia
 
     document.addEventListener('DOMContentLoaded', () => {
-        console.log("🛠️ Inicjalizacja interfejsu UI...");
+        console.log("🛠️ Inicjalizacja interfejsu UI i Silnika Audio...");
 
-        // === ZARZĄDZANIE AUDIO (FIRE & WHOOSH) ===
-        // Kropki (./) gwarantują prawidłowe ładowanie w Live Server!
+        // === ZARZĄDZANIE AUDIO (AMBIENT I MUZYKA) ===
+        let isMuted = false;
+        
+        // 1. Dźwięk w Lobby (Menu)
         const dzwiekOgnia = new Audio('./assety/fire.mp3');
         dzwiekOgnia.loop = true;
         dzwiekOgnia.volume = 0.4;
 
+        // 2. Dźwięk przejścia (Whoosh)
         const dzwiekWhoosh = new Audio('./assety/fire_whoosh.mp3');
         dzwiekWhoosh.volume = 0.8;
 
-        // Próba odtworzenia dźwięku "whoosh" wraz z pojawieniem się formularza.
+        // 3. Główny podkład muzyczny na mapie (Dark Trap)
+        const muzykaGra = new Audio('./assety/dark_trap.mp3');
+        muzykaGra.loop = true;
+        muzykaGra.volume = 0.15; // Cicho, żeby SFX grały pierwsze skrzypce!
+
+        // === SILNIK SFX (DŹWIĘKI REAKTYWNE) ===
+        const SFX = {
+            throw: new Audio('./assety/throw.mp3'),
+            hit: new Audio('./assety/hit.mp3'),
+            eat: new Audio('./assety/eat.mp3'),
+            death: new Audio('./assety/death.mp3'),
+            alert: new Audio('./assety/alert.mp3')
+        };
+
+        // Wstępne ładowanie do pamięci
+        Object.values(SFX).forEach(audio => { audio.preload = 'auto'; });
+
+        function odpalDzwiek(nazwa, glosnosc = 0.5) {
+            if (isMuted || !SFX[nazwa]) return;
+            let dzwiek = SFX[nazwa].cloneNode(); 
+            dzwiek.volume = glosnosc;
+            dzwiek.play().catch(e => console.warn(`Nie można odtworzyć SFX: ${nazwa}`, e));
+        }
+
+        // Próba odtworzenia dźwięku (Autoplay bypass)
         let pierwszaInterakcja = false;
         
         let sprobujOdtworzyc = dzwiekWhoosh.play();
         if (sprobujOdtworzyc !== undefined) {
             sprobujOdtworzyc.then(() => {
-                // Autoplay się udał! Formularz "wjeżdża" z dźwiękiem, odpalamy też ognisko
                 dzwiekOgnia.play().catch(e => console.log(e));
             }).catch(error => {
                 console.log("🛡️ Przeglądarka zablokowała Autoplay. Dźwięk odpali się przy pierwszej interakcji.");
-                // Jeśli zablokowano, podpinamy odpalenie pod pierwsze kliknięcie lub klawisz (np. wpisywanie nicku)
                 const odblokujAudio = () => {
                     if (!pierwszaInterakcja) {
                         pierwszaInterakcja = true;
                         dzwiekWhoosh.currentTime = 0;
                         dzwiekWhoosh.play().catch(e => console.log(e));
-                        dzwiekOgnia.play().catch(e => console.log(e));
+                        if (!isMuted && (!window.Flagi || window.Flagi.Stan.aktualny !== 'PLAYING')) {
+                            dzwiekOgnia.play().catch(e => console.log(e));
+                        }
                     }
                     document.removeEventListener('click', odblokujAudio);
                     document.removeEventListener('keydown', odblokujAudio);
@@ -74,9 +103,53 @@
             });
         }
         
-        // Zabezpieczenie nałożone na body
         document.body.addEventListener('click', () => {
-            if (dzwiekOgnia.paused) dzwiekOgnia.play().catch(e => console.log(e));
+            if (dzwiekOgnia.paused && !isMuted && (!window.Flagi || window.Flagi.Stan.aktualny !== 'PLAYING')) {
+                dzwiekOgnia.play().catch(e => console.log(e));
+            }
+        }, { once: true });
+
+        // --- GLOBALNY PRZYCISK MUTE (ZINTEGROWANY) ---
+        const btnMute = document.createElement('button');
+        btnMute.innerHTML = '🔊';
+        btnMute.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: rgba(5,5,5,0.8); border: 2px solid #e74c3c; border-radius: 50%; width: 45px; height: 45px; color: #fff; font-size: 20px; cursor: pointer; z-index: 9999; box-shadow: 0 0 10px rgba(0,0,0,0.8); transition: transform 0.2s;';
+        btnMute.onmouseenter = () => btnMute.style.transform = 'scale(1.1)';
+        btnMute.onmouseleave = () => btnMute.style.transform = 'scale(1)';
+        btnMute.onclick = () => {
+            isMuted = !isMuted;
+            dzwiekOgnia.muted = isMuted;
+            dzwiekWhoosh.muted = isMuted;
+            muzykaGra.muted = isMuted;
+            btnMute.innerHTML = isMuted ? '🔇' : '🔊';
+            btnMute.style.borderColor = isMuted ? '#555' : '#e74c3c';
+        };
+        document.body.appendChild(btnMute);
+
+        // --- LEADERBOARD (Tabela Wyników UI) ---
+        const leaderboard = document.createElement('div');
+        leaderboard.id = 'leaderboard';
+        leaderboard.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(10,10,15,0.85); border: 2px solid #f1c40f; padding: 12px; border-radius: 8px; color: #fff; font-family: "Exo 2", sans-serif; width: 200px; z-index: 10; pointer-events: none; transition: opacity 0.3s; box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);';
+        leaderboard.classList.add('hidden');
+        document.getElementById('in-game-ui').appendChild(leaderboard);
+
+        // --- MOBILNY PRZYCISK AKCJI ---
+        window.addEventListener('touchstart', function addTouchBtn() {
+            const mobileBtn = document.createElement('button');
+            mobileBtn.innerHTML = '🎯';
+            mobileBtn.style.cssText = 'position: absolute; bottom: 80px; right: 20px; width: 70px; height: 70px; border-radius: 50%; background: rgba(231, 76, 60, 0.4); border: 3px solid #e74c3c; color: white; font-size: 28px; font-weight: bold; z-index: 999; box-shadow: 0 0 15px rgba(231,76,60,0.6); pointer-events: auto;';
+            
+            mobileBtn.ontouchstart = (e) => {
+                e.preventDefault(); 
+                if (!czyWsklepie && window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
+                    const centerX = window.innerWidth / 2;
+                    const centerY = window.innerHeight / 2;
+                    const katRzutu = Math.atan2(kursor.y - centerY, kursor.x - centerX);
+                    socket.emit('rzutOszczepem', { kat: katRzutu });
+                    odpalDzwiek('throw', 0.6);
+                }
+            };
+            document.getElementById('in-game-ui').appendChild(mobileBtn);
+            window.removeEventListener('touchstart', addTouchBtn);
         }, { once: true });
 
 
@@ -114,6 +187,10 @@
         // 3. OBSŁUGA LOBBY I WYBORU KLAS
         document.getElementById('nextBtn').addEventListener('click', () => {
             if (inputNick.value.trim().length < 2) { inputNick.style.borderColor = '#e74c3c'; return; }
+            
+            dzwiekWhoosh.currentTime = 0;
+            if (!isMuted) dzwiekWhoosh.play().catch(e => console.warn("Whoosh zablokowany:", e));
+            
             step1.classList.add('hidden'); step2.classList.remove('hidden');
         });
 
@@ -181,18 +258,24 @@
                 if (formationPanel) formationPanel.classList.remove('hidden');
             }
             
-            // Wyciszenie tła menu, żeby nie dudniło w samej grze
+            // --- ZMIANA AUDIO NA TRYB WALKI ---
             dzwiekOgnia.pause();
+            if (!isMuted) {
+                muzykaGra.currentTime = 0;
+                muzykaGra.play().catch(e => console.warn("Muzyka zablokowana:", e));
+            }
             
             czasStart = Date.now();
-            etapKampanii = 0; // Reset historii przy nowym spawnie
+            etapKampanii = 0; 
+            ostatniaMasa = 0; 
+            ostatniCzasJedzenia = 0;
+            
             if (interwalCzasu) clearInterval(interwalCzasu);
             interwalCzasu = setInterval(aktualizujCzas, 1000);
             
             if (window.Flagi) window.Flagi.ustawStan('PLAYING');
             if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick(); 
             
-            // Fabularny start Kampanii
             if (mode === 'CAMPAIGN') {
                 setTimeout(() => {
                     pokazNapisKinowy("SYSTEM PODTRZYMYWANIA ŻYCIA AKTYWNY. BĄDŹ OSTROŻNY...", 5000);
@@ -229,7 +312,6 @@
             }, 5000);
         }
 
-        // BIZNES: System Napisów Kinowych
         function pokazNapisKinowy(tekst, czas = 4000) {
             let container = document.getElementById('cinematic-subtitles');
             if (!container) {
@@ -263,7 +345,7 @@
             }, czas);
         }
 
-        // 5. HYBRYDOWY SYSTEM STEROWANIA (Klawiatura / Mysz / Touch)
+        // 5. HYBRYDOWY SYSTEM STEROWANIA
         window.addEventListener('mousemove', (e) => {
             kursor.x = e.clientX; kursor.y = e.clientY;
         });
@@ -278,7 +360,6 @@
             if (['s', 'arrowdown'].includes(key)) klawiszeKierunku.s = true;
             if (['d', 'arrowright'].includes(key)) klawiszeKierunku.d = true;
 
-            // Formacje 1-4 (Tylko w trybie TEAMS)
             if (['1','2','3','4'].includes(key) && window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
                 aktywnaFormacja = parseInt(key);
                 socket.emit('zmianaFormacji', aktywnaFormacja);
@@ -307,6 +388,7 @@
                 if (window.Guardian && window.Guardian.rejestrujKlikniecie && !window.Guardian.rejestrujKlikniecie()) return;
                 const katRzutu = Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2);
                 socket.emit('rzutOszczepem', { kat: katRzutu });
+                odpalDzwiek('throw', 0.6);
             }
         });
         window.addEventListener('touchstart', (e) => {
@@ -329,6 +411,7 @@
 
             if (masa >= 50 && etapKampanii === 0) {
                 pokazNapisKinowy("ZAAKTYWOWANO PROTOKÓŁ OBRONNY. RÓJ MASZYN OBUDZIŁ SIĘ Z UŚPIENIA.", 6000);
+                odpalDzwiek('alert', 0.7);
                 etapKampanii = 1;
             }
             if (masa >= 150 && etapKampanii === 1) {
@@ -337,6 +420,7 @@
             }
             if (masa >= 280 && etapKampanii === 2) {
                 pokazNapisKinowy("⚠️ WYKRYTO POTĘŻNE DRGANIA SEJSMICZNE... ANOMALIA OMEGA ZBLIŻA SIĘ DO SEKTORA!", 7000);
+                odpalDzwiek('alert', 0.8);
                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(10);
                 etapKampanii = 3;
             }
@@ -348,6 +432,7 @@
 
             if (bossAlive && etapKampanii === 3) {
                 pokazNapisKinowy("TYTAN OMEGA ZESPAWNOWANY! ZNISZCZ GO, ABY PRZETRWAĆ!", 6000);
+                odpalDzwiek('alert', 1.0);
                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(25);
                 etapKampanii = 4;
             }
@@ -379,7 +464,6 @@
             }
         }
 
-        // 7. AKTUALIZACJA SIŁY DRUŻYN
         function aktualizujSileDruzyn() {
             if (!stanSerwera || window.Flagi.Stan.wybranyTryb !== 'TEAMS') return;
             
@@ -409,9 +493,45 @@
             stanSerwera = data;
             if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick();
             aktualizujSileDruzyn(); 
+            
+            if (stanSerwera.players && window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
+                const tryb = window.Flagi.Stan.wybranyTryb;
+                if (tryb === 'FREE' || tryb === 'CAMPAIGN') { 
+                    const gracze = Object.values(stanSerwera.players)
+                                         .sort((a, b) => b.score - a.score)
+                                         .slice(0, 5); 
+                    
+                    let lbHTML = '<h3 style="margin: 0 0 10px 0; color: #f1c40f; font-size: 15px; text-align: center; border-bottom: 1px solid #555; padding-bottom: 5px;">TOP W SEKTORZE</h3><ol style="margin: 0; padding-left: 25px; font-size: 13px; line-height: 1.8;">';
+                    gracze.forEach(p => {
+                        let isMe = p.id === mojeId;
+                        let color = isMe ? '#f1c40f' : '#fff';
+                        let fw = isMe ? 'bold' : 'normal';
+                        lbHTML += `<li style="color: ${color}; font-weight: ${fw}"><span>${p.name.substring(0, 10)}</span>: <span style="float: right; padding-right: 10px;">${Math.floor(p.score)}</span></li>`;
+                    });
+                    lbHTML += '</ol>';
+                    if (document.getElementById('leaderboard')) {
+                        document.getElementById('leaderboard').innerHTML = lbHTML;
+                        document.getElementById('leaderboard').classList.remove('hidden');
+                    }
+                } else {
+                    if (document.getElementById('leaderboard')) document.getElementById('leaderboard').classList.add('hidden');
+                }
+            }
         });
         socket.on('shopSuccess', (data) => { alert("Ukończono modyfikację: " + data.item.toUpperCase()); zamknijSklep(); });
-        socket.on('killEvent', (data) => { if (data.zabojca && data.ofiara) dodajDoKillfeedu(data.zabojca, data.ofiara); });
+        
+        socket.on('killEvent', (data) => { 
+            if (data.zabojca && data.ofiara) {
+                dodajDoKillfeedu(data.zabojca, data.ofiara);
+                odpalDzwiek('death', 0.3);
+            }
+        });
+        
+        socket.on('cinematicEvent', (tekst) => { 
+            pokazNapisKinowy(tekst, 5000); 
+            odpalDzwiek('alert', 0.6); 
+        });
+        socket.on('wstrzasKamery', (moc) => { if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(moc); });
 
         socket.on('disconnect', () => {
             console.warn("⚠️ Serwer przerwał połączenie.");
@@ -436,7 +556,11 @@
             if (ingameControls) ingameControls.classList.add('hidden'); 
             if (teamPowerBar) teamPowerBar.classList.add('hidden');
             if (formationPanel) formationPanel.classList.add('hidden');
+            if (document.getElementById('leaderboard')) document.getElementById('leaderboard').classList.add('hidden');
             
+            muzykaGra.pause(); 
+            odpalDzwiek('death', 0.8);
+
             const finalTime = timerDisplay ? timerDisplay.innerText : "00:00";
             const tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
 
@@ -472,10 +596,11 @@
 
         // 9. PĘTLA GRY Z HYBRYDOWYM STEROWANIEM
         function pętlaGry() {
+            let teraz = Date.now();
+
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
                 
                 if (!czyWsklepie) {
-                    let teraz = Date.now();
                     if (teraz - ostatniaWysylkaRuchu > 33) {
                         const centerX = window.innerWidth / 2;
                         const centerY = window.innerHeight / 2;
@@ -508,6 +633,26 @@
                     if (mojGracz) {
                         obslugaStref(mojGracz);
                         obslugaFabułyKampanii(mojGracz); 
+                        
+                        // LOGIKA DŹWIĘKÓW I WIZUALIZACJI ZMIAN MASY
+                        if (ostatniaMasa > 0) {
+                            let roznica = mojGracz.score - ostatniaMasa;
+                            
+                            if (roznica <= -1) {
+                                odpalDzwiek('hit', 0.8);
+                                let flash = document.createElement('div');
+                                flash.style.cssText = 'position: fixed; inset: 0; background: rgba(231, 76, 60, 0.4); z-index: 900; pointer-events: none; transition: opacity 0.2s ease-out;';
+                                document.body.appendChild(flash);
+                                setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 50);
+                                if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
+                            } 
+                            else if (roznica >= 1 && (teraz - ostatniCzasJedzenia > 100)) {
+                                odpalDzwiek('eat', 0.2);
+                                ostatniCzasJedzenia = teraz;
+                            }
+                        }
+                        ostatniaMasa = mojGracz.score;
+
                         if (window.Grafika) window.Grafika.rysujKlatke(stanSerwera, mojGracz);
                     }
                 }

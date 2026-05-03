@@ -73,6 +73,103 @@ const WEAPONS = {
     'shuriken': { dmg: 4, life: 30, speed: 20, cost: 2, piercing: false }
 };
 
+// ==========================================
+// SYSTEM EVENTÓW GLOBALNYCH (AI DIRECTOR)
+// ==========================================
+const MenedzerEventow = {
+    ostatniEvent: Date.now(),
+    interwal: 30000, // Pierwszy event odpali się po 30 sekundach!
+    aktywnePromienie: [],
+
+    aktualizuj: function(io, players, bots, foods, mapSize) {
+        const teraz = Date.now();
+
+        // Odliczanie czasu do kolejnego eventu
+        if (teraz - this.ostatniEvent > this.interwal) {
+            this.odpalLosowyEvent(io, players, bots, foods, mapSize);
+            this.ostatniEvent = teraz;
+            this.interwal = 60000 + Math.random() * 40000; // Każdy kolejny event co 60-100 sekund
+        }
+
+        // Fizyka uderzenia z kosmosu (Promień Jonowy)
+        this.aktywnePromienie = this.aktywnePromienie.filter(promien => {
+            if (teraz >= promien.czasUderzenia) {
+                io.emit('wstrzasKamery', 40); // Potężne trzęsienie ekranem u wszystkich
+                
+                // Zadawanie obrażeń - każdy w strefie traci 50% masy
+                Object.values(players).forEach(p => {
+                    if (p.isSafe) return; // Baza chroni przed promieniem
+                    let dystans = Math.hypot(p.x - promien.x, p.y - promien.y);
+                    if (dystans < promien.zasieg) {
+                        p.score = Math.max(10, Math.floor(p.score * 0.5));
+                    }
+                });
+                return false; // Usuń promień po uderzeniu
+            }
+            return true; 
+        });
+    },
+
+    odpalLosowyEvent: function(io, players, bots, foods, mapSize) {
+        const klucze = Object.keys(players).filter(id => players[id].mode !== 'CAMPAIGN'); // Pijemy tylko do trybów PvP
+        const liczbaGraczy = klucze.length;
+        
+        if (liczbaGraczy === 0) return; // Jeśli serwer PvP jest pusty, AI idzie spać
+
+        if (liczbaGraczy <= 3) {
+            // --- SCENARIUSZE DLA SAMOTNIKÓW (1-3 graczy) ---
+            if (Math.random() > 0.5) {
+                // 1. ZŁOTY KONWÓJ (Loot Goblin)
+                io.emit('cinematicEvent', "WYKRYTO ZŁOTEGO DRONA! ZNISZCZ GO ZANIM UCIEKNIE!");
+                let idGoblin = 'bot_' + (++entityIdCounter);
+                bots[idGoblin] = {
+                    id: idGoblin, name: "ZŁOTY DRON", mode: 'FREE',
+                    x: Math.random() * mapSize, y: Math.random() * mapSize,
+                    score: 250, skin: 'arystokrata', 
+                    angle: Math.random() * Math.PI * 2, state: 'FLEE', ownerId: null, typBroni: null
+                };
+            } else {
+                // 2. PRZEBUDZENIE ROJU
+                io.emit('cinematicEvent', "PRZEBUDZENIE ROJU! INSEKTY ATAKUJĄ!");
+                let cel = players[klucze[Math.floor(Math.random() * liczbaGraczy)]];
+                for (let i = 0; i < 8; i++) {
+                    let idRoju = 'bot_' + (++entityIdCounter);
+                    bots[idRoju] = {
+                        id: idRoju, name: "ROBAK", mode: cel.mode,
+                        x: Math.max(0, Math.min(mapSize, cel.x + Math.cos(i) * 800)), 
+                        y: Math.max(0, Math.min(mapSize, cel.y + Math.sin(i) * 800)),
+                        score: 15, skin: 'ninja', angle: 0, state: 'HUNT', ownerId: null, typBroni: null
+                    };
+                }
+            }
+        } else {
+            // --- SCENARIUSZE DLA TŁUMU (4+ graczy) ---
+            if (Math.random() > 0.5) {
+                // 1. ZRZUT ZAOPATRZENIA
+                io.emit('cinematicEvent', "ZRZUT ZAOPATRZENIA W CENTRUM MAPY ZA 5 SEKUND!");
+                setTimeout(() => {
+                    for(let i=0; i < 50; i++) {
+                        let idZrzutu = ++entityIdCounter;
+                        foods[idZrzutu] = {
+                            id: idZrzutu,
+                            x: Math.max(0, Math.min(mapSize, (mapSize/2) + (Math.random() - 0.5) * 800)),
+                            y: Math.max(0, Math.min(mapSize, (mapSize/2) + (Math.random() - 0.5) * 800))
+                        };
+                    }
+                }, 5000);
+            } else {
+                // 2. PROMIEŃ JONOWY W BAZĘ
+                io.emit('cinematicEvent', "UWAGA! UDERZENIE JONOWE W CENTRUM ZA 5S! UCIEKAJ!");
+                this.aktywnePromienie.push({ 
+                    x: mapSize/2, y: mapSize/2, 
+                    zasieg: 1200, 
+                    czasUderzenia: Date.now() + 5000 
+                });
+            }
+        }
+    }
+};
+
 function spawnFood() {
     let id = ++entityIdCounter;
     state.foods[id] = { id: id, x: Math.random() * 6000, y: Math.random() * 6000 };
@@ -606,6 +703,9 @@ setInterval(() => {
     // 2.5 ZARZĄDZANIE KAMPANIĄ
     TrybCampaign.zarzadzajFalami();
 
+    // 2.6 GLOBALNE EVENTY (AI DIRECTOR)
+    MenedzerEventow.aktualizuj(io, state.players, state.bots, state.foods, 6000);
+
     // 3. LOGIKA POCISKÓW I OSZCZEPÓW
     for (let projId in state.projectiles) {
         let proj = state.projectiles[projId];
@@ -667,6 +767,41 @@ setInterval(() => {
             }
             continue; // Pomijamy zwykłą logikę dla dronów kampanii
         }
+
+        // --- INIEKCJA LOGIKI EVENTÓW GLOBALNYCH ---
+        if (b.name === "ZŁOTY DRON") {
+            // Złoty Konwój - Szybko ucieka i gubi masę
+            b.angle += (Math.random() - 0.5) * 0.2; 
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * 8));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * 8));
+            
+            // Szansa na upuszczenie kulek masy podczas ucieczki
+            if (Math.random() < 0.1) {
+                let idF = ++entityIdCounter;
+                state.foods[idF] = { id: idF, x: b.x, y: b.y };
+            }
+            continue; 
+        }
+
+        if (b.name === "ROBAK") {
+            // Przebudzenie Roju - Agresywnie szukają jakiegokolwiek gracza w okolicy
+            let speed = 4.5;
+            let nearby = getNearby(b.x, b.y);
+            let closestDist = Infinity, targetPlayer = null;
+            
+            nearby.players.forEach(p => {
+                if (p.isSafe || p.mode !== b.mode) return;
+                let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                if (dist < 1000 && dist < closestDist) { closestDist = dist; targetPlayer = p; }
+            });
+            
+            if (targetPlayer) b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x);
+            
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
+            continue;
+        }
+        // ------------------------------------------
 
         if (b.ownerId && state.players[b.ownerId]) {
             let nearby = getNearby(b.x, b.y);
