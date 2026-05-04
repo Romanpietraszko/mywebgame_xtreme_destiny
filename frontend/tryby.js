@@ -1,11 +1,17 @@
 // ==========================================
-// TRYBY.JS - Główny Mózg Klienta i Kontroler Gry
+// TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA)
 // ==========================================
 
 (function() {
     // 1. POŁĄCZENIE I ZMIENNE SYSTEMOWE
     const SERWER_URL = window.location.origin;
-    const socket = typeof io !== 'undefined' ? io(SERWER_URL) : null;
+    
+    // (AAA) AUTO-RECONNECTION: Ciche wznawianie połączenia przy utracie pakietów
+    const socket = typeof io !== 'undefined' ? io(SERWER_URL, {
+        reconnection: true,             
+        reconnectionAttempts: 10,
+        reconnectionDelay: 1000
+    }) : null;
 
     if (!socket) {
         console.error("🛡️ [GUARDIAN] Krytyczny błąd: Brak Socket.io! Gra nie ruszy.");
@@ -36,8 +42,17 @@
     let ostatniaMasa = 0; // Śledzenie masy do efektu Hit Flash
     let ostatniCzasJedzenia = 0; // Zapobiega "strzelaniu z karabinu" dźwiękiem jedzenia
 
+    // --- ZMIENNE LIGI AAA ---
+    let ping = 0;
+    let ostatniCzasInputu = Date.now(); // Detekcja AFK
+    let buforRzutuCzas = 0; // Coyote Time (Buforowanie kliknięć)
+    let czyDucking = false; // Audio Ducking (Zarządzanie tłem)
+
     document.addEventListener('DOMContentLoaded', () => {
         console.log("🛠️ Inicjalizacja interfejsu UI i Silnika Audio...");
+
+        // (AAA) MASZYNA STANÓW (Zabezpieczenie przed bugami)
+        if (!window.Flagi) window.Flagi = { Stan: { aktualny: 'LOBBY' } };
 
         // === ZARZĄDZANIE AUDIO (AMBIENT I MUZYKA) ===
         let isMuted = false;
@@ -73,6 +88,52 @@
             let dzwiek = SFX[nazwa].cloneNode(); 
             dzwiek.volume = glosnosc;
             dzwiek.play().catch(e => console.warn(`Nie można odtworzyć SFX: ${nazwa}`, e));
+        }
+
+        // (AAA) SPATIAL AUDIO 3D: Dźwięk zależy od odległości od akcji na mapie
+        function odpalDzwiek3D(nazwa, glosnoscDocelowa = 0.5, zrodloX = null, zrodloY = null) {
+            if (isMuted || !SFX[nazwa]) return;
+            let vol = glosnoscDocelowa;
+
+            if (zrodloX !== null && zrodloY !== null && stanSerwera && stanSerwera.players && mojeId) {
+                let ja = stanSerwera.players[mojeId];
+                if (ja) {
+                    let dystans = Math.hypot(ja.x - zrodloX, ja.y - zrodloY);
+                    let maxDystans = 1500;
+                    if (dystans > maxDystans) return; 
+                    let mnoznik = 1 - (dystans / maxDystans);
+                    vol = glosnoscDocelowa * mnoznik;
+                }
+            }
+
+            let dzwiek = SFX[nazwa].cloneNode(); 
+            dzwiek.volume = Math.max(0, Math.min(1, vol));
+            dzwiek.play().catch(e => console.warn(`Nie można odtworzyć SFX: ${nazwa}`, e));
+        }
+
+        // (AAA) AUDIO DUCKING: Kinowe wyciszanie muzyki w trakcie wybuchów/alertów
+        function zrobAudioDucking() {
+            if (isMuted || czyDucking) return;
+            czyDucking = true;
+            let orgGlosnosc = muzykaGra.volume;
+            muzykaGra.volume = orgGlosnosc * 0.3; // Wyciszenie muzyki do 30% na czas akcji
+            setTimeout(() => {
+                let volInterval = setInterval(() => {
+                    if (muzykaGra.volume < orgGlosnosc) {
+                        muzykaGra.volume = Math.min(orgGlosnosc, muzykaGra.volume + 0.02);
+                    } else {
+                        czyDucking = false;
+                        clearInterval(volInterval);
+                    }
+                }, 100);
+            }, 3000);
+        }
+
+        // (AAA) HAPTIC FEEDBACK: Fizyczne wibracje na telefonach
+        function wibruj(wzorzec) {
+            if (window.Flagi && window.Flagi.Srodowisko && window.Flagi.Srodowisko.isMobile && navigator.vibrate) {
+                try { navigator.vibrate(wzorzec); } catch(e){}
+            }
         }
 
         // Próba odtworzenia dźwięku (Autoplay bypass)
@@ -125,6 +186,19 @@
         };
         document.body.appendChild(btnMute);
 
+        // (AAA) PING & NET-GRAPH MONITOR
+        const netGraph = document.createElement('div');
+        netGraph.id = 'net-graph';
+        netGraph.style.cssText = 'position: fixed; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: #0f0; font-family: monospace; font-size: 11px; padding: 6px; border-radius: 4px; z-index: 9999; display: none; text-align: right; border: 1px solid #333; pointer-events: none; text-shadow: 0 0 5px #0f0;';
+        document.body.appendChild(netGraph);
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                netGraph.style.display = netGraph.style.display === 'none' ? 'block' : 'none';
+            }
+        });
+
         // --- LEADERBOARD (Tabela Wyników UI) ---
         const leaderboard = document.createElement('div');
         leaderboard.id = 'leaderboard';
@@ -141,11 +215,8 @@
             mobileBtn.ontouchstart = (e) => {
                 e.preventDefault(); 
                 if (!czyWsklepie && window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-                    const centerX = window.innerWidth / 2;
-                    const centerY = window.innerHeight / 2;
-                    const katRzutu = Math.atan2(kursor.y - centerY, kursor.x - centerX);
-                    socket.emit('rzutOszczepem', { kat: katRzutu });
-                    odpalDzwiek('throw', 0.6);
+                    // Wysłanie bezpośrednie lub aktywacja bufora
+                    buforRzutuCzas = Date.now(); 
                 }
             };
             document.getElementById('in-game-ui').appendChild(mobileBtn);
@@ -269,6 +340,7 @@
             etapKampanii = 0; 
             ostatniaMasa = 0; 
             ostatniCzasJedzenia = 0;
+            ostatniCzasInputu = Date.now();
             
             if (interwalCzasu) clearInterval(interwalCzasu);
             interwalCzasu = setInterval(aktualizujCzas, 1000);
@@ -291,7 +363,16 @@
             let min = String(Math.floor(roznica / 60)).padStart(2, '0');
             let sek = String(roznica % 60).padStart(2, '0');
             timerDisplay.innerText = `${min}:${sek}`;
+
+            // (AAA) Wysłanie pakietu Ping do sprawdzenia opóźnień
+            socket.emit('pingTest', Date.now());
         }
+
+        // Odbiór Pingu z serwera
+        socket.on('pongTest', (klientWyslano) => {
+            ping = Date.now() - klientWyslano;
+            if (netGraph) netGraph.innerHTML = `PING: <span style="color:${ping > 120 ? '#e74c3c' : '#2ecc71'}">${ping}ms</span>`;
+        });
 
         function dodajDoKillfeedu(zabojca, ofiara) {
             if (!killfeed) return;
@@ -345,22 +426,30 @@
             }, czas);
         }
 
-        // 5. HYBRYDOWY SYSTEM STEROWANIA
+        // 5. HYBRYDOWY SYSTEM STEROWANIA Z DETEKCJĄ AFK
+        function zglosInput() {
+            ostatniCzasInputu = Date.now();
+        }
+
         window.addEventListener('mousemove', (e) => {
             kursor.x = e.clientX; kursor.y = e.clientY;
+            zglosInput();
         });
         window.addEventListener('touchmove', (e) => {
             kursor.x = e.touches[0].clientX; kursor.y = e.touches[0].clientY;
+            zglosInput();
         }, { passive: true });
 
         window.addEventListener('keydown', (e) => {
+            if (window.Flagi && window.Flagi.Stan.aktualny !== 'PLAYING') return; // Zabezpieczenie Maszyny Stanów
+            zglosInput();
             const key = e.key.toLowerCase();
             if (['w', 'arrowup'].includes(key)) klawiszeKierunku.w = true;
             if (['a', 'arrowleft'].includes(key)) klawiszeKierunku.a = true;
             if (['s', 'arrowdown'].includes(key)) klawiszeKierunku.s = true;
             if (['d', 'arrowright'].includes(key)) klawiszeKierunku.d = true;
 
-            if (['1','2','3','4'].includes(key) && window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
+            if (['1','2','3','4'].includes(key) && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
                 aktywnaFormacja = parseInt(key);
                 socket.emit('zmianaFormacji', aktywnaFormacja);
                 document.querySelectorAll('#formation-panel span').forEach(el => el.remove());
@@ -384,19 +473,15 @@
         });
 
         window.addEventListener('mousedown', (e) => {
-            if (e.button === 0 && !czyWsklepie) { 
-                if (window.Guardian && window.Guardian.rejestrujKlikniecie && !window.Guardian.rejestrujKlikniecie()) return;
-                const katRzutu = Math.atan2(e.clientY - window.innerHeight / 2, e.clientX - window.innerWidth / 2);
-                socket.emit('rzutOszczepem', { kat: katRzutu });
-                odpalDzwiek('throw', 0.6);
+            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && e.button === 0 && !czyWsklepie) { 
+                zglosInput();
+                buforRzutuCzas = Date.now(); // (AAA) Coyote Time Buffer
             }
         });
         window.addEventListener('touchstart', (e) => {
-            if (!czyWsklepie && e.touches.length > 1) {
-                if (window.Guardian && window.Guardian.rejestrujKlikniecie && !window.Guardian.rejestrujKlikniecie()) return;
-                const touch = e.touches[e.touches.length - 1];
-                const katRzutu = Math.atan2(touch.clientY - window.innerHeight / 2, touch.clientX - window.innerWidth / 2);
-                socket.emit('rzutOszczepem', { kat: katRzutu });
+            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && !czyWsklepie && e.touches.length > 1) {
+                zglosInput();
+                buforRzutuCzas = Date.now(); 
             }
         }, { passive: false });
 
@@ -411,7 +496,8 @@
 
             if (masa >= 50 && etapKampanii === 0) {
                 pokazNapisKinowy("ZAAKTYWOWANO PROTOKÓŁ OBRONNY. RÓJ MASZYN OBUDZIŁ SIĘ Z UŚPIENIA.", 6000);
-                odpalDzwiek('alert', 0.7);
+                odpalDzwiek3D('alert', 0.7, srodekBazyX, srodekBazyY);
+                zrobAudioDucking();
                 etapKampanii = 1;
             }
             if (masa >= 150 && etapKampanii === 1) {
@@ -420,7 +506,9 @@
             }
             if (masa >= 280 && etapKampanii === 2) {
                 pokazNapisKinowy("⚠️ WYKRYTO POTĘŻNE DRGANIA SEJSMICZNE... ANOMALIA OMEGA ZBLIŻA SIĘ DO SEKTORA!", 7000);
-                odpalDzwiek('alert', 0.8);
+                odpalDzwiek3D('alert', 0.8, mojGracz.x, mojGracz.y);
+                zrobAudioDucking();
+                wibruj([100,50,100,50,200]);
                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(10);
                 etapKampanii = 3;
             }
@@ -432,7 +520,9 @@
 
             if (bossAlive && etapKampanii === 3) {
                 pokazNapisKinowy("TYTAN OMEGA ZESPAWNOWANY! ZNISZCZ GO, ABY PRZETRWAĆ!", 6000);
-                odpalDzwiek('alert', 1.0);
+                odpalDzwiek3D('alert', 1.0, mojGracz.x, mojGracz.y);
+                zrobAudioDucking();
+                wibruj([300,100,300,100,500]);
                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(25);
                 etapKampanii = 4;
             }
@@ -487,10 +577,12 @@
             if (barBlue) barBlue.style.width = `${bluePercent}%`;
         }
 
-        // 8. KOMUNIKACJA Z SERWEREM
+        // 8. KOMUNIKACJA Z SERWEREM (Z Integracją Guardiana AAA)
         socket.on('init', (data) => { mojeId = data.id; });
         socket.on('serverTick', (data) => {
-            stanSerwera = data;
+            // BEZPIECZNE PRZEKAZYWANIE DANYCH Z SERWERA PRZEZ TARCZĘ
+            stanSerwera = window.Guardian && window.Guardian.sanityzujStanSerwera ? window.Guardian.sanityzujStanSerwera(data) : data;
+            
             if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick();
             aktualizujSileDruzyn(); 
             
@@ -523,29 +615,37 @@
         socket.on('killEvent', (data) => { 
             if (data.zabojca && data.ofiara) {
                 dodajDoKillfeedu(data.zabojca, data.ofiara);
-                odpalDzwiek('death', 0.3);
+                let zrodloX = 2000, zrodloY = 2000;
+                if (stanSerwera && stanSerwera.players) {
+                    let ulozysko = Object.values(stanSerwera.players).find(p => p.name === data.ofiara);
+                    if (ulozysko) { zrodloX = ulozysko.x; zrodloY = ulozysko.y; }
+                }
+                odpalDzwiek3D('death', 0.5, zrodloX, zrodloY);
             }
         });
         
         socket.on('cinematicEvent', (tekst) => { 
             pokazNapisKinowy(tekst, 5000); 
-            odpalDzwiek('alert', 0.6); 
+            odpalDzwiek3D('alert', 0.6); 
+            zrobAudioDucking();
         });
-        socket.on('wstrzasKamery', (moc) => { if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(moc); });
+        socket.on('wstrzasKamery', (moc) => { 
+            if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(moc); 
+            wibruj(moc > 15 ? 100 : 30);
+        });
 
+        // (AAA) AUTO-RECONNECTION UI
         socket.on('disconnect', () => {
-            console.warn("⚠️ Serwer przerwał połączenie.");
+            console.warn("⚠️ Serwer przerwał połączenie. Próba ponownego nawiązania...");
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-                if (uiLayer) {
-                    uiLayer.classList.remove('hidden');
-                    uiLayer.innerHTML = `
-                        <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid #e74c3c; border-radius: 15px; box-shadow: 0 0 40px red; position: relative; z-index: 999;">
-                            <h1 style="color: #e74c3c; font-size: 42px; font-family: 'Permanent Marker';">⚠️ UTRACONO POŁĄCZENIE</h1>
-                            <p style="color: #aaa; margin: 20px 0;">Zerwano łączność z centralą serwera.</p>
-                            <button class="main-btn border-blue" onclick="location.reload()">ODŚWIEŻ STRONĘ</button>
-                        </div>
-                    `;
-                }
+                pokazNapisKinowy("⚠️ ZERWANO ŁĄCZNOŚĆ. PRÓBA REKONFIGURACJI...", 3000);
+                wibruj([200, 200, 200]);
+            }
+        });
+
+        socket.on('connect', () => {
+            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && czasStart > 0) {
+                pokazNapisKinowy("🟢 ŁĄCZNOŚĆ PRZYWRÓCONA. WRACASZ DO AKCJI.", 2000);
             }
         });
 
@@ -557,9 +657,11 @@
             if (teamPowerBar) teamPowerBar.classList.add('hidden');
             if (formationPanel) formationPanel.classList.add('hidden');
             if (document.getElementById('leaderboard')) document.getElementById('leaderboard').classList.add('hidden');
+            if (netGraph) netGraph.style.display = 'none';
             
-            muzykaGra.pause(); 
+            zrobAudioDucking();
             odpalDzwiek('death', 0.8);
+            wibruj([500]);
 
             const finalTime = timerDisplay ? timerDisplay.innerText : "00:00";
             const tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
@@ -594,12 +696,19 @@
             }
         });
 
-        // 9. PĘTLA GRY Z HYBRYDOWYM STEROWANIEM
+        // 9. PĘTLA GRY Z HYBRYDOWYM STEROWANIEM I PREDICTION
         function pętlaGry() {
             let teraz = Date.now();
 
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
                 
+                // (AAA) AFK Detection - Oszczędzanie serwera, gdy gracz odejdzie
+                if (teraz - ostatniCzasInputu > 120000) { 
+                    if (teraz % 5000 < 50) pokazNapisKinowy("ZBYT DŁUGI BRAK RUCHU. TRYB OSZCZĘDZANIA ENERGII.", 2000);
+                    // Odciążamy serwer rzadszym wysyłaniem pakietów dla AFK-ów
+                    if (teraz - ostatniaWysylkaRuchu < 200) return requestAnimationFrame(pętlaGry);
+                }
+
                 if (!czyWsklepie) {
                     if (teraz - ostatniaWysylkaRuchu > 33) {
                         const centerX = window.innerWidth / 2;
@@ -608,9 +717,9 @@
                         let kat = 0;
                         let dystans = 0;
                         let ruszKlawiatura = klawiszeKierunku.w || klawiszeKierunku.s || klawiszeKierunku.a || klawiszeKierunku.d;
+                        let dx = 0; let dy = 0;
 
                         if (ruszKlawiatura) {
-                            let dx = 0; let dy = 0;
                             if (klawiszeKierunku.w) dy -= 1;
                             if (klawiszeKierunku.s) dy += 1;
                             if (klawiszeKierunku.a) dx -= 1;
@@ -624,7 +733,43 @@
                         }
                         
                         socket.emit('ruchGraczaMyszka', { kat: kat, dystans: dystans });
+
+                        // (AAA) Client-Side Prediction (Przewidywanie ruchu)
+                        if (stanSerwera && stanSerwera.players && mojeId) {
+                            let mojGracz = stanSerwera.players[mojeId];
+                            if (mojGracz && (dx !== 0 || dy !== 0 || dystans > 20)) {
+                                let predkoscKorekty = 4; // Optymalna wartość dla płynności lokalnej
+                                mojGracz.x += Math.cos(kat) * predkoscKorekty;
+                                mojGracz.y += Math.sin(kat) * predkoscKorekty;
+                            }
+                        }
+
                         ostatniaWysylkaRuchu = teraz;
+                    }
+
+                    // (AAA) Input Buffering (Coyote Time) dla Rzutu Oszczepem
+                    if (buforRzutuCzas > 0 && (teraz - buforRzutuCzas < 250)) { 
+                        let doRzutu = true;
+                        if (window.Guardian && window.Guardian.rejestrujKlikniecie) {
+                            doRzutu = window.Guardian.rejestrujKlikniecie();
+                        }
+                        
+                        if (doRzutu) {
+                            const centerX = window.innerWidth / 2;
+                            const centerY = window.innerHeight / 2;
+                            let celKat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
+                            socket.emit('rzutOszczepem', { kat: celKat });
+                            
+                            let posX = 2000, posY = 2000;
+                            if (stanSerwera && stanSerwera.players && stanSerwera.players[mojeId]) {
+                                posX = stanSerwera.players[mojeId].x; posY = stanSerwera.players[mojeId].y;
+                            }
+                            odpalDzwiek3D('throw', 0.6, posX, posY);
+                            wibruj(15); 
+                            buforRzutuCzas = 0; // Kasowanie bufora po udanym rzucie
+                        }
+                    } else if (teraz - buforRzutuCzas >= 250) {
+                        buforRzutuCzas = 0; // Bufor wygasł
                     }
                 }
 
@@ -639,7 +784,8 @@
                             let roznica = mojGracz.score - ostatniaMasa;
                             
                             if (roznica <= -1) {
-                                odpalDzwiek('hit', 0.8);
+                                odpalDzwiek3D('hit', 0.8, mojGracz.x, mojGracz.y);
+                                wibruj(50);
                                 let flash = document.createElement('div');
                                 flash.style.cssText = 'position: fixed; inset: 0; background: rgba(231, 76, 60, 0.4); z-index: 900; pointer-events: none; transition: opacity 0.2s ease-out;';
                                 document.body.appendChild(flash);
@@ -647,13 +793,20 @@
                                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
                             } 
                             else if (roznica >= 1 && (teraz - ostatniCzasJedzenia > 100)) {
-                                odpalDzwiek('eat', 0.2);
+                                odpalDzwiek3D('eat', 0.2, mojGracz.x, mojGracz.y);
                                 ostatniCzasJedzenia = teraz;
                             }
                         }
                         ostatniaMasa = mojGracz.score;
 
-                        if (window.Grafika) window.Grafika.rysujKlatke(stanSerwera, mojGracz);
+                        // RYSOWANIE GRAFIKI (Z OCHRONĄ GUARDIANA)
+                        if (window.Grafika && window.Guardian && window.Guardian.chronFukcje) {
+                            window.Guardian.chronFukcje(() => {
+                                window.Grafika.rysujKlatke(stanSerwera, mojGracz);
+                            }, "GrafikaRender")();
+                        } else if (window.Grafika) {
+                            window.Grafika.rysujKlatke(stanSerwera, mojGracz);
+                        }
                     }
                 }
             }

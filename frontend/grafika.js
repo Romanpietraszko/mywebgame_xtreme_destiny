@@ -1,5 +1,6 @@
 // ==========================================
 // GRAFIKA.JS - Produkcyjny Silnik Renderujący (Architektura Północna & Taktyczne Boty)
+// WERSJA: AAA Visuals (10 Upgrades + Zoom Bleed Fix)
 // ==========================================
 
 window.Grafika = (function() {
@@ -8,7 +9,7 @@ window.Grafika = (function() {
     
     // --- ZMIENNE SYSTEMOWE ---
     let camera = { x: 0, y: 0 };
-    let cameraScale = 1.0; // NOWOŚĆ: Dynamiczny Zoom
+    let cameraScale = 1.0; // Dynamiczny Zoom
     let screenW = window.innerWidth;
     let screenH = window.innerHeight;
     
@@ -24,10 +25,13 @@ window.Grafika = (function() {
     let pokazDuzaMape = false;
     let wstrzasEkranu = { moc: 0, wygasanie: 0.9 }; // System trzęsienia kamery
     
-    // NOWOŚĆ: System fizycznych cząsteczek i Pływającego Tekstu (Gore & Combat Text)
+    // Systemy FX (Gore, Combat Text, Decals, Shockwaves)
     let efektyWizualne = [];
     let powiadomieniaLiczbowe = []; 
+    let plamyZniszczen = []; // Wypalone kratery po śmierci
+    let faleUderzeniowe = []; // Kinowe fale przy uderzeniach/ewolucji
     let poprzedniePozycje = { players: {}, bots: {} };
+    let poziomyEwolucji = {}; // Śledzenie tierów pancerza do błysków
 
     // Nasłuchiwanie klawisza M
     window.addEventListener('keydown', (e) => {
@@ -59,7 +63,7 @@ window.Grafika = (function() {
 
     // Optymalizacja: Culling (Rysuje tylko to, co widzi kamera z uwzględnieniem zooma)
     function czyWidoczny(x, y, promien) {
-        const margines = 250 / cameraScale; // Margines rośnie, gdy oddalamy kamerę
+        const margines = 300 / cameraScale; // Zwiększony margines dla pewności
         return (
             x + promien + margines > camera.x &&
             x - promien - margines < camera.x + screenW / cameraScale &&
@@ -68,9 +72,9 @@ window.Grafika = (function() {
         );
     }
 
-    // --- SYSTEM FX (Cząsteczki Wybuchów i Liczby Obrażeń) ---
+    // --- SYSTEM FX (Cząsteczki, Fale, Plamy, Smugi) ---
     function generujWybuch(x, y, kolor, moc) {
-        let ilosc = Math.min(moc, 60); // Max 60 iskier, żeby chronić starsze telefony
+        let ilosc = Math.min(moc, 50); 
         for(let i=0; i<ilosc; i++) {
             let kat = Math.random() * Math.PI * 2;
             let predkosc = Math.random() * 12 + 3;
@@ -80,6 +84,29 @@ window.Grafika = (function() {
                 zycie: 1.0, kolor: kolor, rozmiar: Math.random() * 5 + 2
             });
         }
+        
+        // Zostaw wypalony krater (Decal)
+        plamyZniszczen.push({
+            x: x, y: y, 
+            r: moc * 2, 
+            kolor: kolor, 
+            zycie: 1.0, 
+            kat: Math.random() * Math.PI * 2
+        });
+        if(plamyZniszczen.length > 40) plamyZniszczen.shift(); // Limit dla wydajności
+        
+        // Wygeneruj falę uderzeniową (Shockwave)
+        faleUderzeniowe.push({ x: x, y: y, r: 10, maxR: moc * 4, zycie: 1.0, kolor: kolor });
+    }
+
+    function generujSmugęPocisku(x, y, kolor) {
+        if(Math.random() > 0.4) return; // Tworzy gęsty, ale zoptymalizowany ogon
+        efektyWizualne.push({
+            x: x + (Math.random()*10-5), y: y + (Math.random()*10-5),
+            vx: Math.random()*2-1, vy: Math.random()*2-1,
+            zycie: 0.6, kolor: kolor, rozmiar: Math.random() * 3 + 1
+        });
+        if(efektyWizualne.length > 150) efektyWizualne.shift();
     }
 
     function dodajPowiadomienie(x, y, roznica) {
@@ -87,9 +114,9 @@ window.Grafika = (function() {
         let znak = roznica > 0 ? '+' : '';
         let kolor = roznica > 0 ? '#2ecc71' : '#e74c3c';
         powiadomieniaLiczbowe.push({
-            x: x + (Math.random() * 30 - 15), // Lekkie rozproszenie na boki
+            x: x + (Math.random() * 30 - 15), 
             y: y - 40,
-            vy: -2 - Math.random(), // Leci do góry
+            vy: -2 - Math.random(), 
             tekst: znak + Math.floor(roznica),
             kolor: kolor,
             zycie: 1.0
@@ -97,11 +124,52 @@ window.Grafika = (function() {
     }
 
     function aktualizujEfektyZniszczen() {
-        // Cząsteczki fizyczne (Gore)
+        // 1. Plamy zniszczeń na samej ziemi (Decals)
+        for(let i = plamyZniszczen.length - 1; i >= 0; i--) {
+            let d = plamyZniszczen[i];
+            d.zycie -= 0.002; // Znikają baaardzo powoli
+            if (d.zycie <= 0) { plamyZniszczen.splice(i, 1); continue; }
+            
+            if (czyWidoczny(d.x, d.y, d.r)) {
+                ctx.save(); 
+                ctx.translate(d.x, d.y); 
+                ctx.rotate(d.kat);
+                ctx.globalAlpha = d.zycie * 0.3;
+                let grad = ctx.createRadialGradient(0,0,0, 0,0,d.r);
+                grad.addColorStop(0, '#000'); 
+                grad.addColorStop(0.5, d.kolor); 
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad; 
+                ctx.beginPath(); 
+                ctx.arc(0, 0, d.r, 0, Math.PI*2); 
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        // 2. Fale uderzeniowe
+        for(let i = faleUderzeniowe.length - 1; i >= 0; i--) {
+            let f = faleUderzeniowe[i];
+            f.r += (f.maxR - f.r) * 0.15; // Rozszerzanie
+            f.zycie -= 0.05; // Szybkie znikanie
+            if (f.zycie <= 0) { faleUderzeniowe.splice(i, 1); continue; }
+            
+            if (czyWidoczny(f.x, f.y, f.r)) {
+                ctx.globalAlpha = f.zycie;
+                ctx.strokeStyle = f.kolor; 
+                ctx.lineWidth = 4 * f.zycie;
+                ctx.beginPath(); 
+                ctx.arc(f.x, f.y, f.r, 0, Math.PI*2); 
+                ctx.stroke();
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // 3. Fizyczne Cząsteczki (Gore)
         for(let i = efektyWizualne.length - 1; i >= 0; i--) {
             let p = efektyWizualne[i];
             p.x += p.vx; p.y += p.vy;
-            p.vx *= 0.92; p.vy *= 0.92; // Tarcie - zwalniają z czasem
+            p.vx *= 0.92; p.vy *= 0.92; 
             p.zycie -= 0.03;
             
             if (p.zycie <= 0) { efektyWizualne.splice(i, 1); continue; }
@@ -115,7 +183,7 @@ window.Grafika = (function() {
             }
         }
 
-        // Floating Text (Obrażenia i leczenie)
+        // 4. Floating Text (Zawsze na wierzchu)
         ctx.font = 'bold 20px Exo 2, sans-serif';
         ctx.textAlign = 'center';
         for(let i = powiadomieniaLiczbowe.length - 1; i >= 0; i--) {
@@ -138,12 +206,11 @@ window.Grafika = (function() {
         }
     }
 
-    // --- ŚRODOWISKO I MAPA Z POGODĄ ---
+    // --- ŚRODOWISKO I PARALAKSA Z POGODĄ ---
     function generujSrodowisko(tryb) {
         mapaObiekty = { krzaki: [], mury: [], swiatla: [] };
         czasteczkiTla = [];
 
-        // Dynamiczna pogoda zależna od trybu gry
         let iloscCzasteczek = tryb === 'CAMPAIGN' ? 150 : (tryb === 'TEAMS' ? 200 : 100);
         
         for(let i = 0; i < iloscCzasteczek; i++) {
@@ -161,12 +228,13 @@ window.Grafika = (function() {
             }
 
             czasteczkiTla.push({
-                x: Math.random() * screenW, 
-                y: Math.random() * screenH,
+                x: Math.random() * 6000, 
+                y: Math.random() * 6000,
                 speedX: predkoscX, 
                 speedY: predkoscY,
                 r: rozmiar,
-                alpha: Math.random() * 0.5 + 0.1
+                alpha: Math.random() * 0.5 + 0.1,
+                głębia: Math.random() * 0.8 + 0.2 // Wskaźnik Paralaksy (1.0 = blisko, 0.2 = bardzo daleko)
             });
         }
         
@@ -189,12 +257,16 @@ window.Grafika = (function() {
         czasteczkiTla.forEach(c => {
             c.x += c.speedX; c.y += c.speedY;
             
-            // Poprawka dla Zooma: Zapewnia, by pyłki renderowały się na całym powiększonym obszarze kamery
-            if (c.x < 0) c.x = screenW / cameraScale; if (c.x > screenW / cameraScale) c.x = 0;
-            if (c.y < 0) c.y = screenH / cameraScale; if (c.y > screenH / cameraScale) c.y = 0;
+            // Obszar wrap-around na dużej przestrzeni
+            if (c.x < 0) c.x = 6000; if (c.x > 6000) c.x = 0;
+            if (c.y < 0) c.y = 6000; if (c.y > 6000) c.y = 0;
             
-            let drawX = camera.x + c.x;
-            let drawY = camera.y + c.y;
+            // Logika Paralaksy
+            let offsetX = camera.x * (1 - c.głębia);
+            let offsetY = camera.y * (1 - c.głębia);
+            
+            let drawX = c.x + offsetX;
+            let drawY = c.y + offsetY;
 
             if (tryb === 'TEAMS') {
                 ctx.fillStyle = `rgba(200, 200, 200, ${c.alpha})`;
@@ -206,10 +278,10 @@ window.Grafika = (function() {
                 ctx.stroke();
             } else if (tryb === 'CAMPAIGN') {
                 ctx.fillStyle = `rgba(180, 20, 20, ${c.alpha * 0.4})`;
-                ctx.beginPath(); ctx.arc(drawX, drawY, c.r, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(drawX, drawY, c.r * c.głębia, 0, Math.PI*2); ctx.fill();
             } else {
                 ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`;
-                ctx.beginPath(); ctx.arc(drawX, drawY, c.r, 0, Math.PI*2); ctx.fill();
+                ctx.beginPath(); ctx.arc(drawX, drawY, c.r * c.głębia, 0, Math.PI*2); ctx.fill();
             }
         });
     }
@@ -268,12 +340,16 @@ window.Grafika = (function() {
     }
 
     function rysujMape(tryb, limitSwiata, stanSerwera) {
+        // TWARDY FIX NA PRZEŚWITY TŁA PRZY ZOOMIE (Zawsze pełne pokrycie monitora czernią)
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
         ctx.fillStyle = '#08080a'; 
-        // Wypełniamy tło z uwzględnieniem zooma
-        ctx.fillRect(camera.x, camera.y, screenW / cameraScale, screenH / cameraScale);
+        ctx.fillRect(0, 0, screenW, screenH);
+        ctx.restore();
+
         aktualizujCząsteczki(tryb);
 
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.1)'; ctx.lineWidth = 1.5;
+        ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)'; ctx.lineWidth = 1;
         const siatkaRozmiar = 200;
         const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar;
         const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
@@ -307,7 +383,6 @@ window.Grafika = (function() {
         else if (tryb === 'FREE') {
             mapaObiekty.krzaki.forEach(k => {
                 if(czyWidoczny(k.x, k.y, k.r)) {
-                    // NOWOŚĆ: Interaktywne krzaki (szelest, jeśli ktoś tam siedzi)
                     let drganie = 0;
                     if (stanSerwera) {
                         let ktosJestWKrzaku = Object.values(stanSerwera.players).some(p => Math.hypot(p.x - k.x, p.y - k.y) < k.r) || 
@@ -404,6 +479,34 @@ window.Grafika = (function() {
         }
     }
 
+    // Dodatkowe Skrypty Animacji
+    function rysujWstegeRuchu(id, promien, kolor) {
+        if (!sladPostaci[id] || sladPostaci[id].length < 2) return;
+        ctx.save();
+        ctx.beginPath();
+        ctx.moveTo(sladPostaci[id][0].x, sladPostaci[id][0].y);
+        for(let i=1; i<sladPostaci[id].length; i++) {
+            let p1 = sladPostaci[id][i-1]; 
+            let p2 = sladPostaci[id][i];
+            let mx = (p1.x + p2.x) / 2; 
+            let my = (p1.y + p2.y) / 2;
+            ctx.quadraticCurveTo(p1.x, p1.y, mx, my);
+        }
+        ctx.strokeStyle = kolor; 
+        ctx.lineWidth = promien * 0.8; 
+        ctx.lineCap = 'round'; 
+        ctx.lineJoin = 'round';
+        ctx.globalAlpha = 0.3;
+        if (!window.Flagi.Srodowisko.isMobile) { ctx.shadowBlur = 10; ctx.shadowColor = kolor; }
+        ctx.stroke();
+        ctx.restore();
+    }
+
+    function obliczCienKierunkowy() {
+        let katOswietlenia = Date.now() / 2000; 
+        return { offsetX: Math.cos(katOswietlenia) * 10, offsetY: Math.sin(katOswietlenia) * 10 };
+    }
+
     function rysujBota(bot) {
         if (!bot || !czyWidoczny(bot.x, bot.y, 100)) return;
 
@@ -422,27 +525,15 @@ window.Grafika = (function() {
         let mainColor = isBoss ? '#9b59b6' : '#e74c3c';
         let strokeColor = mainColor;
         
-        if (bot.ownerId && bot.team) {
-            strokeColor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
-            
-            ctx.save();
-            ctx.beginPath();
-            ctx.arc(0, 0, promien + 8, 0, Math.PI * 2);
-            ctx.fillStyle = bot.team === 'RED' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(52, 152, 219, 0.2)';
-            ctx.fill();
-            if (window.Flagi && !window.Flagi.Srodowisko.isMobile) {
-                ctx.shadowBlur = 20; 
-                ctx.shadowColor = strokeColor;
-            }
-            ctx.lineWidth = 2;
-            ctx.strokeStyle = strokeColor;
-            ctx.setLineDash([5, 5]); 
-            ctx.stroke();
-            ctx.restore();
-        }
+        if (bot.ownerId && bot.team) strokeColor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
 
-        if (window.Flagi && !window.Flagi.Srodowisko.isMobile) {
-            ctx.shadowBlur = 15; ctx.shadowColor = strokeColor;
+        // Cienie kierunkowe na botach
+        if (!window.Flagi.Srodowisko.isMobile) {
+            let cien = obliczCienKierunkowy();
+            ctx.shadowColor = strokeColor; 
+            ctx.shadowBlur = 15;
+            ctx.shadowOffsetX = cien.offsetX; 
+            ctx.shadowOffsetY = cien.offsetY;
         }
 
         ctx.fillStyle = '#050505';
@@ -466,7 +557,8 @@ window.Grafika = (function() {
         ctx.fill(); 
         ctx.stroke();
 
-        ctx.shadowBlur = 0;
+        ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0; ctx.shadowBlur = 0;
+        
         ctx.strokeStyle = `rgba(${strokeColor === '#3498db' ? '52, 152, 219' : '231, 76, 60'}, 0.5)`;
         if (isBoss) ctx.strokeStyle = 'rgba(155, 89, 182, 0.5)';
         
@@ -522,15 +614,26 @@ window.Grafika = (function() {
         
         let skin = postac.skin || 'standard';
         let currentTime = Date.now();
+        let kolorWiodacy = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
+        if (postac.team) kolorWiodacy = postac.team === 'RED' ? '#e74c3c' : '#3498db';
 
-        if (!czasWejsciaGraczy[id]) {
-            czasWejsciaGraczy[id] = currentTime;
+        // Błysk Ewolucji przy wbiciu poziomu (Tier 1, 2, 3)
+        let tier = masa >= 600 ? 3 : (masa >= 150 ? 2 : (masa >= 50 ? 1 : 0));
+        if (poziomyEwolucji[id] !== undefined && poziomyEwolucji[id] < tier) {
+            faleUderzeniowe.push({ x: postac.x, y: postac.y, r: promien, maxR: promien * 3, zycie: 1.0, kolor: '#fff' });
         }
+        poziomyEwolucji[id] = tier;
+
+        if (!czasWejsciaGraczy[id]) czasWejsciaGraczy[id] = currentTime;
         let czasOdWejscia = currentTime - czasWejsciaGraczy[id];
 
         ctx.save(); 
         if (wKrzaku && isMe) ctx.globalAlpha = 0.4; 
 
+        // Glitch Effect (Gdy tracisz HP i ekran mocno drży)
+        let czyZglitchowany = isMe && wstrzasEkranu.moc > 5;
+
+        // Desant Orbitalny
         if (czasOdWejscia < 1200) {
             let op = 1 - (czasOdWejscia / 1200);
             ctx.save();
@@ -543,36 +646,58 @@ window.Grafika = (function() {
             ctx.restore();
         }
 
-        if (masa >= 300 && !wKrzaku) {
+        // Płynna Wstęga Ruchu zamiast starego "Sladu"
+        if (masa >= 150 && !wKrzaku) {
             if (!sladPostaci[id]) sladPostaci[id] = [];
             sladPostaci[id].push({x: postac.x, y: postac.y});
-            if (sladPostaci[id].length > 5) sladPostaci[id].shift();
-            
-            sladPostaci[id].forEach((punkt, index) => {
-                ctx.beginPath(); ctx.arc(punkt.x, punkt.y, promien * 0.8 * (index/5), 0, Math.PI*2);
-                ctx.fillStyle = (skin === 'ninja') ? `rgba(155, 89, 182, ${index * 0.05})` : `rgba(231, 76, 60, ${index * 0.05})`;
-                ctx.fill();
-            });
+            if (sladPostaci[id].length > 6) sladPostaci[id].shift();
+            rysujWstegeRuchu(id, promien, kolorWiodacy);
         }
 
+        // Funkcja pomocnicza do rysowania ciała (ułatwia nakładanie Glitcha)
+        let renderGracza = (offsetX = 0, offsetY = 0, kolorNadpisany = null) => {
+            ctx.save(); 
+            ctx.translate(postac.x + offsetX, postac.y + offsetY); 
+            ctx.rotate(postac.kat || 0);
+            
+            if (kolorNadpisany) ctx.globalCompositeOperation = 'screen';
+            
+            let img = obrazyPostaci[skin] || obrazyPostaci['standard'];
+            if (img.complete && img.naturalWidth !== 0) {
+                if (masa >= 100 && window.Flagi && !window.Flagi.Srodowisko.isMobile && !kolorNadpisany) {
+                    let cien = obliczCienKierunkowy();
+                    ctx.shadowBlur = 15;
+                    ctx.shadowColor = kolorWiodacy;
+                    ctx.shadowOffsetX = cien.offsetX; 
+                    ctx.shadowOffsetY = cien.offsetY;
+                }
+                ctx.drawImage(img, -promien, -promien, promien * 2, promien * 2);
+                
+                if (kolorNadpisany) {
+                    ctx.fillStyle = kolorNadpisany; 
+                    ctx.globalCompositeOperation = 'source-atop';
+                    ctx.fillRect(-promien, -promien, promien*2, promien*2);
+                }
+            } else {
+                ctx.fillStyle = '#555';
+                ctx.beginPath(); ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.fill();
+            }
+            ctx.shadowBlur = 0; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+            ctx.restore();
+        };
+
+        // Renderowanie Glitcha (Tylko w momentach uderzenia)
+        if (czyZglitchowany) {
+            renderGracza(-5, 0, 'rgba(255,0,0,0.7)'); // Przesunięcie Czerwone
+            renderGracza(5, 0, 'rgba(0,255,255,0.7)'); // Przesunięcie Cyan
+            ctx.globalAlpha = 0.8;
+        }
+        renderGracza(); // Ciało właściwe
+
+        // Resetowanie transformacji i kontynuacja (Pancerze, Broń)
         ctx.save();
         ctx.translate(postac.x, postac.y);
-        let postacKat = postac.kat || 0;
-        ctx.rotate(postacKat);
-
-        let img = obrazyPostaci[skin] || obrazyPostaci['standard'];
-        
-        if (img.complete && img.naturalWidth !== 0) {
-            if (masa >= 100 && window.Flagi && !window.Flagi.Srodowisko.isMobile) {
-                ctx.shadowBlur = 15;
-                ctx.shadowColor = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
-            }
-            ctx.drawImage(img, -promien, -promien, promien * 2, promien * 2);
-        } else {
-            ctx.fillStyle = '#555';
-            ctx.beginPath(); ctx.arc(0, 0, promien, 0, Math.PI*2); ctx.fill();
-        }
-        ctx.shadowBlur = 0; 
+        ctx.rotate(postac.kat || 0);
 
         let kolorZbroi = '#3498db'; 
         if (skin === 'ninja') kolorZbroi = '#9b59b6'; 
@@ -599,7 +724,7 @@ window.Grafika = (function() {
         ctx.beginPath(); ctx.moveTo(-5, -promien); ctx.lineTo(5, -promien); ctx.lineTo(0, -promien - 15); ctx.closePath(); ctx.fill();
         ctx.restore();
 
-        if (masa >= 50) {
+        if (tier >= 1) {
             ctx.save();
             ctx.translate(-promien * 0.8, 0); 
             ctx.fillStyle = '#111';
@@ -615,7 +740,7 @@ window.Grafika = (function() {
             ctx.closePath();
             ctx.fill(); ctx.stroke();
             
-            if (masa >= 150) {
+            if (tier >= 2) {
                 ctx.rotate(currentTime / 500); 
                 ctx.strokeStyle = `rgba(${kolorZbroi === '#3498db' ? '52,152,219' : kolorZbroi === '#9b59b6' ? '155,89,182' : '231,76,60'}, 0.6)`;
                 ctx.setLineDash([5, 10]);
@@ -626,7 +751,7 @@ window.Grafika = (function() {
         }
         ctx.restore(); 
 
-        if (masa >= 600) {
+        if (tier >= 3) {
             ctx.save();
             ctx.translate(postac.x, postac.y - promien - 20); 
             ctx.translate(0, Math.sin(currentTime / 200) * 5); 
@@ -686,7 +811,45 @@ window.Grafika = (function() {
         ctx.restore();
     }
 
-    function rysujEfektyEkranu(tryb, stanSerwera, mojGracz) {
+    function rysujEfektyHUD(tryb, stanSerwera, mojGracz, limitWielkosci) {
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0); 
+        
+        // Speedlines (Efekt Anime/Prędkości na skrajach ekranu)
+        // Szacujemy prędkość na podstawie ruchu kamery z ostatnich klatek lub wywołanego wstrząsu
+        if (wstrzasEkranu.moc > 5 || (mojGracz.score > 200 && Math.abs(Math.sin(Date.now() / 100)) > 0.8)) {
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)'; 
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for(let i=0; i<30; i++) {
+                let angle = Math.random() * Math.PI * 2;
+                let length = Math.random() * 150 + 50;
+                let startR = Math.min(screenW, screenH) / 2;
+                let endR = startR + length;
+                ctx.moveTo(screenW/2 + Math.cos(angle)*startR, screenH/2 + Math.sin(angle)*startR);
+                ctx.lineTo(screenW/2 + Math.cos(angle)*endR, screenH/2 + Math.sin(angle)*endR);
+            }
+            ctx.stroke();
+        }
+
+        // Winieta Krańca Mapy (Czerwona pulsująca mgła blisko ściany)
+        let dystX = Math.min(mojGracz.x, limitWielkosci - mojGracz.x);
+        let dystY = Math.min(mojGracz.y, limitWielkosci - mojGracz.y);
+        let odlegloscOdKrawedzi = Math.min(dystX, dystY);
+        
+        if (odlegloscOdKrawedzi < 600) {
+            let intensywnosc = 1 - (odlegloscOdKrawedzi / 600);
+            let pX = (mojGracz.x < 600) ? 0 : (mojGracz.x > limitWielkosci - 600) ? screenW : screenW/2;
+            let pY = (mojGracz.y < 600) ? 0 : (mojGracz.y > limitWielkosci - 600) ? screenH : screenH/2;
+            
+            let grad = ctx.createRadialGradient(pX, pY, screenH/2, pX, pY, screenW);
+            grad.addColorStop(0, 'rgba(0,0,0,0)'); 
+            grad.addColorStop(1, `rgba(231, 76, 60, ${intensywnosc * 0.8})`);
+            ctx.fillStyle = grad; 
+            ctx.fillRect(0,0,screenW,screenH);
+        }
+
+        // Tryby Specyficzne
         if (tryb === 'TEAMS' && mojGracz.team) {
             let gradient = ctx.createRadialGradient(screenW/2, screenH/2, screenH/1.5, screenW/2, screenH/2, screenW);
             let teamColor = mojGracz.team === 'RED' ? 'rgba(231, 76, 60, 0.2)' : 'rgba(52, 152, 219, 0.2)';
@@ -696,8 +859,6 @@ window.Grafika = (function() {
             ctx.fillRect(0, 0, screenW, screenH);
         } 
         else if (tryb === 'CAMPAIGN') {
-            ctx.save();
-            ctx.setTransform(1, 0, 0, 1, 0, 0); 
             let masaDoŚwiatła = Math.max(10, mojGracz.score || 10);
             let promienSwiatla = 250 + Math.sqrt(masaDoŚwiatła) * 8; 
             
@@ -748,8 +909,8 @@ window.Grafika = (function() {
                 ctx.textAlign = 'center';
                 ctx.fillText(`TYTAN OMEGA`, screenW / 2, barY - 12);
             }
-            ctx.restore();
         }
+        ctx.restore();
     }
 
     function rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, czyMala = true) {
@@ -839,7 +1000,7 @@ window.Grafika = (function() {
         rysujKlatke: function(stanSerwera, mojGracz) {
             if (!stanSerwera || !mojGracz) return;
 
-            // 1. Płynna Kamera (Lerp)
+            // Płynna Kamera (Lerp)
             let docelowaKameraX = mojGracz.x - screenW / 2;
             let docelowaKameraY = mojGracz.y - screenH / 2;
             
@@ -851,7 +1012,7 @@ window.Grafika = (function() {
                 camera.y += (docelowaKameraY - camera.y) * 0.1;
             }
 
-            // 2. NOWOŚĆ: Dynamiczny Zoom oparty na masie gracza
+            // Dynamiczny Zoom oparty na masie gracza
             let masaDoZooma = Math.max(10, mojGracz.score);
             let docelowaSkala = Math.max(0.4, 1.15 - Math.sqrt(masaDoZooma) * 0.015);
             cameraScale += (docelowaSkala - cameraScale) * 0.05;
@@ -880,15 +1041,15 @@ window.Grafika = (function() {
             rysujMape(tryb, limitWielkosci, stanSerwera);
 
             // ==========================================
-            // LOGIKA ŚLEDZENIA ZMIAN (Gore i Floating Text)
+            // LOGIKA ŚLEDZENIA ZMIAN (Gore, Decale, Text)
             // ==========================================
             if (stanSerwera.players) {
                 Object.keys(poprzedniePozycje.players).forEach(id => {
-                    // Wykrywanie śmierci gracza (Gore)
+                    // Wykrywanie śmierci gracza
                     if (!stanSerwera.players[id] && id !== mojGracz.id) {
                         generujWybuch(poprzedniePozycje.players[id].x, poprzedniePozycje.players[id].y, '#e74c3c', 40);
                     }
-                    // Wykrywanie obrażeń/leczenia gracza (Liczby)
+                    // Wykrywanie obrażeń/leczenia
                     else if (stanSerwera.players[id]) {
                         let roznica = stanSerwera.players[id].score - poprzedniePozycje.players[id].score;
                         if (Math.abs(roznica) >= 1) {
@@ -904,12 +1065,10 @@ window.Grafika = (function() {
 
             if (stanSerwera.bots) {
                 Object.keys(poprzedniePozycje.bots).forEach(id => {
-                    // Wykrywanie śmierci bota (Gore)
                     if (!stanSerwera.bots[id]) {
                         let kolorWybuchu = poprzedniePozycje.bots[id].isBoss ? '#9b59b6' : '#e74c3c';
                         generujWybuch(poprzedniePozycje.bots[id].x, poprzedniePozycje.bots[id].y, kolorWybuchu, 25);
                     } 
-                    // Wykrywanie obrażeń/leczenia bota (Liczby)
                     else if (stanSerwera.bots[id]) {
                         let roznica = stanSerwera.bots[id].score - poprzedniePozycje.bots[id].score;
                         if (Math.abs(roznica) >= 1) {
@@ -929,6 +1088,7 @@ window.Grafika = (function() {
             // Rysowanie zniszczeń na mapie przed resztą obiektów
             aktualizujEfektyZniszczen();
 
+            // Rysowanie Masy (Cukierki)
             if (stanSerwera.foods) {
                 lokalnyBuforJedzenia = window.Guardian ? window.Guardian.safeObj(stanSerwera.foods, 'foods') : stanSerwera.foods;
             }
@@ -941,6 +1101,7 @@ window.Grafika = (function() {
                 }
             });
 
+            // Rysowanie Krwawiących Pocisków
             if (stanSerwera.projectiles) {
                 let bezpiecznePociski = window.Guardian ? window.Guardian.safeObj(stanSerwera.projectiles, 'projectiles') : stanSerwera.projectiles;
                 Object.values(bezpiecznePociski).forEach(proj => {
@@ -953,6 +1114,9 @@ window.Grafika = (function() {
                             let kolorOszczepu = proj.piercing ? '#9b59b6' : '#bdc3c7'; 
                             if (proj.mode === 'TEAMS') kolorOszczepu = proj.team === 'RED' ? '#e74c3c' : '#3498db';
                             
+                            // Wywołanie Smugi Oszczepu (Iskry z tyłu pocisku)
+                            generujSmugęPocisku(proj.x, proj.y, kolorOszczepu);
+
                             if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { 
                                 ctx.shadowBlur = 15; 
                                 ctx.shadowColor = kolorOszczepu; 
@@ -978,6 +1142,9 @@ window.Grafika = (function() {
 
                         } else if (proj.type === 'laser') {
                             let kolorLasera = proj.team === 'BOSS' ? '#e74c3c' : '#f1c40f';
+                            
+                            generujSmugęPocisku(proj.x, proj.y, kolorLasera);
+
                             if (window.Flagi && !window.Flagi.Srodowisko.isMobile) { 
                                 ctx.shadowBlur = 15; 
                                 ctx.shadowColor = kolorLasera; 
@@ -1013,8 +1180,8 @@ window.Grafika = (function() {
 
             ctx.restore(); 
 
-            // NAKŁADANIE EFEKTÓW WIZUALNYCH (Niezależne od przesunięcia kamery i zooma)
-            rysujEfektyEkranu(tryb, stanSerwera, mojGracz);
+            // NAKŁADANIE EFEKTÓW HUD (Winieta, Speedlines) - Bez względu na zoom kamery
+            rysujEfektyHUD(tryb, stanSerwera, mojGracz, limitWielkosci);
 
             if (pokazDuzaMape) {
                 rysujMapeTaktyczna(stanSerwera, mojGracz, limitWielkosci, false);

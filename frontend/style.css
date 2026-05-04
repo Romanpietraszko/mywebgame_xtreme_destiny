@@ -2,6 +2,17 @@
 /* STYLE.CSS - Vibe Noir & Optymalizacja Mobile */
 /* ========================================== */
 
+/* 9. ZMIENNE CSS (CSS Variables) - Globalna spójność kolorów */
+:root {
+    --neon-red: #e74c3c;
+    --neon-blue: #3498db;
+    --neon-purple: #9b59b6;
+    --neon-green: #2ecc71;
+    --neon-gold: #f1c40f;
+    --bg-dark: rgba(5, 5, 5, 0.95);
+    --bg-glass: rgba(10, 10, 15, 0.4); /* 1. Glassmorphism baza */
+}
+
 /* RESET I BLOKADA TELEFONÓW */
 * {
     box-sizing: border-box;
@@ -10,9 +21,23 @@
     touch-action: none; /* Blokuje przewijanie i zoom palcami w samej grze */
 }
 
+/* ODBLOKOWANIE DLA PÓL TEKSTOWYCH (Kluczowe, by dalo się wpisać Nick!) */
+input {
+    user-select: auto;
+    -webkit-user-select: auto;
+}
+
 /* CAŁKOWITE UKRYCIE PASKÓW PRZEWIJANIA (Native App Feel) */
 ::-webkit-scrollbar {
-    display: none;
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.5);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--neon-red);
+    border-radius: 10px;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
 }
 
 body, html {
@@ -32,6 +57,7 @@ canvas {
     display: block;
     width: 100%;
     height: 100%;
+    touch-action: none; /* Wymuszenie na płótnie gry */
 }
 
 /* KLASA POMOCNICZA */
@@ -56,7 +82,7 @@ canvas {
 #menu {
     position: relative; /* Wymagane do płonącej ramki */
     background: #080808; /* CAŁKOWICIE NIEPRZEZROCZYSTA CZERŃ - ogień nie wchodzi do środka! */
-    padding: 30px;
+    padding: clamp(20px, 4vw, 30px);
     border-radius: 12px;
     border: none; /* Usuwamy statyczną ramkę, bo będzie animowana */
     /* Animacja potężnego wejścia */
@@ -65,11 +91,12 @@ canvas {
     width: 90%;
     max-width: 450px;
     z-index: 1; /* Utrzymuje zawartość nad płomieniem */
+    will-change: transform, opacity, box-shadow; /* GPU Acceleration */
 }
 
 /* Animacja rozbłysku przy wejściu na stronę */
 @keyframes menuExplosion {
-    0% { transform: scale(0.7) translateY(100px); opacity: 0; box-shadow: 0 0 0px #ff5722; }
+    0% { transform: scale(0.7) translateY(100px); opacity: 0; box-shadow: 0 0 0px var(--neon-red); }
     40% { box-shadow: 0 0 120px 30px rgba(255, 87, 34, 0.8); } /* BŁYSK! */
     100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9); }
 }
@@ -80,11 +107,12 @@ canvas {
     position: absolute;
     top: -4px; left: -4px; right: -4px; bottom: -4px; /* Grubość ognia */
     border-radius: 14px; /* Dopasowane do #menu */
-    background: linear-gradient(60deg, #111 0%, #e74c3c 25%, #ff9800 50%, #e74c3c 75%, #111 100%);
+    background: linear-gradient(60deg, #111 0%, var(--neon-red) 25%, #ff9800 50%, var(--neon-red) 75%, #111 100%);
     background-size: 300% 300%;
     z-index: -1;
     animation: fireBorder 1.5s linear infinite;
     box-shadow: 0 0 20px rgba(231, 76, 60, 0.8), 0 0 40px rgba(255, 152, 0, 0.5); /* Mocna łuna rzucana na zewnątrz */
+    will-change: background-position;
 }
 
 @keyframes fireBorder {
@@ -95,13 +123,25 @@ canvas {
 
 h1 {
     font-family: 'Permanent Marker', cursive;
-    font-size: 42px;
+    font-size: clamp(34px, 5vw, 42px);
     margin: 0 0 5px 0;
     transform: rotate(-2deg);
+    animation: crtFlicker 5s infinite alternate;
+    will-change: opacity, text-shadow;
 }
 
-.paint-x { color: #3498db; text-shadow: 0 0 15px rgba(52, 152, 219, 0.8); }
-.paint-d { color: #e74c3c; text-shadow: 0 0 15px rgba(231, 76, 60, 0.8); }
+/* Efekt uszkodzonego neonu / CRT */
+@keyframes crtFlicker {
+    0%, 100% { opacity: 1; text-shadow: 0 0 0px rgba(255,255,255,0); }
+    3% { opacity: 0.8; text-shadow: 0 0 20px var(--neon-red); }
+    6% { opacity: 1; text-shadow: 0 0 5px rgba(255,255,255,0.3); }
+    7% { opacity: 0.6; }
+    8%, 9% { opacity: 1; }
+    10% { opacity: 0.9; }
+}
+
+.paint-x { color: var(--neon-blue); text-shadow: 0 0 15px rgba(52, 152, 219, 0.8); }
+.paint-d { color: var(--neon-red); text-shadow: 0 0 15px rgba(231, 76, 60, 0.8); }
 
 .subtitle {
     color: #aaaaaa;
@@ -109,25 +149,27 @@ h1 {
     text-transform: uppercase;
     letter-spacing: 2px;
     margin-bottom: 25px;
+    font-size: clamp(12px, 1.5vw, 16px);
 }
 
 /* POLA I PRZYCISKI */
 input {
     width: 100%;
-    padding: 15px;
+    padding: clamp(12px, 2vw, 15px);
     background: rgba(15, 15, 15, 0.9); /* Ciemniejsze, by pasowały do nowego menu */
     color: #ffffff;
     border: 2px solid #333;
     border-radius: 8px;
     font-family: inherit;
-    font-size: 20px;
+    font-size: clamp(16px, 2vw, 20px);
     text-align: center;
     margin-bottom: 15px;
-    transition: 0.3s ease;
+    transition: all 0.3s ease;
+    will-change: border-color, box-shadow;
 }
 
 input:focus {
-    border-color: #e74c3c;
+    border-color: var(--neon-red);
     outline: none;
     box-shadow: 0 0 15px rgba(231, 76, 60, 0.6);
 }
@@ -135,19 +177,24 @@ input:focus {
 .main-btn {
     background: rgba(15, 15, 15, 0.9);
     color: #ffffff;
-    padding: 15px;
+    padding: clamp(12px, 2vw, 15px);
     width: 100%;
     border-radius: 8px;
-    font-size: 20px;
+    font-size: clamp(16px, 2vw, 20px);
     font-family: inherit;
     font-weight: bold;
     text-transform: uppercase;
     cursor: pointer;
     margin-bottom: 10px;
-    transition: all 0.2s cubic-bezier(0.25, 0.8, 0.25, 1);
+    transition: transform 0.2s cubic-bezier(0.2, 1.5, 0.5, 1), box-shadow 0.2s ease, background 0.2s ease;
     border: 2px solid #555;
     position: relative;
     overflow: hidden;
+    will-change: transform, box-shadow;
+}
+
+.main-btn:hover {
+    transform: scale(1.03); /* Fizyczny wzrost */
 }
 
 .main-btn:active {
@@ -155,20 +202,20 @@ input:focus {
 }
 
 /* KOLORY NEONÓW DLA PRZYCISKÓW */
-.border-blue { border-color: #3498db; }
-.border-blue:hover, .border-blue.selected { background: #3498db; color: #000; box-shadow: 0 0 20px rgba(52,152,219,0.6); }
+.border-blue { border-color: var(--neon-blue); }
+.border-blue:hover, .border-blue.selected { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px rgba(52,152,219,0.6); }
 
-.border-red { border-color: #e74c3c; }
-.border-red:hover, .border-red.selected { background: #e74c3c; color: #000; box-shadow: 0 0 20px rgba(231,76,60,0.6); }
+.border-red { border-color: var(--neon-red); }
+.border-red:hover, .border-red.selected { background: var(--neon-red); color: #000; box-shadow: 0 0 20px rgba(231,76,60,0.6); }
 
-.border-purple { border-color: #9b59b6; }
-.border-purple:hover, .border-purple.selected { background: #9b59b6; color: #000; box-shadow: 0 0 20px rgba(155,89,182,0.6); }
+.border-purple { border-color: var(--neon-purple); }
+.border-purple:hover, .border-purple.selected { background: var(--neon-purple); color: #000; box-shadow: 0 0 20px rgba(155,89,182,0.6); }
 
-.border-green { border-color: #2ecc71; }
-.border-green:hover, .border-green.selected { background: #2ecc71; color: #000; box-shadow: 0 0 20px rgba(46,204,113,0.6); }
+.border-green { border-color: var(--neon-green); }
+.border-green:hover, .border-green.selected { background: var(--neon-green); color: #000; box-shadow: 0 0 20px rgba(46,204,113,0.6); }
 
-.border-gold { border-color: #f1c40f; opacity: 0.8; }
-.border-gold:hover, .border-gold.selected { background: #f1c40f; color: #000; box-shadow: 0 0 20px rgba(241,196,15,0.6); opacity: 1; }
+.border-gold { border-color: var(--neon-gold); opacity: 0.8; }
+.border-gold:hover, .border-gold.selected { background: var(--neon-gold); color: #000; box-shadow: 0 0 20px rgba(241,196,15,0.6); opacity: 1; }
 
 .back-btn {
     background: none;
@@ -180,9 +227,13 @@ input:focus {
     cursor: pointer;
     margin-top: 10px;
     padding: 10px; /* Łatwiejsze kliknięcie na mobile */
-    transition: color 0.2s;
+    transition: color 0.2s, transform 0.2s;
+    will-change: transform;
 }
-.back-btn:hover { color: #fff; }
+.back-btn:hover { 
+    color: #fff; 
+    transform: scale(1.1);
+}
 
 /* WYBÓR KLASY */
 .char-grid {
@@ -198,40 +249,72 @@ input:focus {
     padding: 15px 5px;
     border-radius: 8px;
     cursor: pointer;
-    transition: 0.2s ease;
+    transition: transform 0.2s cubic-bezier(0.2, 1.5, 0.5, 1), box-shadow 0.2s, border-color 0.2s;
+    will-change: transform, box-shadow;
 }
 
-.char-card h4 { margin: 0 0 5px 0; font-size: 16px; color: #fff; }
-.char-card p { margin: 0; font-size: 11px; color: #aaa; }
+.char-card:hover {
+    transform: translateY(-5px);
+}
+
+.char-card h4 { margin: 0 0 5px 0; font-size: clamp(14px, 1.5vw, 16px); color: #fff; }
+.char-card p { margin: 0; font-size: clamp(11px, 1.2vw, 12px); color: #aaa; }
 
 .char-card.selected {
-    border-color: #2ecc71;
+    border-color: var(--neon-green);
     background: rgba(46, 204, 113, 0.15);
     box-shadow: 0 0 15px rgba(46,204,113,0.4);
-    transform: translateY(-3px);
+    transform: translateY(-3px) scale(1.05);
 }
 
 /* ==========================================
    INTERFEJS W GRZE (IN-GAME HUD & SKLEP)
    ========================================== */
 
+/* GLASSMORPHISM DLA ELEMENTÓW HUD */
+#leaderboard, #survival-timer, #killfeed div, #formation-panel, #team-power-bar {
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+}
+
 #castle-shop {
     background: rgba(10, 10, 15, 0.85) !important;
     backdrop-filter: blur(10px);
     -webkit-backdrop-filter: blur(10px);
-    border: 2px solid #3498db;
+    border: 2px solid var(--neon-blue);
     box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(52, 152, 219, 0.2) !important;
     border-radius: 12px;
 }
 
-/* Animacja dla wiadomości w killfeedzie */
+/* Animacja dla wiadomości w killfeedzie oraz HUD */
 @keyframes slideInRight {
     from { transform: translateX(100%); opacity: 0; }
     to { transform: translateX(0); opacity: 1; }
 }
 
+@keyframes slideInTop {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+#leaderboard {
+    animation: slideInRight 0.5s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
+#survival-timer {
+    animation: slideInTop 0.5s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
 #killfeed div {
     animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+    border-left: 3px solid var(--neon-red) !important;
+    will-change: transform, opacity;
 }
 
 /* Subtelne pulsowanie tutoriala */
@@ -242,7 +325,10 @@ input:focus {
 }
 
 #midas-tutorial {
+    background: rgba(15, 15, 20, 0.8) !important;
+    border: 1px solid var(--neon-gold);
     animation: pulseGlow 2s infinite ease-in-out;
+    will-change: box-shadow;
 }
 
 /* ==========================================
@@ -421,6 +507,7 @@ input:focus {
     animation: rise 5s infinite ease-in;
     opacity: 0;
     mix-blend-mode: screen; /* Efekt światła - ładnie miesza się z tłem */
+    will-change: transform, opacity;
 }
 
 @keyframes rise {
@@ -438,6 +525,7 @@ input:focus {
     position: absolute;
     border-radius: 50%;
     filter: blur(2px);
+    will-change: transform;
 }
 
 .bot-red {
@@ -469,6 +557,7 @@ input:focus {
         -12vw -35vh 15px 2px #ff9800,
         8vw -20vh 14px 1px #f1c40f;
     animation: riseUpSway infinite ease-in;
+    will-change: transform, opacity;
 }
 
 .food-1 { left: 45%; bottom: -50px; top: auto; animation-duration: 4.5s; animation-delay: 0s; }
