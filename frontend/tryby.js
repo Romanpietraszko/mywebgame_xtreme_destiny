@@ -319,8 +319,14 @@
 
             socket.emit('joinGame', data);
             
+            // --- ODCINAJĄCA LAGI ZMIANA ---
+            // Niszczymy warstwę CSS z iskarami. GPU oddycha z ulgą.
             if (uiLayer) uiLayer.classList.add('hidden');
-            if (bgLayer) bgLayer.classList.add('hidden'); 
+            if (bgLayer) {
+                bgLayer.style.display = 'none';
+                bgLayer.innerHTML = ''; // Fizyczne wyczyszczenie elementów HTML z pamięci
+            }
+            
             if (timerContainer) timerContainer.classList.remove('hidden');
             if (ingameControls) ingameControls.classList.remove('hidden');
 

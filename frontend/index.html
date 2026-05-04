@@ -163,9 +163,9 @@
     </div>
 
     <div id="in-game-ui" style="pointer-events: none; position: absolute; inset: 0; z-index: 50;">
-        
+        <a href="https://wsi.edu.pl/?gad_source=1&gad_campaignid=21611471215" target="_blank "rel="noopener noreferre">
         <img id="uni-logo" src="/assety/logo.svg" alt="Logo Uczelni" onerror="this.style.display='none'" style="position: absolute; top: 20px; left: 20px; width: 80px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); z-index: 100;">
-
+    </a>
         <!-- PASEK SIŁY DRUŻYN (Pojawia się tylko w TEAMS) -->
         <div id="team-power-bar" class="hidden" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); width: 400px; height: 25px; background: #111; border: 2px solid #555; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 0 15px rgba(0,0,0,0.8);">
             <div id="bar-red" style="width: 50%; background: linear-gradient(90deg, #c0392b, #e74c3c); box-shadow: 0 0 15px #e74c3c; transition: width 0.4s ease-out; display: flex; align-items: center; padding-left: 10px; font-weight: bold; color: white; font-size: 12px; font-family: 'Exo 2', sans-serif;">RED</div>
@@ -210,6 +210,8 @@
     <canvas id="gameCanvas"></canvas>
 
     <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
+    <script src="/automatyzacja/brain.js"></script>
+    <script src="/automatyzacja/hand.js"></script>
     <script src="/automatyzacja/guardian.js"></script>
     <script src="flagi.js"></script>
     <script src="grafika.js"></script>

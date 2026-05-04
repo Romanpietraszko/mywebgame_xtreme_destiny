@@ -1,301 +1,225 @@
 // ==========================================
-// GUARDIAN.JS - Kwarantanna, Walidator Typów i Tarcza Antykryzysowa (AAA Agent)
+// /automatyzacja/guardian.js - Centrala (Zarządca i Hub Systemu AAA+)
+// Wyposażony w Watchdoga, Memory Guard i ochronę przed manipulacją z zewnątrz
 // ==========================================
-console.log("🛡️ XD Guardian System: ONLINE - Kwarantanna aktywna.");
 
-window.Guardian = (function() {
-    // Prywatne zmienne monitorujące
-    let lastTickTime = Date.now();
-    let frameTimes = [];
-    let isLowSpecMode = false;
-    let warningElement = null;
-    
-    // Zmienne Anty-Lag / Anty-Spam
-    let historiaKlikniec = [];
-    let droppedFrames = 0;
+console.log("🛡️ [VIBE NOIR] Inicjalizacja Centrali Guardian...");
 
-    // --- SŁOWNIK REGUŁ I WARTOŚCI AWARYJNYCH ---
-    const BEZPIECZNE_WARTOSCI = {
-        liczba: 0,
-        pozycja: 2000,
-        tekst: "Nieznany",
-        kolor: "#ffffff",
-        masa: 10,
-        boolean: false
-    };
-
-    const LIMITS = {
-        minX: -1000, maxX: 10000,
-        minY: -1000, maxY: 10000,
-        maxScore: 999999,
-        maxPredkosc: 150
-    };
-
-    // --- Inicjalizacja UI Ostrzeżeń ---
-    function initUI() {
-        if (!document.getElementById('guardian-warning')) {
-            warningElement = document.createElement('div');
-            warningElement.id = 'guardian-warning';
-            warningElement.style.cssText = `
-                position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
-                background: rgba(231, 76, 60, 0.9); color: white; padding: 5px 15px;
-                border-radius: 5px; font-weight: bold; font-family: 'Rajdhani', 'Exo 2', sans-serif;
-                z-index: 99999; display: none; box-shadow: 0 0 10px red; pointer-events: none;
-            `;
-            document.body.appendChild(warningElement);
+class GuardianSystem {
+    constructor() {
+        // Zabezpieczenie przed brakiem modułów (wymagana kolejność w HTML)
+        if (!window.GuardianBrain || !window.GuardianHand) {
+            console.error("☠️ [GUARDIAN] BŁĄD KRYTYCZNY: Brak modułów Brain lub Hand! Sprawdź kolejność w index.html");
+            return;
         }
-    }
 
-    function showWarning(msg) {
-        if (warningElement) {
-            warningElement.innerText = msg;
-            warningElement.style.display = 'block';
-        }
-    }
-
-    function hideWarning() {
-        if (warningElement) warningElement.style.display = 'none';
-    }
-
-    // --- Pętla mierząca FPS ---
-    function monitorWydajnosci(timestamp) {
-        if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-            let now = Date.now();
-            frameTimes.push(now);
-            
-            while (frameTimes.length > 0 && frameTimes[0] <= now - 1000) {
-                frameTimes.shift();
+        // Podpięcie Zwojów i Mięśni
+        this.brain = new window.GuardianBrain();
+        this.hand = new window.GuardianHand();
+        
+        // --- TARCZA GLOBALNA NA BŁĘDY SILNIKA ---
+        window.addEventListener('error', (e) => {
+            console.error("🛡️ [KRYTYCZNE] Przechwycono globalny błąd silnika.", e.message);
+            if (this.brain.analizujCrash(e, "Global Engine")) {
+                this.hand.wymusTwardyReset();
             }
-
-            let fps = frameTimes.length;
-            
-            if (fps < 30 && !isLowSpecMode && fps > 0) {
-                console.warn("🛡️ [GUARDIAN] Wykryto spadki FPS (" + fps + "). Włączam tryb optymalnej wydajności!");
-                isLowSpecMode = true;
-                if (window.Flagi) window.Flagi.Srodowisko.isMobile = true; 
-            }
-
-            if (now - lastTickTime > 2000) {
-                showWarning("⚠️ UTRACONO POŁĄCZENIE Z SERWEREM...");
-            } else {
-                hideWarning();
-            }
-        }
-        requestAnimationFrame(monitorWydajnosci);
-    }
-
-    window.addEventListener('DOMContentLoaded', () => {
-        initUI();
-        requestAnimationFrame(monitorWydajnosci);
-    });
-
-    // --- 1. GLOBALNA TARCZA ANTY-CRASHOWA ---
-    window.addEventListener('blur', function() {
-        console.log("🛡️ [GUARDIAN] Utracono ostrość. Wymuszam zatrzymanie postaci.");
-        const keysToRelease = ['KeyW', 'KeyS', 'KeyA', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'KeyQ'];
-        keysToRelease.forEach(code => {
-            window.dispatchEvent(new KeyboardEvent('keyup', { 'code': code }));
+            e.preventDefault();
         });
-    });
+        
+        window.addEventListener('unhandledrejection', (e) => {
+            console.warn("🛡️ [GUARDIAN] Przechwycono odrzuconą obietnicę asynchroniczną.");
+            e.preventDefault();
+        });
 
-    window.addEventListener('error', function(event) {
-        console.error("🛡️ [GUARDIAN] Przechwycono krytyczny błąd! Izolacja w toku:", event.message);
-        event.preventDefault(); 
-    });
-    
-    window.addEventListener('unhandledrejection', function(event) {
-        console.warn("🛡️ [GUARDIAN] Przechwycono porzuconą obietnicę (Promise). Ignoruję.");
-        event.preventDefault();
-    });
+        // --- PĘTLA WYDAJNOŚCI I SYSTEMU WATCHDOG ---
+        const petlaCentrali = () => {
+            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
+                
+                // 1. Analiza klatek (FPS) i lagów
+                const raport = this.brain.analizujWydajnosc();
+                if (raport.stan === 'LOW_SPEC') {
+                    this.hand.wlaczTrybZiemniaka();
+                }
+                
+                if (raport.awariaSerwera) {
+                    this.hand.pokazOstrzezenie("Brak sygnału serwera - Rekonfiguracja węzła");
+                } else {
+                    this.hand.ukryjOstrzezenie();
+                }
 
-    // --- 3. SANITYZATOR (CZYSZCZENIE DANYCH WEWNĘTRZNE) ---
-    function wymusLiczbe(wartosc, domyslna, min, max) {
-        let num = Number(wartosc);
-        if (Number.isNaN(num) || num === null || num === undefined) return domyslna;
-        if (min !== undefined && num < min) return min;
-        if (max !== undefined && num > max) return max;
-        return num;
-    }
+                // 2. Memory Guard - Ochrona przed wyciekami RAM (Out-Of-Memory Crash)
+                this.monitorujPamiec();
 
-    function wymusTekst(wartosc, domyslna) {
-        if (typeof wartosc !== 'string' || wartosc.trim() === '') return domyslna;
-        return wartosc.replace(/[<>]/g, ""); 
-    }
-
-    // --- 4. KWARANTANNA GŁÓWNYCH OBIEKTÓW ---
-    function filtrujGracza(gracz) {
-        if (!gracz) return null;
-        return {
-            id: wymusTekst(gracz.id, "BrakID"),
-            name: wymusTekst(gracz.name, "Gracz"),
-            x: wymusLiczbe(gracz.x, BEZPIECZNE_WARTOSCI.pozycja, LIMITS.minX, LIMITS.maxX),
-            y: wymusLiczbe(gracz.y, BEZPIECZNE_WARTOSCI.pozycja, LIMITS.minY, LIMITS.maxY),
-            score: wymusLiczbe(gracz.score, BEZPIECZNE_WARTOSCI.masa, 0, LIMITS.maxScore),
-            dx: wymusLiczbe(gracz.dx, 0, -LIMITS.maxPredkosc, LIMITS.maxPredkosc),
-            dy: wymusLiczbe(gracz.dy, 0, -LIMITS.maxPredkosc, LIMITS.maxPredkosc),
-            skin: wymusTekst(gracz.skin, "standard"),
-            team: gracz.team ? wymusTekst(gracz.team, "NONE") : null,
-            kat: wymusLiczbe(gracz.kat, 0),
-            isSafe: Boolean(gracz.isSafe),
-            isShielding: Boolean(gracz.isShielding)
-        };
-    }
-
-    function filtrujPocisk(pocisk) {
-        if (!pocisk) return null;
-        return {
-            x: wymusLiczbe(pocisk.x, 0),
-            y: wymusLiczbe(pocisk.y, 0),
-            dx: wymusLiczbe(pocisk.dx, 0),
-            dy: wymusLiczbe(pocisk.dy, 0),
-            type: wymusTekst(pocisk.type, "oszczep"),
-            mode: wymusTekst(pocisk.mode, "FREE"),
-            team: pocisk.team ? wymusTekst(pocisk.team, "NONE") : null,
-            piercing: Boolean(pocisk.piercing)
-        };
-    }
-
-    function chronKlatke(funkcjaDoUruchomienia, nazwaModulu = "Nieznany") {
-        return function(...argumenty) {
-            try {
-                return funkcjaDoUruchomienia.apply(this, argumenty);
-            } catch (blad) {
-                console.error(`🛡️ [GUARDIAN] Moduł [${nazwaModulu}] uległ awarii. Klatka pominięta.`, blad);
+                // 3. Watchdog - Anty-Tamper (Sprawdza czy haker nie usunął mózgu w konsoli F12)
+                this.weryfikujIntegralnosciSystemu();
             }
+            requestAnimationFrame(petlaCentrali);
         };
+        requestAnimationFrame(petlaCentrali);
+        
+        console.log("🛡️ [VIBE NOIR] System Guardian: WSZYSTKIE MODUŁY ZINTEGROWANE I ZABEZPIECZONE.");
     }
 
-    // Publiczne API Guardiana
-    return {
-        // ZGŁASZANIE PULSU SERWERA
-        odbierzTick: function() {
-            let teraz = Date.now();
-            let roznica = teraz - lastTickTime;
-            lastTickTime = teraz;
-
-            if (roznica > 150) {
-                droppedFrames++;
-                if (droppedFrames % 10 === 0) {
-                    console.log(`🐌 [LAG SPIKE] Opóźnienie serwera: ${roznica}ms. System utrzymuje stabilność.`);
+    // --- NOWOŚĆ: MEMORY GUARD ---
+    monitorujPamiec() {
+        // Działa w przeglądarkach opartych na Chromium (Chrome, Edge, Opera, Brave)
+        if (window.performance && window.performance.memory) {
+            // Zamiana bajtów na Megabajty
+            const zuzycieMB = window.performance.memory.usedJSHeapSize / 1048576; 
+            
+            // Jeśli JS pożera ponad 500MB RAM-u (potencjalny wyciek / memory leak)
+            if (zuzycieMB > 500 && !this.brain.isLowSpecMode) {
+                console.warn(`🛡️ [GUARDIAN] Krytyczne zużycie pamięci RAM: ${zuzycieMB.toFixed(2)} MB! Odciążam rdzeń.`);
+                this.hand.wlaczTrybZiemniaka();
+                if (this.brain.ai) {
+                    this.brain.ai.zglosAnomalie("Wydajność", "Wykryto ogromny wyciek pamięci operacyjnej", { ramUsed: zuzycieMB });
                 }
             }
-        },
+        }
+    }
 
-        // Ochrona przed spamowaniem kliknięciami
-        rejestrujKlikniecie: function() {
-            let teraz = Date.now();
-            historiaKlikniec.push(teraz);
-            
-            if (historiaKlikniec.length > 6) historiaKlikniec.shift();
+    // --- NOWOŚĆ: WATCHDOG (ANTY-TAMPER) ---
+    weryfikujIntegralnosciSystemu() {
+        // Hakerzy czasem wpisują `window.Guardian.brain = null`, by wyłączyć ochronę
+        if (!this.brain || !this.hand) {
+            console.error("☠️ [WATCHDOG] Wykryto manipulację w pamięci klienta! Moduły zostały naruszone.");
+            // Ratunkowy, twardy reset
+            try { sessionStorage.clear(); } catch(e) {}
+            window.location.reload(true);
+        }
+    }
 
-            if (historiaKlikniec.length === 6) {
-                let czasTrwania = historiaKlikniec[5] - historiaKlikniec[0];
-                if (czasTrwania < 120) {
-                    console.warn("🛡️ [GUARDIAN] Zablokowano spam kliknięć (Auto-Clicker wstrzymany).");
-                    historiaKlikniec = []; 
-                    return false; 
-                }
-            }
-            return true; 
-        },
+    // --- PUBLICZNE API DLA TRYBY.JS ---
 
-        // BEZPIECZNA MATEMATYKA (Fallback)
-        clamp: function(value, min, max) {
-            if (isNaN(value)) return min;
-            return Math.min(Math.max(value, min), max);
-        },
+    odbierzTick() { 
+        this.brain.odbierzPuls(); 
+    }
 
-        safeNum: function(value, fallback = 0) {
-            return (typeof value === 'number' && !isNaN(value)) ? value : fallback;
-        },
+    rejestrujKlikniecie() {
+        if (this.brain.wykryjAutoClicker()) {
+            this.hand.mrugnijEkranem('rgba(241, 196, 15, 0.2)', 150); // Żółty błysk ostrzegawczy
+            this.hand.pokazOstrzezenie("Zablokowano nienaturalną szybkość kliknięć!", true);
+            return false; // Zablokuj akcję
+        }
+        return true; // Autoryzacja pozytywna
+    }
 
-        lerp: function(start, end, factor = 0.3) {
-            return start + (end - start) * factor;
-        },
+    // --- TARCZA SIECIOWA (Oczyszczanie Danych Serwerowych) ---
+    sanityzujStanSerwera(surowyStan) {
+        if (!surowyStan || typeof surowyStan !== 'object') {
+            return { players: {}, bots: {}, foods: {}, projectiles: {} };
+        }
+        
+        // Zabezpieczenie przed "Zatruciem Ładunku" (Payload Bombing)
+        // Jeśli serwer (lub atakujący Man-In-The-Middle) przyśle gigantyczny obiekt
+        const przyblizonyRozmiar = Object.keys(surowyStan.players || {}).length + Object.keys(surowyStan.projectiles || {}).length;
+        if (przyblizonyRozmiar > 2000) {
+            console.error("🛡️ [GUARDIAN] Odrzucono pakiet: Przekroczono limit obiektów (DDoS Payload).");
+            if (this.brain.ai) this.brain.ai.zglosAnomalie("DDoS Protection", "Gigantyczny Payload", { size: przyblizonyRozmiar });
+            return { players: {}, bots: {}, foods: {}, projectiles: {} };
+        }
 
-        // --- GŁÓWNY ZAWÓR BEZPIECZEŃSTWA: STERYLIZACJA PAKIETÓW Z SIECI ---
-        sanityzujStanSerwera: function(surowyStan) {
-            if (!surowyStan) return { players: {}, bots: {}, foods: {}, projectiles: {} };
-            
-            let bezpiecznyStan = { players: {}, bots: {}, foods: {}, projectiles: {} };
+        let czystyStan = { players: {}, bots: {}, foods: {}, projectiles: {} };
 
-            // Oczyszczanie Graczy
+        try {
             if (surowyStan.players) {
                 Object.keys(surowyStan.players).forEach(id => {
-                    let bezpieczny = filtrujGracza(surowyStan.players[id]);
-                    if (bezpieczny) bezpiecznyStan.players[id] = bezpieczny;
+                    const g = this.brain.analizujGracza(surowyStan.players[id]);
+                    if (g) czystyStan.players[id] = g;
                 });
             }
-
-            // Oczyszczanie Botów
             if (surowyStan.bots) {
                 Object.keys(surowyStan.bots).forEach(id => {
-                    let bot = filtrujGracza(surowyStan.bots[id]);
-                    if (bot) {
-                        bot.isBoss = Boolean(surowyStan.bots[id].isBoss);
-                        bot.ownerId = surowyStan.bots[id].ownerId ? String(surowyStan.bots[id].ownerId) : null;
-                        bezpiecznyStan.bots[id] = bot;
+                    const b = this.brain.analizujGracza(surowyStan.bots[id]);
+                    if (b) { 
+                        b.ownerId = surowyStan.bots[id].ownerId ? String(surowyStan.bots[id].ownerId) : null; 
+                        czystyStan.bots[id] = b; 
                     }
                 });
             }
-
-            // Oczyszczanie Jedzenia
             if (surowyStan.foods) {
-                Object.keys(surowyStan.foods).forEach(id => {
-                    let f = surowyStan.foods[id];
-                    if (f && typeof f.x === 'number' && !Number.isNaN(f.x) && typeof f.y === 'number' && !Number.isNaN(f.y)) {
-                        bezpiecznyStan.foods[id] = { x: f.x, y: f.y };
+                let fArray = Array.isArray(surowyStan.foods) ? surowyStan.foods : Object.values(surowyStan.foods);
+                fArray.forEach((f, idx) => {
+                    if (f && typeof f === 'object') {
+                        let fx = Number(f.x), fy = Number(f.y);
+                        if (Number.isFinite(fx) && Number.isFinite(fy)) czystyStan.foods[f.id || idx] = { x: fx, y: fy };
                     }
                 });
             }
-
-            // Oczyszczanie Pocisków
             if (surowyStan.projectiles) {
                 Object.keys(surowyStan.projectiles).forEach(id => {
-                    let p = filtrujPocisk(surowyStan.projectiles[id]);
-                    if (p) bezpiecznyStan.projectiles[id] = p;
+                    const p = this.brain.analizujPocisk(surowyStan.projectiles[id]);
+                    if (p) czystyStan.projectiles[id] = p;
                 });
             }
-
-            return bezpiecznyStan;
-        },
-
-        // KAGANIEC PAMIĘCI (Limitowanie tablic/obiektów dla optymalizacji)
-        safeObj: function(data, typ = 'ogolne') {
-            if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
-
-            let klucze = Object.keys(data);
-            
-            let maxLimit = 300; 
-            if (typ === 'projectiles') maxLimit = 150;
-            else if (typ === 'foods') maxLimit = 250;
-            else if (typ === 'bots') maxLimit = 80;
-
-            if (klucze.length > maxLimit) {
-                let zredukowany = {};
-                for(let i = 0; i < maxLimit; i++) {
-                    zredukowany[klucze[i]] = data[klucze[i]];
-                }
-                return zredukowany;
+        } catch (e) {
+            console.error("🛡️ [GUARDIAN] Krytyczny błąd sanityzacji sieci.", e);
+            // Wywołanie sztucznej inteligencji opartej o najnowszego Brain.js (BrainAiCore)
+            if (this.brain.ai && typeof this.brain.ai.zglosAnomalie === 'function') {
+                this.brain.ai.zglosAnomalie("Inspektor Sieciowy", "Pakiet spowodował crash walidacji", e.stack);
             }
+            return { players: {}, bots: {}, foods: {}, projectiles: {} };
+        }
+        
+        return czystyStan;
+    }
 
+    // --- KONTROLA PAMIĘCI (Zabezpieczenie przed StackOverflow i wyciekiem obiektów) ---
+    safeObj(data, typ = 'ogolne') {
+        if (typeof data !== 'object' || data === null || Array.isArray(data)) return {};
+        if (typ === 'foods') return data; // Jedzenie przetwarzamy osobno
+        
+        try {
+            const klucze = Object.keys(data);
+            let limit = (typ === 'projectiles') ? 150 : (typ === 'bots') ? 80 : 300;
+            
+            if (klucze.length > limit) {
+                let zred = {};
+                for (let i = 0; i < limit; i++) zred[klucze[i]] = data[klucze[i]];
+                return zred;
+            }
             return data;
-        },
+        } catch(e) { return {}; }
+    }
 
-        safeArray: function(data) {
-            if (!data) return [];
-            if (Array.isArray(data)) return data;
-            if (typeof data === 'object') return Object.values(data);
-            return [];
-        },
+    safeArray(data) {
+        if (!data) return [];
+        if (Array.isArray(data)) return data;
+        if (typeof data === 'object') { 
+            try { return Object.values(data); } 
+            catch(e) { return []; } 
+        }
+        return [];
+    }
 
-        safeString: function(value, fallback = "") {
-            if (typeof value === 'string') return value;
-            if (value && typeof value.toString === 'function') return value.toString();
-            return fallback;
-        },
+    // --- KWARANTANNA DLA NIEBEZPIECZNYCH FUNKCJI ---
+    chronFukcje(funkcjaDoUruchomienia, nazwaModulu = "Nieznany") {
+        const brainRef = this.brain;
+        const handRef = this.hand;
+        
+        return function(...argumenty) {
+            try { 
+                return funkcjaDoUruchomienia.apply(this, argumenty); 
+            } 
+            catch (blad) {
+                console.error(`🛡️ [GUARDIAN] Izolowany moduł [${nazwaModulu}] uległ awarii.`, blad);
+                // Przekazanie błędu do Analizatora Crash-Loops w Mózgu
+                if (brainRef && brainRef.analizujCrash(blad, nazwaModulu)) {
+                    if (handRef) handRef.wymusTwardyReset();
+                }
+            }
+        };
+    }
+}
 
-        // API do owijania groźnych funkcji (Kwarantanna Kodu)
-        chronFukcje: chronKlatke
-    };
-})();
+// Inicjalizacja Centrali jako Bytu Niezmiennego
+window.Guardian = new GuardianSystem();
+
+// Ostatnia linia obrony: Próba zamrożenia instancji w środowiskach, które to wspierają,
+// aby zapobiec nadpisaniu 'window.Guardian' przez cheaterów w konsoli przeglądarki.
+try {
+    Object.defineProperty(window, 'Guardian', {
+        writable: false,
+        configurable: false
+    });
+} catch(e) {}
