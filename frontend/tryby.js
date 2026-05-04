@@ -76,7 +76,8 @@
             throw: new Audio('./assety/throw.mp3'),
             hit: new Audio('./assety/hit.mp3'),
             eat: new Audio('./assety/eat.mp3'),
-            death: new Audio('./assety/death.mp3'),
+            // AWARYJNA ŁATKA: Zastępujemy brakujący death.mp3 plikiem hit.mp3
+            death: new Audio('./assety/hit.mp3'), 
             alert: new Audio('./assety/alert.mp3')
         };
 
