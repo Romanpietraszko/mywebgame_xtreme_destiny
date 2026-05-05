@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 2: Czystość i Precyzja)
+// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 4: Powrót "Juice'u" - SER I MYSZY!)
 // ==========================================
 
 window.Grafika = (function() {
@@ -61,9 +61,10 @@ window.Grafika = (function() {
     // ==========================================
     // 🗄️ BAZY DANYCH I ASSETY
     // ==========================================
-    let MacierzOtoczenia = []; 
+    let MacierzOtoczenia = []; // Nasze złoża sera!
     let czyMapaWygenerowana = false;
     let czasteczkiTla = []; 
+    let lokalnyBuforJedzenia = {}; 
     
     let poprzedniePozycje = { players: {}, bots: {} };
     let wskaznikiOffscreen = []; 
@@ -92,7 +93,7 @@ window.Grafika = (function() {
         obrazyPostaci[klucz].img.onerror = () => { console.warn(`Brak grafiki: ${sciezka}. Włączam tryb wektorowy.`); };
         obrazyPostaci[klucz].img.src = sciezka;
     }
-    ladujObrazek('standard', '/assety/xtreme-destiny-postac-1.png'); // Zmieniono nazwę pliku z nawiasami!
+    ladujObrazek('standard', '/assety/xtreme-destiny-postac-1.png'); 
     ladujObrazek('ninja', '/assety/ninja-transparent.png');
     ladujObrazek('arystokrata', '/assety/postac-bez-tla.png');
 
@@ -131,6 +132,19 @@ window.Grafika = (function() {
                 speedX: (Math.random() - 0.5) * 0.5, speedY: (Math.random() - 0.5) * 0.5, 
                 r: Math.random() * 2, alpha: Math.random() * 0.5 + 0.1, głębia: Math.random() * 0.8 + 0.2 
             });
+        }
+
+        // <--- WSTRZYKNIĘCIE KRZAKÓW (SERA) --->
+        if (tryb === 'FREE') {
+            for(let i = 0; i < 60; i++) {
+                MacierzOtoczenia.push({ 
+                    typ: 'ser_z_dziurami', 
+                    x: Math.random() * limitWielkosci, 
+                    y: Math.random() * limitWielkosci, 
+                    r: 90 + Math.random() * 40, // Losowa wielkość bloków sera
+                    faza: Math.random() * TWO_PI 
+                });
+            }
         }
 
         minimapCanvas.width = 1000; 
@@ -187,15 +201,116 @@ window.Grafika = (function() {
         for(let y = startY; y < camera.y + screenH / cameraScale; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW / cameraScale, y); }
         ctx.stroke();
 
+        // <--- RYSOWANIE SERA (KRZAKÓW) --->
+        MacierzOtoczenia.forEach(obiekt => {
+            if(!czyWidoczny(obiekt.x, obiekt.y, obiekt.r)) return;
+            ctx.save(); 
+            ctx.translate(obiekt.x | 0, obiekt.y | 0);
+            if (obiekt.typ === 'ser_z_dziurami') {
+                ctx.fillStyle = '#f1c40f'; // Apetyczny złoty ser
+                AkceleratorRenderu.ustawCien(ctx, '#f1c40f', 15);
+                ctx.beginPath(); 
+                ctx.arc(0, 0, obiekt.r, 0, TWO_PI); 
+                ctx.fill();
+                AkceleratorRenderu.resetujCien(ctx);
+                
+                // Dziury w serze
+                ctx.fillStyle = '#08080a'; // Przebija kolor tła mapy
+                ctx.beginPath(); ctx.arc(-obiekt.r/3, -obiekt.r/3, obiekt.r/4, 0, TWO_PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(obiekt.r/2, 0, obiekt.r/5, 0, TWO_PI); ctx.fill();
+                ctx.beginPath(); ctx.arc(-obiekt.r/4, obiekt.r/2, obiekt.r/6, 0, TWO_PI); ctx.fill();
+            }
+            ctx.restore();
+        });
+
         // ZAMEK / BAZA
         if (tryb === 'FREE' && czyWidoczny(2000, 2000, 400)) {
+            let czas = performance.now();
             ctx.save(); 
             ctx.translate(2000, 2000); 
-            ctx.fillStyle = 'rgba(52, 152, 219, 0.1)'; ctx.beginPath(); ctx.arc(0, 0, 400, 0, TWO_PI); ctx.fill();
-            ctx.strokeStyle = '#3498db'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, 400, 0, TWO_PI); ctx.stroke();
             
-            ctx.fillStyle = '#7f8c8d'; ctx.fillRect(-150, -100, 300, 200); 
-            ctx.strokeStyle = '#f1c40f'; ctx.strokeRect(-150, -100, 300, 200);
+            const kolorMuru = '#95a5a6'; 
+            const kolorKrawedzi = '#f1c40f'; 
+            const kolorDachu = '#e74c3c';    
+            const kolorFosy = 'rgba(52, 152, 219, 0.3)'; 
+            const kolorFosyGlow = '#3498db';
+
+            ctx.beginPath(); 
+            ctx.arc(0, 0, 320, 0, TWO_PI); 
+            ctx.fillStyle = kolorFosy; 
+            ctx.fill();
+            ctx.lineWidth = 4; 
+            ctx.strokeStyle = kolorFosyGlow;
+            AkceleratorRenderu.ustawCien(ctx, kolorFosyGlow, 20);
+            ctx.stroke(); 
+            AkceleratorRenderu.resetujCien(ctx);
+
+            ctx.fillStyle = '#7f8c8d'; 
+            ctx.fillRect(-50, 20, 100, 300); 
+            ctx.strokeStyle = '#fff'; 
+            ctx.lineWidth = 2; 
+            ctx.strokeRect(-50, 20, 100, 300);
+            
+            ctx.lineWidth = 4; 
+            AkceleratorRenderu.ustawCien(ctx, '#000', 15);
+
+            ctx.fillStyle = kolorMuru; 
+            ctx.strokeStyle = kolorKrawedzi; 
+            ctx.fillRect(-150, -100, 300, 200); 
+            ctx.strokeRect(-150, -100, 300, 200);
+            
+            ctx.beginPath(); 
+            ctx.moveTo(-180, -100); 
+            ctx.lineTo(180, -100); 
+            ctx.lineTo(0, -250); 
+            ctx.closePath(); 
+            ctx.fillStyle = kolorDachu; 
+            ctx.fill(); 
+            ctx.stroke();
+            
+            ctx.fillStyle = kolorMuru; 
+            ctx.fillRect(-220, -50, 70, 150); 
+            ctx.strokeRect(-220, -50, 70, 150);
+            ctx.beginPath(); 
+            ctx.moveTo(-240, -50); 
+            ctx.lineTo(-130, -50); 
+            ctx.lineTo(-185, -150); 
+            ctx.closePath(); 
+            ctx.fillStyle = kolorDachu; 
+            ctx.fill(); 
+            ctx.stroke();
+            
+            ctx.fillStyle = kolorMuru; 
+            ctx.fillRect(150, -50, 70, 150); 
+            ctx.strokeRect(150, -50, 70, 150);
+            ctx.beginPath(); 
+            ctx.moveTo(130, -50); 
+            ctx.lineTo(240, -50); 
+            ctx.lineTo(185, -150); 
+            ctx.closePath(); 
+            ctx.fillStyle = kolorDachu; 
+            ctx.fill(); 
+            ctx.stroke();
+
+            ctx.fillStyle = '#050505'; 
+            ctx.fillRect(-60, 20, 120, 80); 
+            ctx.strokeStyle = '#f1c40f'; 
+            ctx.strokeRect(-60, 20, 120, 80);
+            
+            ctx.save(); 
+            ctx.translate(0, 60); 
+            ctx.rotate(czas / 1000); 
+            ctx.strokeStyle = '#fff'; 
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+            AkceleratorRenderu.ustawCien(ctx, '#fff', 15);
+            ctx.beginPath(); 
+            ctx.rect(-15, -15, 30, 30); 
+            ctx.rotate(Math.PI / 4); 
+            ctx.rect(-15, -15, 30, 30); 
+            ctx.fill(); 
+            ctx.stroke(); 
+            ctx.restore();
+            
             ctx.restore();
         }
     }
@@ -207,6 +322,15 @@ window.Grafika = (function() {
         let promien = 15 + Math.sqrt(Math.min(bot.score || 10, 600)) * 1.5;
         if (!czyWidoczny(bot.x, bot.y, promien)) return;
 
+        // <--- UKRYWANIE W SERZE --->
+        let wKrzaku = false;
+        for (let i = 0; i < MacierzOtoczenia.length; i++) {
+            let dx = bot.x - MacierzOtoczenia[i].x;
+            let dy = bot.y - MacierzOtoczenia[i].y;
+            if ((dx*dx + dy*dy) < MacierzOtoczenia[i].r * MacierzOtoczenia[i].r) { wKrzaku = true; break; }
+        }
+        if (wKrzaku) return; // Boty ukrywają się w serze i stają się niewidoczne
+
         let isBoss = bot.isBoss || bot.skin === 'ninja';
         let kolor = isBoss ? '#9b59b6' : '#e74c3c';
         if (bot.ownerId && bot.team) kolor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
@@ -215,7 +339,6 @@ window.Grafika = (function() {
         ctx.translate(bot.x | 0, bot.y | 0); 
         ctx.rotate(bot.angle || 0);
 
-        // Kształt bota
         ctx.fillStyle = '#050505'; 
         ctx.strokeStyle = kolor; 
         ctx.lineWidth = 3;
@@ -230,11 +353,9 @@ window.Grafika = (function() {
         ctx.closePath(); ctx.fill(); ctx.stroke();
         AkceleratorRenderu.resetujCien(ctx);
 
-        // Oznaczenie przodu
         ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(promien, 0); ctx.stroke();
         ctx.restore();
 
-        // Tekst
         if (!isBoss) {
             ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.fillStyle = '#aaa';
             ctx.font = '10px Exo 2, sans-serif'; ctx.textAlign = 'center';
@@ -248,41 +369,109 @@ window.Grafika = (function() {
         let promien = Math.min(20 + Math.sqrt(masa) * 2, 65); 
         if (!czyWidoczny(postac.x, postac.y, promien)) return;
 
+        // <--- LOGIKA TRANSFORMACJI W MYSZ --->
+        let wKrzaku = false;
+        for (let i = 0; i < MacierzOtoczenia.length; i++) {
+            let dx = postac.x - MacierzOtoczenia[i].x;
+            let dy = postac.y - MacierzOtoczenia[i].y;
+            if ((dx*dx + dy*dy) < MacierzOtoczenia[i].r * MacierzOtoczenia[i].r) { 
+                wKrzaku = true; 
+                break; 
+            }
+        }
+
+        // Jeśli to wróg w serze - nie rysujemy go wcale
+        if (wKrzaku && !isMe) return; 
+
         let skin = postac.skin || 'standard';
         let kolor = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
         if (postac.team) kolor = postac.team === 'RED' ? '#e74c3c' : '#3498db';
 
+        if (postac.isSafe) { 
+            ctx.save(); 
+            ctx.translate(postac.x | 0, postac.y | 0); 
+            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; 
+            ctx.lineWidth = 3; 
+            ctx.setLineDash([10, 15]); 
+            ctx.rotate(performance.now() / 800); 
+            AkceleratorRenderu.ustawCien(ctx, '#2ecc71', 15);
+            ctx.beginPath(); 
+            ctx.arc(0, 0, promien + 15, 0, TWO_PI); 
+            ctx.stroke(); 
+            AkceleratorRenderu.resetujCien(ctx);
+            ctx.restore();
+        }
+
         ctx.save(); 
+        // Półprzezroczystość dla nas, żebyśmy wiedzieli, że jesteśmy ukryci
+        if (wKrzaku && isMe) ctx.globalAlpha = 0.5;
+
         ctx.translate(postac.x | 0, postac.y | 0); 
         ctx.rotate(postac.kat || 0);
 
-        // BEZPIECZNE RYSOWANIE
         let asset = obrazyPostaci[skin];
         if (asset && asset.loaded) {
             AkceleratorRenderu.ustawCien(ctx, kolor, 15);
             ctx.drawImage(asset.img, -promien, -promien, promien * 2, promien * 2);
             AkceleratorRenderu.resetujCien(ctx);
             
-            // Marker kierunku nad teksturą
             ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.moveTo(promien * 0.5, 0); ctx.lineTo(promien + 10, 0); ctx.stroke();
         } else {
-            // Awaryjny wektor
             ctx.fillStyle = '#111'; ctx.strokeStyle = kolor; ctx.lineWidth = 4;
             AkceleratorRenderu.ustawCien(ctx, kolor, 20);
             ctx.beginPath(); ctx.arc(0, 0, promien, 0, TWO_PI); ctx.fill(); ctx.stroke();
             AkceleratorRenderu.resetujCien(ctx);
-            // Kierunek
             ctx.fillStyle = kolor; ctx.fillRect(0, -5, promien + 10, 10);
         }
+
+        // <--- RYSOWANIE WĄSÓW I USZU MYSZY --->
+        if (wKrzaku && isMe) {
+            // Uszy myszy
+            ctx.fillStyle = kolor;
+            ctx.beginPath();
+            ctx.arc(-promien * 0.5, -promien * 0.6, 12, 0, TWO_PI); // Lewe ucho
+            ctx.arc(promien * 0.5, -promien * 0.6, 12, 0, TWO_PI);  // Prawe ucho
+            ctx.fill();
+            
+            // Środki uszu (różowe/ciemniejsze)
+            ctx.fillStyle = '#e84393'; 
+            ctx.beginPath();
+            ctx.arc(-promien * 0.5, -promien * 0.6, 6, 0, TWO_PI);
+            ctx.arc(promien * 0.5, -promien * 0.6, 6, 0, TWO_PI);
+            ctx.fill();
+
+            // Wibrujące Wąsy!
+            let wibracja = Math.sin(performance.now() / 50) * 2;
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            // Lewe wąsy
+            ctx.moveTo(-promien * 0.2, 0); ctx.lineTo(-promien * 0.8, -10 + wibracja);
+            ctx.moveTo(-promien * 0.2, 0); ctx.lineTo(-promien * 0.9, 0 + wibracja);
+            ctx.moveTo(-promien * 0.2, 0); ctx.lineTo(-promien * 0.8, 10 + wibracja);
+            // Prawe wąsy
+            ctx.moveTo(promien * 0.2, 0); ctx.lineTo(promien * 0.8, -10 - wibracja);
+            ctx.moveTo(promien * 0.2, 0); ctx.lineTo(promien * 0.9, 0 - wibracja);
+            ctx.moveTo(promien * 0.2, 0); ctx.lineTo(promien * 0.8, 10 - wibracja);
+            ctx.stroke();
+
+            // Słodki mysi nosek
+            ctx.fillStyle = '#ff7675';
+            ctx.beginPath();
+            ctx.arc(0, -promien * 0.2, 4, 0, TWO_PI);
+            ctx.fill();
+        }
+
         ctx.restore(); 
 
-        // Nazwa i masa
         ctx.save();
         ctx.translate(postac.x | 0, postac.y | 0); 
         ctx.fillStyle = isMe ? '#f1c40f' : '#ffffff'; 
         ctx.font = 'bold 14px Exo 2, sans-serif'; 
         ctx.textAlign = 'center';
+        // Gdy jesteś w krzaku, nick staje się szary i ukryty
+        if (wKrzaku && isMe) ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
         ctx.fillText(`${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, promien + 20);
         ctx.restore();
     }
@@ -300,12 +489,10 @@ window.Grafika = (function() {
             let dt = Math.min(3, (now - lastTime) / 16.666); 
             lastTime = now;
 
-            // Kamera
             let celX = mojGracz.x - screenW / 2; let celY = mojGracz.y - screenH / 2;
             camera.x += (celX - camera.x) * (0.2 * dt); 
             camera.y += (celY - camera.y) * (0.2 * dt);
 
-            // Wstrząs
             let drawCamX = camera.x + (Math.random() - 0.5) * wstrzasEkranu.moc; 
             let drawCamY = camera.y + (Math.random() - 0.5) * wstrzasEkranu.moc;
             wstrzasEkranu.moc *= Math.pow(wstrzasEkranu.wygasanie, dt);
@@ -316,14 +503,13 @@ window.Grafika = (function() {
             if (!czyMapaWygenerowana) generujSrodowisko(tryb, limitWielkosci);
             ZarzadcaPamieci.wyczyscPamiecCoRunde();
 
-            // PŁÓTNO GŁÓWNE
             ctx.save(); 
             ctx.translate(screenW / 2, screenH / 2);
             ctx.scale(cameraScale, cameraScale);
             ctx.translate(-screenW / 2, -screenH / 2);
             ctx.translate(-drawCamX, -drawCamY);
 
-            // 1. TŁO I ŚRODOWISKO
+            // 1. TŁO I ŚRODOWISKO (ZAMEK + SERY)
             rysujMape(tryb, limitWielkosci, dt);
 
             // 2. POCISKI
@@ -337,13 +523,18 @@ window.Grafika = (function() {
                 });
             }
 
-            // 3. JEDZENIE
+            // 3. JEDZENIE 
             if (stanSerwera.foods) {
-                Object.values(stanSerwera.foods).forEach(f => {
-                    if (!czyWidoczny(f.x, f.y, 10)) return;
-                    ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(f.x | 0, f.y | 0, 5, 0, TWO_PI); ctx.fill();
-                });
+                lokalnyBuforJedzenia = stanSerwera.foods; 
             }
+            Object.values(lokalnyBuforJedzenia).forEach(f => {
+                if (!czyWidoczny(f.x, f.y, 10)) return;
+                let oscylacja = Math.sin(now / 200 + f.x) * 2; 
+                ctx.fillStyle = '#2ecc71'; 
+                ctx.beginPath(); 
+                ctx.arc(f.x | 0, (f.y + oscylacja) | 0, 5, 0, TWO_PI); 
+                ctx.fill();
+            });
 
             // 4. BOTY I INNI GRACZE
             if (stanSerwera.bots) Object.values(stanSerwera.bots).forEach(bot => rysujBota(bot));
@@ -359,7 +550,6 @@ window.Grafika = (function() {
             ctx.restore(); 
 
             // UI HUD ZAWSZE NA EKRANIE
-            // Celownik myszki
             ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 2;
             ctx.beginPath(); ctx.arc(pozycjaMyszki.x, pozycjaMyszki.y, 10, 0, TWO_PI); ctx.stroke();
             ctx.fillStyle = '#e74c3c'; ctx.fillRect(pozycjaMyszki.x - 1, pozycjaMyszki.y - 1, 2, 2);
