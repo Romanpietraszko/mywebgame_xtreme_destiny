@@ -1,5 +1,6 @@
 // ==========================================
-// TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA)
+// TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA+ Reżyserska)
+// WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
 // ==========================================
 
 (function() {
@@ -48,41 +49,63 @@
     let buforRzutuCzas = 0; // Coyote Time (Buforowanie kliknięć)
     let czyDucking = false; // Audio Ducking (Zarządzanie tłem)
 
+    // ==========================================
+    // [IDEA 1 & 2] MASZYNA STANÓW (FSM) I EVENT BUS
+    // ==========================================
+    const EventBus = {
+        listeners: {},
+        on(event, callback) { if(!this.listeners[event]) this.listeners[event] = []; this.listeners[event].push(callback); },
+        emit(event, data) { if(this.listeners[event]) this.listeners[event].forEach(cb => cb(data)); }
+    };
+
+    const GameFSM = {
+        zmienStan(nowyStan) {
+            if (window.Flagi) window.Flagi.Stan.aktualny = nowyStan;
+            EventBus.emit('stateChanged', nowyStan);
+            console.log(`🎬 [REŻYSER] Zmiana stanu gry na: ${nowyStan}`);
+        }
+    };
+
+    // ==========================================
+    // [IDEA 11] OBJECT POOLING WIZUALIZACJI
+    // ==========================================
+    const DOMElementsPool = {
+        pool: [],
+        get() { return this.pool.length > 0 ? this.pool.pop() : document.createElement('div'); },
+        release(el) { el.remove(); el.className = ''; el.innerHTML = ''; this.pool.push(el); }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         console.log("🛠️ Inicjalizacja interfejsu UI i Silnika Audio...");
 
-        // (AAA) MASZYNA STANÓW (Zabezpieczenie przed bugami)
         if (!window.Flagi) window.Flagi = { Stan: { aktualny: 'LOBBY' } };
 
         // === ZARZĄDZANIE AUDIO (AMBIENT I MUZYKA) ===
         let isMuted = false;
         
-        // 1. Dźwięk w Lobby (Menu)
         const dzwiekOgnia = new Audio('./assety/fire.mp3');
         dzwiekOgnia.loop = true;
         dzwiekOgnia.volume = 0.4;
 
-        // 2. Dźwięk przejścia (Whoosh)
         const dzwiekWhoosh = new Audio('./assety/fire_whoosh.mp3');
         dzwiekWhoosh.volume = 0.8;
 
-        // 3. Główny podkład muzyczny na mapie (Dark Trap)
         const muzykaGra = new Audio('./assety/dark_trap.mp3');
         muzykaGra.loop = true;
-        muzykaGra.volume = 0.15; // Cicho, żeby SFX grały pierwsze skrzypce!
+        muzykaGra.volume = 0.15; 
 
         // === SILNIK SFX (DŹWIĘKI REAKTYWNE) ===
         const SFX = {
             throw: new Audio('./assety/throw.mp3'),
             hit: new Audio('./assety/hit.mp3'),
             eat: new Audio('./assety/eat.mp3'),
-            // AWARYJNA ŁATKA: Zastępujemy brakujący death.mp3 plikiem hit.mp3
             death: new Audio('./assety/hit.mp3'), 
-            alert: new Audio('./assety/alert.mp3')
+            alert: new Audio('./assety/alert.mp3'),
+            heartbeat: new Audio('./assety/heartbeat.mp3') // [IDEA 16] Sudden Death Audio
         };
+        if(SFX.heartbeat) { SFX.heartbeat.loop = true; SFX.heartbeat.volume = 0.6; }
 
-        // Wstępne ładowanie do pamięci
-        Object.values(SFX).forEach(audio => { audio.preload = 'auto'; });
+        Object.values(SFX).forEach(audio => { if(audio) audio.preload = 'auto'; });
 
         function odpalDzwiek(nazwa, glosnosc = 0.5) {
             if (isMuted || !SFX[nazwa]) return;
@@ -91,7 +114,6 @@
             dzwiek.play().catch(e => console.warn(`Nie można odtworzyć SFX: ${nazwa}`, e));
         }
 
-        // (AAA) SPATIAL AUDIO 3D: Dźwięk zależy od odległości od akcji na mapie
         function odpalDzwiek3D(nazwa, glosnoscDocelowa = 0.5, zrodloX = null, zrodloY = null) {
             if (isMuted || !SFX[nazwa]) return;
             let vol = glosnoscDocelowa;
@@ -106,18 +128,16 @@
                     vol = glosnoscDocelowa * mnoznik;
                 }
             }
-
             let dzwiek = SFX[nazwa].cloneNode(); 
             dzwiek.volume = Math.max(0, Math.min(1, vol));
             dzwiek.play().catch(e => console.warn(`Nie można odtworzyć SFX: ${nazwa}`, e));
         }
 
-        // (AAA) AUDIO DUCKING: Kinowe wyciszanie muzyki w trakcie wybuchów/alertów
         function zrobAudioDucking() {
             if (isMuted || czyDucking) return;
             czyDucking = true;
             let orgGlosnosc = muzykaGra.volume;
-            muzykaGra.volume = orgGlosnosc * 0.3; // Wyciszenie muzyki do 30% na czas akcji
+            muzykaGra.volume = orgGlosnosc * 0.3; 
             setTimeout(() => {
                 let volInterval = setInterval(() => {
                     if (muzykaGra.volume < orgGlosnosc) {
@@ -130,7 +150,6 @@
             }, 3000);
         }
 
-        // (AAA) HAPTIC FEEDBACK: Fizyczne wibracje na telefonach
         function wibruj(wzorzec) {
             if (window.Flagi && window.Flagi.Srodowisko && window.Flagi.Srodowisko.isMobile && navigator.vibrate) {
                 try { navigator.vibrate(wzorzec); } catch(e){}
@@ -139,13 +158,12 @@
 
         // Próba odtworzenia dźwięku (Autoplay bypass)
         let pierwszaInterakcja = false;
-        
         let sprobujOdtworzyc = dzwiekWhoosh.play();
         if (sprobujOdtworzyc !== undefined) {
             sprobujOdtworzyc.then(() => {
                 dzwiekOgnia.play().catch(e => console.log(e));
             }).catch(error => {
-                console.log("🛡️ Przeglądarka zablokowała Autoplay. Dźwięk odpali się przy pierwszej interakcji.");
+                console.log("🛡️ Przeglądarka zablokowała Autoplay.");
                 const odblokujAudio = () => {
                     if (!pierwszaInterakcja) {
                         pierwszaInterakcja = true;
@@ -171,7 +189,7 @@
             }
         }, { once: true });
 
-        // --- GLOBALNY PRZYCISK MUTE (ZINTEGROWANY) ---
+        // --- GLOBALNY PRZYCISK MUTE ---
         const btnMute = document.createElement('button');
         btnMute.innerHTML = '🔊';
         btnMute.style.cssText = 'position: fixed; bottom: 20px; left: 20px; background: rgba(5,5,5,0.8); border: 2px solid #e74c3c; border-radius: 50%; width: 45px; height: 45px; color: #fff; font-size: 20px; cursor: pointer; z-index: 9999; box-shadow: 0 0 10px rgba(0,0,0,0.8); transition: transform 0.2s;';
@@ -182,6 +200,7 @@
             dzwiekOgnia.muted = isMuted;
             dzwiekWhoosh.muted = isMuted;
             muzykaGra.muted = isMuted;
+            if(SFX.heartbeat) SFX.heartbeat.muted = isMuted;
             btnMute.innerHTML = isMuted ? '🔇' : '🔊';
             btnMute.style.borderColor = isMuted ? '#555' : '#e74c3c';
         };
@@ -200,12 +219,17 @@
             }
         });
 
-        // --- LEADERBOARD (Tabela Wyników UI) ---
+        // --- LEADERBOARD ---
         const leaderboard = document.createElement('div');
         leaderboard.id = 'leaderboard';
         leaderboard.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(10,10,15,0.85); border: 2px solid #f1c40f; padding: 12px; border-radius: 8px; color: #fff; font-family: "Exo 2", sans-serif; width: 200px; z-index: 10; pointer-events: none; transition: opacity 0.3s; box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);';
         leaderboard.classList.add('hidden');
         document.getElementById('in-game-ui').appendChild(leaderboard);
+
+        // --- [IDEA 6] MUTATOR UI INDICATOR ---
+        const mutatorDisplay = document.createElement('div');
+        mutatorDisplay.style.cssText = 'position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: #3498db; font-family: "Exo 2", sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 5px #3498db; z-index: 10; pointer-events: none;';
+        document.getElementById('in-game-ui').appendChild(mutatorDisplay);
 
         // --- MOBILNY PRZYCISK AKCJI ---
         window.addEventListener('touchstart', function addTouchBtn() {
@@ -216,7 +240,6 @@
             mobileBtn.ontouchstart = (e) => {
                 e.preventDefault(); 
                 if (!czyWsklepie && window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-                    // Wysłanie bezpośrednie lub aktywacja bufora
                     buforRzutuCzas = Date.now(); 
                 }
             };
@@ -244,7 +267,6 @@
         const ingameControls = document.getElementById('ingame-controls');
         const btnLeave = document.getElementById('btn-leave');
 
-        // Referencje UI Trybu TEAMS
         const teamPowerBar = document.getElementById('team-power-bar');
         const barRed = document.getElementById('bar-red');
         const barBlue = document.getElementById('bar-blue');
@@ -252,6 +274,8 @@
 
         if (btnLeave) {
             btnLeave.addEventListener('click', () => {
+                // [IDEA 3] Graceful Teardown
+                EventBus.emit('gameTeardown');
                 if (confirm("Czy na pewno chcesz opuścić pole bitwy i wrócić do menu głównego?")) location.reload(); 
             });
         }
@@ -259,10 +283,8 @@
         // 3. OBSŁUGA LOBBY I WYBORU KLAS
         document.getElementById('nextBtn').addEventListener('click', () => {
             if (inputNick.value.trim().length < 2) { inputNick.style.borderColor = '#e74c3c'; return; }
-            
             dzwiekWhoosh.currentTime = 0;
-            if (!isMuted) dzwiekWhoosh.play().catch(e => console.warn("Whoosh zablokowany:", e));
-            
+            if (!isMuted) dzwiekWhoosh.play().catch(e => console.warn("Whoosh:", e));
             step1.classList.add('hidden'); step2.classList.remove('hidden');
         });
 
@@ -317,26 +339,25 @@
                 spawnZone: sektor
             };
 
+            // [IDEA 13] Agresywna Czystka Mapy na start
+            EventBus.emit('arenaSweep');
+
             socket.emit('joinGame', data);
             
-            // --- ODCINAJĄCA LAGI ZMIANA ---
-            // Niszczymy warstwę CSS z iskarami. GPU oddycha z ulgą.
             if (uiLayer) uiLayer.classList.add('hidden');
             if (bgLayer) {
                 bgLayer.style.display = 'none';
-                bgLayer.innerHTML = ''; // Fizyczne wyczyszczenie elementów HTML z pamięci
+                bgLayer.innerHTML = ''; 
             }
             
             if (timerContainer) timerContainer.classList.remove('hidden');
             if (ingameControls) ingameControls.classList.remove('hidden');
 
-            // Aktywacja UI zależnie od trybu
             if (mode === 'TEAMS') {
                 if (teamPowerBar) teamPowerBar.classList.remove('hidden');
                 if (formationPanel) formationPanel.classList.remove('hidden');
             }
             
-            // --- ZMIANA AUDIO NA TRYB WALKI ---
             dzwiekOgnia.pause();
             if (!isMuted) {
                 muzykaGra.currentTime = 0;
@@ -352,30 +373,52 @@
             if (interwalCzasu) clearInterval(interwalCzasu);
             interwalCzasu = setInterval(aktualizujCzas, 1000);
             
-            if (window.Flagi) window.Flagi.ustawStan('PLAYING');
+            GameFSM.zmienStan('PLAYING');
             if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick(); 
             
             if (mode === 'CAMPAIGN') {
-                setTimeout(() => {
-                    pokazNapisKinowy("SYSTEM PODTRZYMYWANIA ŻYCIA AKTYWNY. BĄDŹ OSTROŻNY...", 5000);
-                }, 1500);
+                setTimeout(() => { pokazNapisKinowy("SYSTEM PODTRZYMYWANIA ŻYCIA AKTYWNY. BĄDŹ OSTROŻNY...", 5000); }, 1500);
             }
 
             requestAnimationFrame(pętlaGry);
         }
 
+        // [IDEA 5 & 16] Time-Drift Sync & Sudden Death
+        let isSuddenDeath = false;
         function aktualizujCzas() {
             if (!timerDisplay) return;
-            let roznica = Math.floor((Date.now() - czasStart) / 1000);
+            
+            // Time-Drift Sync: Jeśli serwer podsyła czas zakończenia, używamy go. Inaczej lokalny start.
+            let roznica = 0;
+            if (stanSerwera && stanSerwera.serverEndTime) {
+                roznica = Math.max(0, Math.floor((stanSerwera.serverEndTime - Date.now()) / 1000));
+            } else {
+                roznica = Math.floor((Date.now() - czasStart) / 1000); // Licznik w górę (Survival)
+            }
+
             let min = String(Math.floor(roznica / 60)).padStart(2, '0');
             let sek = String(roznica % 60).padStart(2, '0');
             timerDisplay.innerText = `${min}:${sek}`;
 
-            // (AAA) Wysłanie pakietu Ping do sprawdzenia opóźnień
+            // Protokół Sudden Death (Odliczanie w dół)
+            if (stanSerwera && stanSerwera.serverEndTime && roznica <= 30 && roznica > 0) {
+                if (!isSuddenDeath) {
+                    isSuddenDeath = true;
+                    timerDisplay.style.color = '#e74c3c';
+                    timerDisplay.style.textShadow = '0 0 10px #e74c3c';
+                    pokazNapisKinowy("NAGŁA ŚMIERĆ!", 2000);
+                    if (!isMuted && SFX.heartbeat) SFX.heartbeat.play().catch(e=>console.log(e));
+                }
+            } else if (isSuddenDeath && roznica > 30) {
+                isSuddenDeath = false;
+                timerDisplay.style.color = '#fff';
+                timerDisplay.style.textShadow = 'none';
+                if(SFX.heartbeat) SFX.heartbeat.pause();
+            }
+
             socket.emit('pingTest', Date.now());
         }
 
-        // Odbiór Pingu z serwera
         socket.on('pongTest', (klientWyslano) => {
             ping = Date.now() - klientWyslano;
             if (netGraph) netGraph.innerHTML = `PING: <span style="color:${ping > 120 ? '#e74c3c' : '#2ecc71'}">${ping}ms</span>`;
@@ -383,7 +426,7 @@
 
         function dodajDoKillfeedu(zabojca, ofiara) {
             if (!killfeed) return;
-            const wpis = document.createElement('div');
+            const wpis = DOMElementsPool.get();
             wpis.style.background = 'rgba(20,20,25,0.85)';
             wpis.style.borderLeft = '3px solid #e74c3c';
             wpis.style.padding = '5px 10px';
@@ -391,12 +434,13 @@
             wpis.style.fontFamily = "'Exo 2', sans-serif";
             wpis.style.fontSize = '13px';
             wpis.style.borderRadius = '3px';
+            wpis.style.opacity = '1';
             wpis.innerHTML = `<span style="color:#e74c3c; font-weight:bold;">${zabojca}</span> zniszczył <span style="color:#aaa;">${ofiara}</span>`;
             killfeed.appendChild(wpis);
             setTimeout(() => {
                 wpis.style.opacity = '0';
                 wpis.style.transition = 'opacity 0.5s ease';
-                setTimeout(() => wpis.remove(), 500);
+                setTimeout(() => { DOMElementsPool.release(wpis); }, 500);
             }, 5000);
         }
 
@@ -434,9 +478,7 @@
         }
 
         // 5. HYBRYDOWY SYSTEM STEROWANIA Z DETEKCJĄ AFK
-        function zglosInput() {
-            ostatniCzasInputu = Date.now();
-        }
+        function zglosInput() { ostatniCzasInputu = Date.now(); }
 
         window.addEventListener('mousemove', (e) => {
             kursor.x = e.clientX; kursor.y = e.clientY;
@@ -448,7 +490,7 @@
         }, { passive: true });
 
         window.addEventListener('keydown', (e) => {
-            if (window.Flagi && window.Flagi.Stan.aktualny !== 'PLAYING') return; // Zabezpieczenie Maszyny Stanów
+            if (window.Flagi && !['PLAYING', 'SPECTATOR'].includes(window.Flagi.Stan.aktualny)) return; 
             zglosInput();
             const key = e.key.toLowerCase();
             if (['w', 'arrowup'].includes(key)) klawiszeKierunku.w = true;
@@ -482,7 +524,7 @@
         window.addEventListener('mousedown', (e) => {
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && e.button === 0 && !czyWsklepie) { 
                 zglosInput();
-                buforRzutuCzas = Date.now(); // (AAA) Coyote Time Buffer
+                buforRzutuCzas = Date.now(); 
             }
         });
         window.addEventListener('touchstart', (e) => {
@@ -498,7 +540,6 @@
 
         function obslugaFabułyKampanii(mojGracz) {
             if (!window.Flagi || window.Flagi.Stan.wybranyTryb !== 'CAMPAIGN') return;
-
             let masa = mojGracz.score;
 
             if (masa >= 50 && etapKampanii === 0) {
@@ -563,7 +604,6 @@
 
         function aktualizujSileDruzyn() {
             if (!stanSerwera || window.Flagi.Stan.wybranyTryb !== 'TEAMS') return;
-            
             let redScore = 0; let blueScore = 0;
             Object.values(stanSerwera.players).forEach(p => {
                 if (p.team === 'RED') redScore += p.score;
@@ -579,21 +619,32 @@
 
             let redPercent = (redScore / total) * 100;
             let bluePercent = (blueScore / total) * 100;
-
+            // [IDEA 9] Rubber-Banding Visuals
             if (barRed) barRed.style.width = `${redPercent}%`;
             if (barBlue) barBlue.style.width = `${bluePercent}%`;
         }
 
-        // 8. KOMUNIKACJA Z SERWEREM (Z Integracją Guardiana AAA)
+        // 8. KOMUNIKACJA Z SERWEREM
         socket.on('init', (data) => { mojeId = data.id; });
         socket.on('serverTick', (data) => {
-            // BEZPIECZNE PRZEKAZYWANIE DANYCH Z SERWERA PRZEZ TARCZĘ
             stanSerwera = window.Guardian && window.Guardian.sanityzujStanSerwera ? window.Guardian.sanityzujStanSerwera(data) : data;
+            
+            // Wczytywanie z serwera metadanych trybu (Mutatory/Timer)
+            if (data.serverEndTime) stanSerwera.serverEndTime = data.serverEndTime;
+            if (data.mutators && mutatorDisplay) {
+                mutatorDisplay.innerText = "Aktywne Modyfikacje: " + data.mutators.join(' | ');
+            }
+
+            // [IDEA 12] Virtual Spectator Mode Check
+            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && !stanSerwera.players[mojeId] && data.isSpectator) {
+                GameFSM.zmienStan('SPECTATOR');
+                pokazNapisKinowy("JESTEŚ WIDZEM", 3000);
+            }
             
             if (window.Guardian && window.Guardian.odbierzTick) window.Guardian.odbierzTick();
             aktualizujSileDruzyn(); 
             
-            if (stanSerwera.players && window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
+            if (stanSerwera.players && window.Flagi && ['PLAYING', 'SPECTATOR'].includes(window.Flagi.Stan.aktualny)) {
                 const tryb = window.Flagi.Stan.wybranyTryb;
                 if (tryb === 'FREE' || tryb === 'CAMPAIGN') { 
                     const gracze = Object.values(stanSerwera.players)
@@ -643,7 +694,7 @@
 
         // (AAA) AUTO-RECONNECTION UI
         socket.on('disconnect', () => {
-            console.warn("⚠️ Serwer przerwał połączenie. Próba ponownego nawiązania...");
+            console.warn("⚠️ Serwer przerwał połączenie.");
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
                 pokazNapisKinowy("⚠️ ZERWANO ŁĄCZNOŚĆ. PRÓBA REKONFIGURACJI...", 3000);
                 wibruj([200, 200, 200]);
@@ -657,7 +708,7 @@
         });
 
         socket.on('gameOver', (data) => {
-            if (window.Flagi) window.Flagi.ustawStan('GAMEOVER');
+            GameFSM.zmienStan('GAMEOVER');
             clearInterval(interwalCzasu);
             if (timerContainer) timerContainer.classList.add('hidden');
             if (ingameControls) ingameControls.classList.add('hidden'); 
@@ -665,6 +716,7 @@
             if (formationPanel) formationPanel.classList.add('hidden');
             if (document.getElementById('leaderboard')) document.getElementById('leaderboard').classList.add('hidden');
             if (netGraph) netGraph.style.display = 'none';
+            if (SFX.heartbeat) SFX.heartbeat.pause();
             
             zrobAudioDucking();
             odpalDzwiek('death', 0.8);
@@ -679,11 +731,24 @@
                 let kolor = data.killerName === "VICTORY" ? "#2ecc71" : "#e74c3c";
                 let viralText = `Osiągnąłem ${data.finalScore} masy i przetrwałem ${finalTime} w Vibe Noir (Tryb: ${tryb})! Zmierz się ze mną: ${window.location.href}`;
 
+                // [IDEA 17 & 20] MVP Stats & Map Voting UI
+                let mvpData = data.mvpStats ? `<h3 style="color:#3498db;">MVP: ${data.mvpStats.name} (Assists: ${data.mvpStats.assists})</h3>` : '';
+
                 uiLayer.innerHTML = `
-                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolor}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999;">
+                    <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolor}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999; max-width: 600px; margin: 0 auto;">
                         <h1 style="color: ${kolor}; font-size: 48px; font-family: 'Permanent Marker';">${tytul}</h1>
                         <p style="color: #aaa;">"${data.message}"</p>
+                        ${mvpData}
                         <h2 style="color: #f1c40f;">MASA: ${data.finalScore} | CZAS: ${finalTime}</h2>
+                        
+                        <div style="margin-top: 20px; padding: 15px; border-top: 1px solid #333;">
+                            <h4 style="color:#aaa;">Głosuj na Następną Arenę:</h4>
+                            <div style="display:flex; justify-content:center; gap: 10px;">
+                                <button class="main-btn" onclick="socket.emit('voteMap', 'Neon City')">Neon City</button>
+                                <button class="main-btn" onclick="socket.emit('voteMap', 'Wasteland')">Wasteland</button>
+                            </div>
+                        </div>
+
                         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
                             <button id="btn-share-score" class="main-btn border-blue" style="font-size: 18px;">📢 POCHWAL SIĘ WYNIKIEM</button>
                             <button class="main-btn border-red" style="font-size: 18px;" onclick="location.reload()">REBOOT SYSTEM</button>
@@ -706,13 +771,25 @@
         // 9. PĘTLA GRY Z HYBRYDOWYM STEROWANIEM I PREDICTION
         function pętlaGry() {
             let teraz = Date.now();
+            const stanAktualny = window.Flagi ? window.Flagi.Stan.aktualny : 'LOBBY';
 
-            if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING') {
-                
-                // (AAA) AFK Detection - Oszczędzanie serwera, gdy gracz odejdzie
+            // [IDEA 12] Jeśli gracz jest obserwatorem, omija sterowanie i przesył wektorów
+            if (stanAktualny === 'SPECTATOR') {
+                if (stanSerwera && window.Grafika) {
+                    let najbogatszy = null;
+                    if(stanSerwera.players) {
+                        najbogatszy = Object.values(stanSerwera.players).sort((a,b)=>b.score-a.score)[0];
+                    }
+                    if(window.Guardian && window.Guardian.chronFukcje) {
+                        window.Guardian.chronFukcje(() => window.Grafika.rysujKlatke(stanSerwera, najbogatszy), "GrafikaRender")();
+                    } else window.Grafika.rysujKlatke(stanSerwera, najbogatszy);
+                }
+                return requestAnimationFrame(pętlaGry);
+            }
+
+            if (stanAktualny === 'PLAYING') {
                 if (teraz - ostatniCzasInputu > 120000) { 
                     if (teraz % 5000 < 50) pokazNapisKinowy("ZBYT DŁUGI BRAK RUCHU. TRYB OSZCZĘDZANIA ENERGII.", 2000);
-                    // Odciążamy serwer rzadszym wysyłaniem pakietów dla AFK-ów
                     if (teraz - ostatniaWysylkaRuchu < 200) return requestAnimationFrame(pętlaGry);
                 }
 
@@ -731,7 +808,6 @@
                             if (klawiszeKierunku.s) dy += 1;
                             if (klawiszeKierunku.a) dx -= 1;
                             if (klawiszeKierunku.d) dx += 1;
-                            
                             kat = Math.atan2(dy, dx);
                             dystans = 100; 
                         } else {
@@ -741,20 +817,17 @@
                         
                         socket.emit('ruchGraczaMyszka', { kat: kat, dystans: dystans });
 
-                        // (AAA) Client-Side Prediction (Przewidywanie ruchu)
                         if (stanSerwera && stanSerwera.players && mojeId) {
                             let mojGracz = stanSerwera.players[mojeId];
                             if (mojGracz && (dx !== 0 || dy !== 0 || dystans > 20)) {
-                                let predkoscKorekty = 4; // Optymalna wartość dla płynności lokalnej
+                                let predkoscKorekty = 4; 
                                 mojGracz.x += Math.cos(kat) * predkoscKorekty;
                                 mojGracz.y += Math.sin(kat) * predkoscKorekty;
                             }
                         }
-
                         ostatniaWysylkaRuchu = teraz;
                     }
 
-                    // (AAA) Input Buffering (Coyote Time) dla Rzutu Oszczepem
                     if (buforRzutuCzas > 0 && (teraz - buforRzutuCzas < 250)) { 
                         let doRzutu = true;
                         if (window.Guardian && window.Guardian.rejestrujKlikniecie) {
@@ -773,10 +846,10 @@
                             }
                             odpalDzwiek3D('throw', 0.6, posX, posY);
                             wibruj(15); 
-                            buforRzutuCzas = 0; // Kasowanie bufora po udanym rzucie
+                            buforRzutuCzas = 0; 
                         }
                     } else if (teraz - buforRzutuCzas >= 250) {
-                        buforRzutuCzas = 0; // Bufor wygasł
+                        buforRzutuCzas = 0; 
                     }
                 }
 
@@ -786,7 +859,6 @@
                         obslugaStref(mojGracz);
                         obslugaFabułyKampanii(mojGracz); 
                         
-                        // LOGIKA DŹWIĘKÓW I WIZUALIZACJI ZMIAN MASY
                         if (ostatniaMasa > 0) {
                             let roznica = mojGracz.score - ostatniaMasa;
                             
@@ -806,7 +878,6 @@
                         }
                         ostatniaMasa = mojGracz.score;
 
-                        // RYSOWANIE GRAFIKI (Z OCHRONĄ GUARDIANA)
                         if (window.Grafika && window.Guardian && window.Guardian.chronFukcje) {
                             window.Guardian.chronFukcje(() => {
                                 window.Grafika.rysujKlatke(stanSerwera, mojGracz);
@@ -819,6 +890,5 @@
             }
             requestAnimationFrame(pętlaGry); 
         }
-
     }); 
 })();

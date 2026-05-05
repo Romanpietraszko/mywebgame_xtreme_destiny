@@ -1,22 +1,46 @@
-// ==========================================
-// HAND.JS - "Mięśnie" i Egzekutor Akcji Guardiana (Pełna Wersja AAA+)
-// Odpowiada za UI, DOM, Klawiaturę, Efekty Wizualne i Awaryjny Reset
-// ==========================================
+// ==========================================================================
+// HAND.JS - "Mięśnie" i Egzekutor Akcji Guardiana (Pełna Wersja AAA+ Precision)
+// Odpowiada za UI, DOM, Klawiaturę, Efekty Wizualne, Awaryjny Reset i Anty-Lag
+// ==========================================================================
 
 class GuardianHand {
     constructor() {
+        // --- 0. IMMUNITET DEWELOPERSKI ---
+        this.isDevMode = window.location.hostname === 'localhost' || 
+                         window.location.hostname === '127.0.0.1' || 
+                         sessionStorage.getItem('dev_mode') === 'true';
+
+        if (this.isDevMode) {
+            console.log("%c🛡️ [HAND] Immunitet Deweloperski AKTYWNY. Logi i funkcje dev odblokowane.", "color: #f1c40f; font-weight: bold;");
+        }
+
+        // --- 1. ZMIENNE UI I INTERFEJSU ---
         this.uiWarning = null;
-        this.uiCritical = null; // Nowa warstwa wizualna na krytyczne błędy
+        this.uiCritical = null; 
         this.ostrzezenieTimeout = null;
         
-        // Inicjalizacja przy starcie
+        // --- 2. REJESTRY STANU (Fail-Safes i Anty-Lag) ---
+        this.stan = {
+            fps: 60,
+            ostatniaKlatka: performance.now(),
+            poziomZiemniaka: 0, // 0 - Ultra, 1 - Medium, 2 - Extreme Potato
+            czyKlawiaturaZacieta: false, // Lokalny Input Jamming
+            czyShadowBanned: false
+        };
+        this.historiaKlikniec = [];
+        this.bledyWizualne = 0;
+
+        // --- INICJALIZACJA ---
         this.zbudujInterfejs();
         this.aktywujTarczeSystemowe();
         
-        console.log("🦾 [HAND] Moduł Egzekucyjny podłączony do macierzy. Gotowy do uderzenia.");
+        console.log("🦾 [HAND] Moduł Egzekucyjny podłączony do macierzy. Gotowy do uderzenia i ochrony.");
     }
 
-    // --- 1. ZARZĄDZANIE INTERFEJSEM (Wstrzykiwanie DOM) ---
+    // ==========================================================================
+    // 🎨 MODUŁ 1: ZARZĄDZANIE INTERFEJSEM (Wstrzykiwanie DOM)
+    // ==========================================================================
+    
     zbudujInterfejs() {
         // 1A. Standardowy, mroczny alert u góry ekranu
         if (!document.getElementById('guardian-warning')) {
@@ -94,7 +118,10 @@ class GuardianHand {
         this.uiWarning.style.transform = 'translateX(-50%) translateY(-20px)';
     }
 
-    // --- 2. ZAAWANSOWANE EFEKTY EGZEKUCYJNE (Haptics & Visuals) ---
+    // ==========================================================================
+    // 💥 MODUŁ 2: ZAAWANSOWANE EFEKTY EGZEKUCYJNE (Haptics & Visuals)
+    // ==========================================================================
+    
     mrugnijEkranem(kolor = 'rgba(231, 76, 60, 0.4)', czasTrwania = 200) {
         if (!this.uiCritical) return;
         this.uiCritical.style.background = `radial-gradient(circle, transparent 20%, ${kolor} 100%)`;
@@ -124,27 +151,24 @@ class GuardianHand {
         requestAnimationFrame(wstrzas);
     }
 
-    // --- 3. OCHRONA KONTROLEK I DOM ---
+    // ==========================================================================
+    // 🛡️ MODUŁ 3: OCHRONA KONTROLEK, DOM I FAIL-SAFES
+    // ==========================================================================
+    
     aktywujTarczeSystemowe() {
-        // Blokada "Ghost Input" - Gdy gracz klika Alt-Tab lub zmienia kartę
+        // --- ORYGINALNE TARCZE (Ghost Input & Focus) ---
         window.addEventListener('blur', () => {
             console.log("🦾 [HAND] Utrata fokusu. Zerowanie wektorów ruchu fizycznego i myszy.");
-            
-            // Lista wszystkich klawiszy używanych do ruchu i akcji
             const keysToRelease = [
                 'KeyW', 'KeyS', 'KeyA', 'KeyD', 
                 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
                 'KeyQ', 'KeyE', 'Space', 'Digit1', 'Digit2', 'Digit3', 'Digit4'
             ];
-            
-            // Symulacja puszczenia klawiszy i przycisków myszy, by tryby.js to wyłapały
             try {
                 keysToRelease.forEach(code => {
                     const eventCode = new KeyboardEvent('keyup', { 'code': code, 'key': code.replace('Key', '').toLowerCase() });
                     window.dispatchEvent(eventCode);
                 });
-
-                // Uwolnienie zablokowanej myszki
                 const mouseEvent = new MouseEvent('mouseup', { button: 0 });
                 window.dispatchEvent(mouseEvent);
             } catch(e) {
@@ -152,7 +176,6 @@ class GuardianHand {
             }
         });
 
-        // Awaryjne czyszczenie focusa z pól tekstowych (zapobiega blokowaniu ruchu po wyjściu ze sklepu)
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
                 if (document.activeElement && document.activeElement.tagName === 'INPUT') {
@@ -161,42 +184,200 @@ class GuardianHand {
                 }
             }
         });
+
+        // --- NOWOŚĆ: Pożeracz Błędów (Silent Error Swallowing) ---
+        // Chroni klienta przed całkowitym zamrożeniem z powodu drobnego błędu w animacji/UI
+        window.addEventListener('error', (e) => {
+            if (this.isDevMode) return; // Szef musi widzieć błędy
+            
+            this.bledyWizualne++;
+            if (this.bledyWizualne > 50 && this.stan.poziomZiemniaka < 2) {
+                console.warn("🛡️ [HAND] Kaskada błędów wizualnych! Odpalam Tryb Ziemniaka (Bezpieczny).");
+                this.wlaczTrybZiemniaka(2);
+                this.bledyWizualne = 0;
+            }
+            e.preventDefault(); // Powstrzymuje propagację do silnika głównego
+        });
+
+        // --- NOWOŚĆ: Przycisk Paniki (F4) - Ręczny ratunek przed lagiem ---
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'F4') {
+                e.preventDefault();
+                const nowyPoziom = this.stan.poziomZiemniaka >= 2 ? 0 : 2;
+                if (nowyPoziom === 2) {
+                    this.wlaczTrybZiemniaka(2);
+                    this.pokazOstrzezenie("RĘCZNY TRYB WYDAJNOŚCI AKTYWNY (F4)", true);
+                } else {
+                    this.przywrocGrafike();
+                    this.pokazOstrzezenie("GRAFIKA PRZYWRÓCONA (F4)", true);
+                }
+            }
+        });
+
+        // --- NOWOŚĆ: WebGL Context Recovery ---
+        // Ratowanie Canvasa jeśli zawiesi się karta graficzna
+        const canvas = document.getElementById('gameCanvas'); 
+        if (canvas) {
+            canvas.addEventListener('webglcontextlost', (e) => {
+                e.preventDefault(); 
+                console.error("🏥 [HAND] Utracono kontekst GPU! Próba restartu płótna...");
+                setTimeout(() => { this.odbudujCanvas(); }, 1000);
+            }, false);
+        }
     }
 
-    // --- 4. EGZEKUCJA OPTYMALIZACJI ---
-    wlaczTrybZiemniaka() {
+    odbudujCanvas() {
+        console.log("🏥 [HAND] Odtwarzanie kontekstu graficznego...");
+        if (typeof window.grafika !== 'undefined' && typeof window.grafika.inicjalizuj === 'function') {
+            window.grafika.inicjalizuj();
+        }
+    }
+
+    // ==========================================================================
+    // ⚡ MODUŁ 4: EKSTREMALNY ANTY-LAG I SKALOWANIE
+    // ==========================================================================
+    
+    monitorujWydajnoscRenderu() {
+        const teraz = performance.now();
+        const delta = teraz - this.stan.ostatniaKlatka;
+        this.stan.ostatniaKlatka = teraz;
+
+        if (delta > 0) {
+            this.stan.fps = (this.stan.fps * 0.9) + ((1000 / delta) * 0.1);
+        }
+
+        // Dynamiczne Skalowanie Rozdzielczości (Auto-Downscale)
+        if (!this.isDevMode) {
+            if (this.stan.fps < 30 && this.stan.poziomZiemniaka === 0) {
+                this.wlaczTrybZiemniaka(1);
+            } else if (this.stan.fps < 15 && this.stan.poziomZiemniaka === 1) {
+                this.wlaczTrybZiemniaka(2);
+            }
+        }
+    }
+
+    wlaczTrybZiemniaka(poziom = 1) {
+        this.stan.poziomZiemniaka = poziom;
+        
         if (window.Flagi && window.Flagi.Srodowisko) {
-            // Flaga isMobile w tryby.js odcina m.in. wibracje i może odciąć ciężkie procesy
             window.Flagi.Srodowisko.isMobile = true; 
         }
         
-        // Ratowanie GPU: Twarde wyłączenie efektów na Canvasie
         const gameCanvas = document.querySelector('canvas');
-        if (gameCanvas) {
-            gameCanvas.style.filter = 'none'; // Odcina kosztowne cienie i blury na głównej macierzy
+        if (!gameCanvas) return;
+
+        if (poziom === 1) {
+            // [Poziom 1]: Odcina kosztowne cienie i delikatnie skaluje Canvas
+            gameCanvas.style.filter = 'none';
+            gameCanvas.style.transform = "scale(1.25)";
+            gameCanvas.width = window.innerWidth * 0.8;
+            gameCanvas.height = window.innerHeight * 0.8;
+        } else if (poziom === 2) {
+            // [Poziom 2]: Agresywne ucięcie detali, pikseloza dla ratowania FPS
+            gameCanvas.style.filter = "none";
+            gameCanvas.style.boxShadow = "none";
+            gameCanvas.width = window.innerWidth * 0.5;
+            gameCanvas.height = window.innerHeight * 0.5;
+            gameCanvas.style.transform = "scale(2.0)";
+            gameCanvas.style.imageRendering = "pixelated";
+            
+            document.body.style.setProperty('--bg-glass', 'rgba(10, 10, 15, 0.9)'); 
+            const style = document.createElement('style');
+            style.id = 'guardian-potato-style';
+            style.innerHTML = `* { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }`;
+            if (!document.getElementById('guardian-potato-style')) document.head.appendChild(style);
         }
 
-        // Agresywne wyłączenie obciążających animacji w CSS
-        document.body.style.setProperty('--bg-glass', 'rgba(10, 10, 15, 0.9)'); // Zastępuje ciężki backdrop-filter
-        const style = document.createElement('style');
-        style.innerHTML = `
-            * {
-                animation-duration: 0.01ms !important;
-                animation-iteration-count: 1 !important;
-                transition-duration: 0.01ms !important;
-            }
-        `;
-        document.head.appendChild(style);
-
-        this.mrugnijEkranem('rgba(241, 196, 15, 0.3)', 300); // Subtelny żółty błysk potwierdzający wejście trybu wydajności
-        this.pokazOstrzezenie("AKTYWOWANO PROTOKÓŁ WYDAJNOŚCI", true);
+        this.mrugnijEkranem('rgba(241, 196, 15, 0.3)', 300);
+        this.pokazOstrzezenie(`PROTOKÓŁ WYDAJNOŚCI [POZIOM ${poziom}]`, true);
     }
 
-    // --- 5. TWARDY REBOOT (Procedura Ostatniej Szansy) ---
+    przywrocGrafike() {
+        this.stan.poziomZiemniaka = 0;
+        const gameCanvas = document.querySelector('canvas');
+        if (gameCanvas) {
+            gameCanvas.style.transform = "scale(1)";
+            gameCanvas.width = window.innerWidth;
+            gameCanvas.height = window.innerHeight;
+            gameCanvas.style.imageRendering = "auto";
+        }
+        const potatoStyle = document.getElementById('guardian-potato-style');
+        if (potatoStyle) potatoStyle.remove();
+    }
+
+    chronRenderowanie(funkcjaRenderujaca) {
+        // [IDEA: Proxy Shield] - Ochrona głównej pętli renderującej grę przed crashami
+        return (...args) => {
+            this.monitorujWydajnoscRenderu();
+            try {
+                funkcjaRenderujaca(...args);
+            } catch (err) {
+                // Pożera błąd klatki, pozwalając silnikowi spróbować wyrenderować następną
+                if (this.isDevMode) console.error("🎨 [HAND-RENDER ERROR]:", err);
+            }
+        };
+    }
+
+    // ==========================================================================
+    // 🎯 MODUŁ 5: SNAJPERSKI ANTY-CHEAT (Izolacja lokalnego gracza)
+    // ==========================================================================
+
+    weryfikujLokalneWejscie() {
+        if (this.isDevMode) return true; // Szef klika jak chce i z jaką chce prędkością
+
+        const teraz = performance.now();
+        this.historiaKlikniec.push(teraz);
+        if (this.historiaKlikniec.length > 5) this.historiaKlikniec.shift();
+
+        // [IDEA: Kłódka na Klawiaturę / Input Jamming]
+        // Uderza tylko w tego jednego gracza. Blokuje jego strzały/skille jeśli używa makra o stałym interwale
+        if (this.historiaKlikniec.length === 5) {
+            let interwaly = [];
+            for (let i = 1; i < 5; i++) interwaly.push(this.historiaKlikniec[i] - this.historiaKlikniec[i-1]);
+
+            const srednia = interwaly.reduce((a, b) => a + b) / 4;
+            const wariancja = interwaly.reduce((a, b) => a + Math.pow(b - srednia, 2), 0) / 4;
+
+            if (wariancja < 2.0 && srednia < 100) { 
+                this.stan.czyKlawiaturaZacieta = true;
+                setTimeout(() => { this.stan.czyKlawiaturaZacieta = false; }, 2000); 
+            }
+        }
+
+        if (this.stan.czyKlawiaturaZacieta) {
+            return false; // Zablokowano akcję (broń u hakera zacina się i nie wysyła pakietu na serwer)
+        }
+
+        return true;
+    }
+
+    aktywujShadowRealm(czyWlaczyc) {
+        // [IDEA: Piekło Szarości]
+        // Oszust zostaje oflagowany. Jego gra staje się depresyjnie szara, kursor robi się "wait".
+        // Nie cierpią na tym inni gracze, ani serwer.
+        if (this.isDevMode) return;
+
+        this.stan.czyShadowBanned = czyWlaczyc;
+        const canvas = document.getElementById('gameCanvas');
+        
+        if (canvas) {
+            if (czyWlaczyc) {
+                canvas.style.filter = "grayscale(100%) contrast(150%) blur(1px)";
+                document.body.style.cursor = "wait"; 
+            } else if (this.stan.poziomZiemniaka === 0) {
+                canvas.style.filter = "none";
+                document.body.style.cursor = "crosshair";
+            }
+        }
+    }
+
+    // ==========================================================================
+    // 💀 MODUŁ 6: TWARDY REBOOT (Procedura Ostatniej Szansy)
+    // ==========================================================================
+    
     wymusTwardyReset() {
         console.error("☠️ [HAND] Wprowadzam twardy restart środowiska. Zegnaj świecie.");
         
-        // Agresywny efekt wizualny przed śmiercią strony
         document.body.style.transition = "filter 0.5s, transform 0.5s";
         document.body.style.filter = "grayscale(100%) contrast(200%)";
         document.body.style.transform = "scale(1.05)";
@@ -206,15 +387,13 @@ class GuardianHand {
         
         this.pokazOstrzezenie("CRASH SYSTEMU - REBOOT KONSOLI W TOKU...", false);
         
-        // Zabezpieczenie przed nieskończonym odświeżaniem - czyścimy SessionStorage
         try { sessionStorage.clear(); } catch(e) {}
 
-        // Twardy reload z wymuszeniem pobrania nowych plików (pominięcie cache)
         setTimeout(() => {
             window.location.reload(true);
         }, 1500);
     }
 }
 
-// Udostępnienie instancji dla Głównego Guardiana
-window.GuardianHand = GuardianHand;
+// Udostępnienie instancji dla Głównego Guardiana i pętli
+window.GuardianHand = new GuardianHand();

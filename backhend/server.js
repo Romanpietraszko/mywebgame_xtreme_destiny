@@ -1,5 +1,6 @@
 // ==========================================
 // SERVER.JS - Autorytatywny Sędzia (Vibe Noir - Pancerna Architektura)
+// WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
 // ==========================================
 
 const express = require('express');
@@ -48,6 +49,9 @@ const MAX_MASS = 600;
 const MAX_FOODS = 250;
 const MAX_BOTS = 60; 
 const CELL_SIZE = 400; // Spatial Hashing
+
+// [FAZA 1 FIX] Pula dla siatki przestrzennej (Zapobiega Garbage Collection)
+const preallocatedGrid = {}; 
 
 const state = {
     players: {}, bots: {}, foods: {}, projectiles: {},
@@ -539,7 +543,7 @@ io.on('connection', (socket) => {
 
         state.players[socket.id] = {
             id: socket.id,
-            name: data.name || "Nieznany",
+            name: String(data.name || "Nieznany").substring(0, 16), // [FAZA 1 FIX] Sanityzacja długości nicku
             skin: data.skin || 'standard',
             mode: data.mode || 'FREE',
             team: pTeam,
@@ -549,7 +553,8 @@ io.on('connection', (socket) => {
             activeWeapon: 'sword',
             overcharge: 0,
             isShielding: false, isSafe: false,
-            katRuchu: 0, dystansKursora: 0, rozkazAktywny: false
+            katRuchu: 0, dystansKursora: 0, rozkazAktywny: false,
+            ostatniStrzal: 0 // [FAZA 1 FIX] Zmienna do ochrony przed spamem
         };
         socket.emit('init', { id: socket.id, team: pTeam });
     });
@@ -557,14 +562,25 @@ io.on('connection', (socket) => {
     socket.on('ruchGraczaMyszka', (dane) => {
         let p = state.players[socket.id];
         if (p) {
-            p.katRuchu = dane.kat;
-            p.dystansKursora = dane.dystans;
+            // [FAZA 1 FIX] Sanityzacja (Klamrowanie typu) ucinająca exploity NaN
+            p.katRuchu = Number(dane.kat) || 0;
+            p.dystansKursora = Number(dane.dystans) || 0;
         }
     });
 
     socket.on('rzutOszczepem', (dane) => {
         let p = state.players[socket.id];
         if (p && !p.isSafe) { 
+            
+            // [FAZA 1 FIX] Server-Side Authority (Ochrona przed auto-clickerami i crash-exploitami)
+            const teraz = Date.now();
+            let limitCzasowy = p.mode === 'TEAMS' ? 500 : 200; // Twardy narzut
+            if (teraz - p.ostatniStrzal < limitCzasowy) return; // Bezlitosne ignorowanie spamu
+            p.ostatniStrzal = teraz;
+
+            let celKat = Number(dane.kat);
+            if (isNaN(celKat)) return;
+
             let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
             if (p.score > koszt) {
                 p.score -= koszt;
@@ -572,7 +588,7 @@ io.on('connection', (socket) => {
                 state.projectiles[pid] = {
                     id: pid, ownerId: p.id, team: p.team, mode: p.mode,
                     x: p.x, y: p.y,
-                    dx: Math.cos(dane.kat), dy: Math.sin(dane.kat),
+                    dx: Math.cos(celKat), dy: Math.sin(celKat),
                     life: 50, speed: 25, damage: p.mode === 'TEAMS' ? 25 : WEAPONS[p.activeWeapon].dmg, 
                     piercing: true, type: 'oszczep'
                 };
@@ -611,6 +627,11 @@ io.on('connection', (socket) => {
         }
     });
 
+    // [FAZA 1 FIX] PONG TEST DO BADAŃ PINGU W TRYBY.JS
+    socket.on('pingTest', (timestamp) => {
+        socket.emit('pongTest', timestamp);
+    });
+
     socket.on('disconnect', () => {
         console.log(`[ rozłączono ] Terminal: ${socket.id}`);
         for(let bId in state.bots) { if(state.bots[bId].ownerId === socket.id) delete state.bots[bId]; }
@@ -624,14 +645,21 @@ io.on('connection', (socket) => {
 setInterval(() => {
     state.tickCounter++;
 
-    // 1. SPATIAL HASHING (Optymalizacja)
-    let grid = {};
+    // 1. SPATIAL HASHING (FAZA 1 FIX: Prealokacja i odciążenie RAM)
+    // Zamiast tworzyć setki obiektów co tick, czyścimy tylko ich zawartość
+    for (let key in preallocatedGrid) {
+        preallocatedGrid[key].players.length = 0;
+        preallocatedGrid[key].bots.length = 0;
+        preallocatedGrid[key].foods.length = 0;
+    }
+
     function addToGrid(entity, type) {
         if (!entity) return;
         let key = `${Math.floor(entity.x / CELL_SIZE)},${Math.floor(entity.y / CELL_SIZE)}`;
-        if (!grid[key]) grid[key] = { players: [], bots: [], foods: [] };
-        grid[key][type].push(entity);
+        if (!preallocatedGrid[key]) preallocatedGrid[key] = { players: [], bots: [], foods: [] };
+        preallocatedGrid[key][type].push(entity);
     }
+    
     Object.values(state.players).forEach(p => addToGrid(p, 'players'));
     Object.values(state.bots).forEach(b => addToGrid(b, 'bots'));
     Object.values(state.foods).forEach(f => addToGrid(f, 'foods'));
@@ -641,7 +669,7 @@ setInterval(() => {
         let nearby = { players: [], bots: [], foods: [] };
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
-                let cell = grid[`${cx + dx},${cy + dy}`];
+                let cell = preallocatedGrid[`${cx + dx},${cy + dy}`];
                 if (cell) {
                     nearby.players.push(...cell.players);
                     nearby.bots.push(...cell.bots);
@@ -843,6 +871,7 @@ setInterval(() => {
 
     // 5. WYSYŁKA
     io.emit('serverTick', {
+        serverTime: Date.now(), // [FAZA 1 FIX] Master Clock Sync dla Maszyny Stanów
         players: state.players,
         bots: state.bots,
         projectiles: state.projectiles,
