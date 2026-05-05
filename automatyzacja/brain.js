@@ -1,8 +1,8 @@
 // ==========================================
-// BRAIN.JS - Sztuczna Inteligencja z Bazą Sygnatur (Smart Core v11.1 OMEGA AAA)
+// BRAIN.JS - Sztuczna Inteligencja z Bazą Sygnatur (Smart Core v11.2 OMEGA AAA)
 // Posiada dedykowany rdzeń AI (BrainAiCore) do komunikacji z Ollamą
 // WDROŻONO: 50+ Modułów Technicznych (Optymalizacja, AI Taktyczne, Anti-Cheat 2.0, Reżyser Gry)
-// FIX: Izolacja Kar Per-Gracz (Usunięto Cross-Contamination)
+// FIX: Izolacja Kar Per-Gracz, Memory Leak Fix, Node.js Universal Check
 // ==========================================
 
 // ---------------------------------------------------------
@@ -10,12 +10,15 @@
 // ---------------------------------------------------------
 class BrainAiCore {
     constructor() {
-        this.isDevMode = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+        // [FIX] Universal Check (Zapobiega crashom window is not defined w Node.js)
+        const isBrowser = typeof window !== 'undefined';
+        this.isDevMode = isBrowser ? (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') : false;
+        
         this.OLLAMA_URL = "http://localhost:11434/api/generate";
         this.OLLAMA_MODEL = "phi3:latest"; 
         this.czyZajety = false;
 
-        if (this.isDevMode) {
+        if (this.isDevMode && isBrowser) {
             console.log(`🧠 [BRAIN-AI] Zwoje mózgowe podłączone. Model [${this.OLLAMA_MODEL}] gotowy do analizy anomali.`);
         }
     }
@@ -82,6 +85,7 @@ class GuardianBrain {
         // --- REJESTRY BEZPIECZEŃSTWA (Anti-Cheat 2.0 - PER PLAYER) ---
         this.historiaKlikniec = new Map();    // [FIX] ID -> [czasy kliknięć]
         this.poziomZagrozenia = new Map();    // [FIX] ID -> Threat Score
+        this.historiaPozycji = new Map();     // [FIX] Przywrócona zmienna dla anty-teleportu
         this.shadowBans = new Set();          // [IDEA 10] Piekielne Lobby dla cheaterów
         this.lastShotTime = new Map();        // [IDEA 8] Server-Side Cooldown Check
         this.aimbotHeuristics = new Map();    // [IDEA 9] Śledzenie snapowania kątów
@@ -345,7 +349,7 @@ class GuardianBrain {
             }
         }
         
-        if (this.historiaPozycji.size > 100) this.historiaPozycji.clear();
+        // [FIX] Usunięto clear(), który psuł anty-teleport przy >100 graczach.
         this.historiaPozycji.set(id, { x: x, y: y });
         this.aktualizujSiatkePrzestrzenna(id, x, y);
 
@@ -434,7 +438,8 @@ class GuardianBrain {
             // --- DECYZJE CELU ---
             // [IDEA 23] Reaguj na List Gończy
             if (this.bounties.size > 0 && Math.random() > 0.5) {
-                let targetBountyId = Array.from(this.bounties)[0];
+                // [FIX] Zmiana z Array.from (bardzo wolne) na O(1) Iterator
+                let targetBountyId = this.bounties.values().next().value;
                 if (widoczneCele[targetBountyId]) bot.target = widoczneCele[targetBountyId];
             }
 
@@ -640,12 +645,19 @@ class GuardianBrain {
                 console.log(`%c💓 [BRAIN HEARTBEAT] IQ: ${this.iqSlider} | Bounties: ${this.bounties.size} | RAM: ${memInfo} | GameHour: ${Math.floor(this.gameHour)}:00`, 'color: #888; font-style: italic;');
             }
 
-            // [IDEA 27] Auto-Kicking Zombie Sockets
+            // [IDEA 27] Auto-Kicking Zombie Sockets & Memory Leak Fix
             this.zombieConnections.forEach((lastSeen, id) => {
                 if (teraz - lastSeen > 30000) {
                     console.log(`🧹 [ZOMBIE GC] Usunięto martwe połączenie: ${id}`);
+                    // [FIX] Pełna sterylizacja RAMu po odłączonym graczu!
                     this.zombieConnections.delete(id);
-                    this.shadowBans.delete(id); // Czyści pamięć po cheaterze
+                    this.shadowBans.delete(id); 
+                    this.historiaKlikniec.delete(id);
+                    this.poziomZagrozenia.delete(id);
+                    this.historiaPozycji.delete(id);
+                    this.lastShotTime.delete(id);
+                    this.aimbotHeuristics.delete(id);
+                    this.bounties.delete(id);
                 }
             });
         }
@@ -656,7 +668,7 @@ class GuardianBrain {
     }
 
     runSelfDiagnostics() {
-        console.log("🛠️ [BRAIN] Uruchamianie procedury diagnostycznej Smart Core v11.1 OMEGA (Fix)...");
+        console.log("🛠️ [BRAIN] Uruchamianie procedury diagnostycznej Smart Core v11.2 OMEGA (Fix)...");
         let testBot = { id: "bot_test", x: 100, y: 100, dx: 0, dy: 0 };
         this.limitujPredkosc(1000, 1000, 500); 
         this.analizujGracza(testBot); 
