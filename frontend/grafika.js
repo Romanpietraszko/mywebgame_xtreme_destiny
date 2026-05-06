@@ -190,7 +190,7 @@ window.Grafika = (function() {
         obrazyPostaci[klucz].img.onerror = () => { console.warn(`Brak grafiki: ${sciezka}. Włączam tryb wektorowy.`); };
         obrazyPostaci[klucz].img.src = sciezka;
     }
-    ladujObrazek('standard', '/assety/xtreme-destiny-postac-1.png'); 
+    ladujObrazek('standard', '/assety/xtreme-destiny-postac(1).png'); 
     ladujObrazek('ninja', '/assety/ninja-transparent.png');
     ladujObrazek('arystokrata', '/assety/postac-bez-tla.png');
 
