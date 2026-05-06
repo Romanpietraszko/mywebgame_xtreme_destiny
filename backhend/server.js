@@ -1,6 +1,7 @@
 // ==========================================
 // SERVER.JS - Autorytatywny Sędzia (Vibe Noir - Pancerna Architektura)
 // WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
+// ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
 // ==========================================
 
 const express = require('express');
@@ -84,6 +85,8 @@ const MenedzerEventow = {
     ostatniEvent: Date.now(),
     interwal: 30000, // Pierwszy event odpali się po 30 sekundach!
     aktywnePromienie: [],
+    // [NOWOŚĆ AAA] Pula aktywnych czarnych dziur (Anomalii)
+    aktywneAnomalie: [],
 
     aktualizuj: function(io, players, bots, foods, mapSize) {
         const teraz = Date.now();
@@ -112,6 +115,33 @@ const MenedzerEventow = {
             }
             return true; 
         });
+
+        // [NOWOŚĆ AAA] Fizyka Anomalii Grawitacyjnej (Czarna Dziura)
+        this.aktywneAnomalie = this.aktywneAnomalie.filter(anomalia => {
+            if (teraz > anomalia.czasZakonczenia) return false;
+
+            Object.values(players).forEach(p => {
+                if (p.isSafe || p.mode === 'CAMPAIGN') return; // Nie działa w bezpiecznej bazie i kampanii
+                let dystans = Math.hypot(p.x - anomalia.x, p.y - anomalia.y);
+                if (dystans < anomalia.zasiegWysysania) {
+                    // Wsysanie w kierunku centrum (im bliżej, tym mocniej)
+                    let silyWsysania = (anomalia.zasiegWysysania - dystans) / anomalia.zasiegWysysania;
+                    let kat = Math.atan2(anomalia.y - p.y, anomalia.x - p.x);
+                    p.x += Math.cos(kat) * (silyWsysania * 5); // Przesunięcie siłowe
+                    p.y += Math.sin(kat) * (silyWsysania * 5);
+                    
+                    // Ekstremalne zniszczenie w samym horyzoncie zdarzeń
+                    if (dystans < 50) {
+                        p.score = Math.max(1, p.score - 2);
+                        if (p.score <= 1) {
+                            io.emit('killEvent', { zabojca: "ANOMALIA OMEGA", ofiara: p.name });
+                            triggerZgon(p.id, "ANOMALIĘ GRAWITACYJNĄ");
+                        }
+                    }
+                }
+            });
+            return true;
+        });
     },
 
     odpalLosowyEvent: function(io, players, bots, foods, mapSize) {
@@ -122,7 +152,8 @@ const MenedzerEventow = {
 
         if (liczbaGraczy <= 3) {
             // --- SCENARIUSZE DLA SAMOTNIKÓW (1-3 graczy) ---
-            if (Math.random() > 0.5) {
+            let szansa = Math.random();
+            if (szansa > 0.6) {
                 // 1. ZŁOTY KONWÓJ (Loot Goblin)
                 io.emit('cinematicEvent', "WYKRYTO ZŁOTEGO DRONA! ZNISZCZ GO ZANIM UCIEKNIE!");
                 let idGoblin = 'bot_' + (++entityIdCounter);
@@ -132,7 +163,7 @@ const MenedzerEventow = {
                     score: 250, skin: 'arystokrata', 
                     angle: Math.random() * Math.PI * 2, state: 'FLEE', ownerId: null, typBroni: null
                 };
-            } else {
+            } else if (szansa > 0.3) {
                 // 2. PRZEBUDZENIE ROJU
                 io.emit('cinematicEvent', "PRZEBUDZENIE ROJU! INSEKTY ATAKUJĄ!");
                 let cel = players[klucze[Math.floor(Math.random() * liczbaGraczy)]];
@@ -145,6 +176,14 @@ const MenedzerEventow = {
                         score: 15, skin: 'ninja', angle: 0, state: 'HUNT', ownerId: null, typBroni: null
                     };
                 }
+            } else {
+                // [NOWOŚĆ AAA] 3. ANOMALIA GRAWITACYJNA
+                io.emit('cinematicEvent', "WYKRYTO ANOMALIĘ GRAWITACYJNĄ. ZACHOWAJ DYSTANS OD CENTRUM!");
+                this.aktywneAnomalie.push({
+                    x: mapSize / 2, y: mapSize / 2,
+                    zasiegWysysania: 1600, // Wielki zasięg
+                    czasZakonczenia: Date.now() + 20000 // Anomalia trwa 20 sekund
+                });
             }
         } else {
             // --- SCENARIUSZE DLA TŁUMU (4+ graczy) ---
@@ -465,8 +504,33 @@ class TrybCampaign {
 
         let katDoGracza = Math.atan2(closest.y - boss.y, closest.x - boss.x);
 
+        // [NOWOŚĆ AAA] FAZA 3 OSTATECZNA: Poniżej 20% zdrowia Boss wpada w SZAŁ
+        if (boss.score < boss.maxScore * 0.2) {
+            boss.state = 'BOSS_PHASE_3';
+            boss.katObrotu += 0.15; // Bardzo szybki obrót, tryb szału
+            boss.angle = boss.katObrotu;
+            
+            // Faza 3: Strzela laserami jak minigun co 150ms
+            if (Date.now() - boss.ostatniStrzal > 150) {
+                for(let i=0; i<3; i++) { 
+                    let pid = ++entityIdCounter;
+                    let fireAngle = boss.katObrotu + (i * Math.PI * 0.66);
+                    state.projectiles[pid] = {
+                        id: pid, ownerId: boss.id, team: 'BOSS', mode: 'CAMPAIGN',
+                        x: boss.x, y: boss.y,
+                        dx: Math.cos(fireAngle), dy: Math.sin(fireAngle),
+                        life: 100, speed: 18, damage: 15, piercing: true, type: 'laser'
+                    };
+                }
+                boss.ostatniStrzal = Date.now();
+            }
+            // Mimo strzelania, agresywnie napiera
+            let speed = 4.0;
+            boss.x += Math.cos(katDoGracza) * speed;
+            boss.y += Math.sin(katDoGracza) * speed;
+
         // FAZA 2: Poniżej 50% zdrowia zaczyna strzelać laserami dookoła
-        if (boss.score < boss.maxScore / 2) {
+        } else if (boss.score < boss.maxScore / 2) {
             boss.state = 'BOSS_PHASE_2';
             boss.katObrotu += 0.08; // Powolny obrót dział
             boss.angle = boss.katObrotu;
@@ -565,6 +629,26 @@ io.on('connection', (socket) => {
             // [FAZA 1 FIX] Sanityzacja (Klamrowanie typu) ucinająca exploity NaN
             p.katRuchu = Number(dane.kat) || 0;
             p.dystansKursora = Number(dane.dystans) || 0;
+        }
+    });
+
+    // <--- [NOWOŚĆ AAA] NASŁUCHIWANIE NA PREDYKCJĘ ZJEDZENIA (ROZWIĄZUJE PROBLEM LAGÓW Z KROPKAMI) --->
+    socket.on('zgłośZjedzenieKropki', (fid) => {
+        let p = state.players[socket.id];
+        if (p && !p.isSafe && state.foods[fid]) {
+            let f = state.foods[fid];
+            // Walidacja odległości na wypadek cheaterów (z marginesem +40px na opóźnienia sieci)
+            let pRadius = Math.min(20 + Math.sqrt(Math.max(10, p.score)) * 2, 65) + 40; 
+            let dist = Math.hypot(p.x - f.x, p.y - f.y);
+            
+            if (dist <= pRadius) {
+                // Potwierdzenie autoryzacji zjedzenia dla serwera!
+                dodajMase(p, (p.mode === 'TEAMS' ? 2 : 1) * p.massMultiplier);
+                delete state.foods[fid];
+                spawnFood(); // Uzupełniamy świat o nową kropkę
+            } else {
+                console.log(`[ ANTI-CHEAT ] Podejrzane zjedzenie u gracza ${p.name} (Zbyt duży dystans: ${Math.floor(dist)} > ${Math.floor(pRadius)})`);
+            }
         }
     });
 
