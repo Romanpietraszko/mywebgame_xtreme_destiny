@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 6: Fabryka Pieczątek, Eko-Juice i Unikalne Tryby)
+// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 7: LERP + Głębia 2.5D na stabilnym kodzie)
 // ==========================================
 
 window.Grafika = (function() {
@@ -162,9 +162,11 @@ window.Grafika = (function() {
     let czyMapaWygenerowana = false;
     let czasteczkiTla = []; 
     let lokalnyBuforJedzenia = {}; 
-    let plamyPolaBitwy = []; // Olej i krew poległych (Game Juice)
+    let plamyPolaBitwy = []; 
     
-    let poprzedniePozycje = { players: {}, bots: {}, projectiles: {} };
+    // <--- NOWOŚĆ: LOKALNY STAN DLA PŁYNNOŚCI (LERP) --->
+    let LokalnyStan = { players: {}, bots: {} }; 
+    let poprzedniePozycje = { projectiles: {} };
     let wskaznikiOffscreen = []; 
     let KolejkaEfektow = []; 
 
@@ -259,6 +261,29 @@ window.Grafika = (function() {
         czyMapaWygenerowana = true;
     }
 
+    // <--- NOWOŚĆ: Wyizolowana funkcja do rysowania pojedynczych obiektów środowiska (na potrzeby Y-Sortingu) --->
+    function rysujPojedynczyKrzak(obiekt) {
+        ctx.save(); ctx.translate(obiekt.x | 0, obiekt.y | 0);
+        if (obiekt.typ === 'ser_z_dziurami') {
+            ctx.fillStyle = '#f1c40f'; AkceleratorRenderu.ustawCien(ctx, '#f1c40f', 15);
+            ctx.beginPath(); ctx.arc(0, 0, obiekt.r, 0, TWO_PI); ctx.fill(); AkceleratorRenderu.resetujCien(ctx);
+            ctx.fillStyle = '#08080a'; 
+            ctx.beginPath(); ctx.arc(-obiekt.r/3, -obiekt.r/3, obiekt.r/4, 0, TWO_PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(obiekt.r/2, 0, obiekt.r/5, 0, TWO_PI); ctx.fill();
+            ctx.beginPath(); ctx.arc(-obiekt.r/4, obiekt.r/2, obiekt.r/6, 0, TWO_PI); ctx.fill();
+        } else if (obiekt.typ === 'zasieki_laserowe') {
+            ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4; ctx.setLineDash([10, 10]); ctx.lineDashOffset = performance.now() / 20;
+            AkceleratorRenderu.ustawCien(ctx, '#e74c3c', 15);
+            ctx.beginPath(); ctx.moveTo(-obiekt.r, 0); ctx.lineTo(obiekt.r, 0); ctx.moveTo(0, -obiekt.r); ctx.lineTo(0, obiekt.r); ctx.stroke();
+            AkceleratorRenderu.resetujCien(ctx);
+        } else if (obiekt.typ === 'kokon_roju') {
+            ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r, obiekt.r*0.7, obiekt.faza, 0, TWO_PI); ctx.fill();
+            let puls = Math.sin(performance.now() / 300 + obiekt.faza);
+            ctx.fillStyle = `rgba(142, 68, 173, ${0.4 + puls*0.2})`; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r*0.8, obiekt.r*0.5, obiekt.faza, 0, TWO_PI); ctx.fill();
+        }
+        ctx.restore();
+    }
+
     function rysujMape(tryb, limitWielkosci, dt) {
         ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); 
         ctx.fillStyle = '#08080a'; ctx.fillRect(0, 0, screenW, screenH); 
@@ -326,29 +351,6 @@ window.Grafika = (function() {
                 ctx.drawImage(FabrykaPieczatek.kraterCampaign, limitWielkosci/2 - 600, limitWielkosci/2 - 600);
             }
         }
-
-        MacierzOtoczenia.forEach(obiekt => {
-            if(!czyWidoczny(obiekt.x, obiekt.y, obiekt.r)) return;
-            ctx.save(); ctx.translate(obiekt.x | 0, obiekt.y | 0);
-            if (obiekt.typ === 'ser_z_dziurami') {
-                ctx.fillStyle = '#f1c40f'; AkceleratorRenderu.ustawCien(ctx, '#f1c40f', 15);
-                ctx.beginPath(); ctx.arc(0, 0, obiekt.r, 0, TWO_PI); ctx.fill(); AkceleratorRenderu.resetujCien(ctx);
-                ctx.fillStyle = '#08080a'; 
-                ctx.beginPath(); ctx.arc(-obiekt.r/3, -obiekt.r/3, obiekt.r/4, 0, TWO_PI); ctx.fill();
-                ctx.beginPath(); ctx.arc(obiekt.r/2, 0, obiekt.r/5, 0, TWO_PI); ctx.fill();
-                ctx.beginPath(); ctx.arc(-obiekt.r/4, obiekt.r/2, obiekt.r/6, 0, TWO_PI); ctx.fill();
-            } else if (obiekt.typ === 'zasieki_laserowe') {
-                ctx.strokeStyle = '#e74c3c'; ctx.lineWidth = 4; ctx.setLineDash([10, 10]); ctx.lineDashOffset = performance.now() / 20;
-                AkceleratorRenderu.ustawCien(ctx, '#e74c3c', 15);
-                ctx.beginPath(); ctx.moveTo(-obiekt.r, 0); ctx.lineTo(obiekt.r, 0); ctx.moveTo(0, -obiekt.r); ctx.lineTo(0, obiekt.r); ctx.stroke();
-                AkceleratorRenderu.resetujCien(ctx);
-            } else if (obiekt.typ === 'kokon_roju') {
-                ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r, obiekt.r*0.7, obiekt.faza, 0, TWO_PI); ctx.fill();
-                let puls = Math.sin(performance.now() / 300 + obiekt.faza);
-                ctx.fillStyle = `rgba(142, 68, 173, ${0.4 + puls*0.2})`; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r*0.8, obiekt.r*0.5, obiekt.faza, 0, TWO_PI); ctx.fill();
-            }
-            ctx.restore();
-        });
     }
 
     function rysujEfektyKolejki(dt) {
@@ -500,8 +502,8 @@ window.Grafika = (function() {
             ctx.fillStyle = kolor; ctx.beginPath(); ctx.arc(startX + (x * scale), startY + (y * scale), promienKropki, 0, TWO_PI); ctx.fill();
         }
 
-        if (stanSerwera.bots) Object.values(stanSerwera.bots).forEach(b => rysujKropke(b.x, b.y, b.skin === 'ninja' ? '#9b59b6' : '#e74c3c', czyMala ? 1.5 : 3));
-        if (stanSerwera.players) Object.values(stanSerwera.players).forEach(p => { if (p.id !== mojGracz.id) rysujKropke(p.x, p.y, (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') ? (p.team === 'RED' ? '#e74c3c' : '#3498db') : '#95a5a6', czyMala ? 2.5 : 5); });
+        if (LokalnyStan.bots) Object.values(LokalnyStan.bots).forEach(b => rysujKropke(b.x, b.y, b.skin === 'ninja' ? '#9b59b6' : '#e74c3c', czyMala ? 1.5 : 3));
+        if (LokalnyStan.players) Object.values(LokalnyStan.players).forEach(p => { if (p.id !== mojGracz.id) rysujKropke(p.x, p.y, (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') ? (p.team === 'RED' ? '#e74c3c' : '#3498db') : '#95a5a6', czyMala ? 2.5 : 5); });
 
         let puls = 2.5 + Math.abs(Math.sin(performance.now() / 300)) * 2;
         rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
@@ -539,12 +541,53 @@ window.Grafika = (function() {
             let limitWielkosci = tryb === 'TEAMS' ? 6000 : 4000;
 
             if (!czyMapaWygenerowana) generujSrodowisko(tryb, limitWielkosci);
-            
-            // ANALIZA ZMIAN (Game Juice - Śmierć i Pociski)
-            let noweBots = {}; let nowePociski = {};
+            ZarzadcaPamieci.wyczyscPamiecCoRunde();
+
+            // <--- NOWOŚĆ 1: LERP (PŁYNNY RUCH BEZ SKOKÓW) --->
             if (stanSerwera.bots) {
-                Object.keys(stanSerwera.bots).forEach(id => noweBots[id] = stanSerwera.bots[id]);
+                Object.keys(stanSerwera.bots).forEach(id => {
+                    let serwerBot = stanSerwera.bots[id];
+                    if (!LokalnyStan.bots[id]) {
+                        LokalnyStan.bots[id] = { ...serwerBot }; // Jeśli bot jest nowy, od razu kopiujemy go do lokalnego stanu
+                    } else {
+                        // Jeśli bot już istnieje, powoli przysuwamy jego pozycję do tej, którą przysłał serwer
+                        LokalnyStan.bots[id].x += (serwerBot.x - LokalnyStan.bots[id].x) * (0.3 * dt);
+                        LokalnyStan.bots[id].y += (serwerBot.y - LokalnyStan.bots[id].y) * (0.3 * dt);
+                        LokalnyStan.bots[id].score = serwerBot.score;
+                        LokalnyStan.bots[id].angle = serwerBot.angle;
+                        LokalnyStan.bots[id].isBoss = serwerBot.isBoss;
+                        LokalnyStan.bots[id].skin = serwerBot.skin;
+                    }
+                });
+                // Kasowanie martwych botów
+                Object.keys(LokalnyStan.bots).forEach(id => {
+                    if (!stanSerwera.bots[id]) {
+                        plamyPolaBitwy.push({ x: LokalnyStan.bots[id].x, y: LokalnyStan.bots[id].y, r: 20 + Math.random()*20, kat: Math.random() * TWO_PI, zycie: 1.0, isBoss: LokalnyStan.bots[id].isBoss });
+                        for(let i=0; i<5; i++) wstrzyknijEfektWalki('iskra', LokalnyStan.bots[id].x, LokalnyStan.bots[id].y, {vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, zycie: 0.5 + Math.random()});
+                        delete LokalnyStan.bots[id];
+                    }
+                });
             }
+
+            if (stanSerwera.players) {
+                Object.keys(stanSerwera.players).forEach(id => {
+                    let serwerGracz = stanSerwera.players[id];
+                    if (!LokalnyStan.players[id]) {
+                        LokalnyStan.players[id] = { ...serwerGracz };
+                    } else {
+                        LokalnyStan.players[id].x += (serwerGracz.x - LokalnyStan.players[id].x) * (0.3 * dt);
+                        LokalnyStan.players[id].y += (serwerGracz.y - LokalnyStan.players[id].y) * (0.3 * dt);
+                        LokalnyStan.players[id].score = serwerGracz.score;
+                        LokalnyStan.players[id].kat = serwerGracz.kat;
+                        LokalnyStan.players[id].isSafe = serwerGracz.isSafe;
+                    }
+                });
+                Object.keys(LokalnyStan.players).forEach(id => {
+                    if (!stanSerwera.players[id]) delete LokalnyStan.players[id];
+                });
+            }
+
+            let nowePociski = {};
             if (stanSerwera.projectiles) {
                 Object.keys(stanSerwera.projectiles).forEach(id => {
                     nowePociski[id] = stanSerwera.projectiles[id];
@@ -553,14 +596,6 @@ window.Grafika = (function() {
                     }
                 });
             }
-            Object.keys(poprzedniePozycje.bots).forEach(id => {
-                if (!noweBots[id]) {
-                    let b = poprzedniePozycje.bots[id];
-                    plamyPolaBitwy.push({ x: b.x, y: b.y, r: 20 + Math.random()*20, kat: Math.random() * TWO_PI, zycie: 1.0, isBoss: b.isBoss || b.skin === 'ninja' });
-                    for(let i=0; i<5; i++) wstrzyknijEfektWalki('iskra', b.x, b.y, {vx: (Math.random()-0.5)*10, vy: (Math.random()-0.5)*10, zycie: 0.5 + Math.random()});
-                }
-            });
-            poprzedniePozycje.bots = noweBots;
             poprzedniePozycje.projectiles = nowePociski;
 
             ctx.save(); 
@@ -571,6 +606,54 @@ window.Grafika = (function() {
 
             rysujMape(tryb, limitWielkosci, dt);
 
+            // <--- NOWOŚĆ 2: GŁĘBIA (Y-SORTING) --->
+            // Wrzucamy wszystko do jednego worka, by posortować
+            let KolejkaY = [];
+
+            // 1. Dodajemy krzaki i lasery
+            MacierzOtoczenia.forEach(obiekt => {
+                if (czyWidoczny(obiekt.x, obiekt.y, obiekt.r)) {
+                    KolejkaY.push({ typObj: 'srodowisko', y: obiekt.y, dane: obiekt });
+                }
+            });
+
+            // 2. Dodajemy boty z Lokalnego Stanu
+            Object.values(LokalnyStan.bots).forEach(bot => {
+                let promien = 15 + Math.sqrt(Math.min(bot.score || 10, 600)) * 1.5;
+                if (czyWidoczny(bot.x, bot.y, promien)) {
+                    KolejkaY.push({ typObj: 'bot', y: bot.y, dane: bot });
+                }
+            });
+
+            // 3. Dodajemy graczy z Lokalnego Stanu
+            Object.keys(LokalnyStan.players).forEach(id => {
+                if (id !== mojGracz.id) {
+                    let p = LokalnyStan.players[id];
+                    let promien = Math.min(20 + Math.sqrt(Math.max(10, p.score || 10)) * 2, 65);
+                    if (czyWidoczny(p.x, p.y, promien)) {
+                        KolejkaY.push({ typObj: 'gracz', y: p.y, dane: p, isMe: false });
+                    }
+                }
+            });
+
+            // 4. Dodajemy Ciebie (żebyś mógł chować się za serem)
+            KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: mojGracz, isMe: true });
+
+            // Sortujemy całą tablicę po Y (od góry do dołu)
+            KolejkaY.sort((a, b) => a.y - b.y);
+
+            // Rysujemy posortowane obiekty
+            KolejkaY.forEach(element => {
+                if (element.typObj === 'srodowisko') {
+                    rysujPojedynczyKrzak(element.dane);
+                } else if (element.typObj === 'bot') {
+                    rysujBota(element.dane);
+                } else if (element.typObj === 'gracz') {
+                    rysujPostac(element.dane, element.isMe);
+                }
+            });
+
+            // Reszta renderowania (Pociski i HUD na wierzchu)
             if (stanSerwera.projectiles) {
                 Object.values(stanSerwera.projectiles).forEach(proj => {
                     if (!czyWidoczny(proj.x, proj.y, 20)) return;
@@ -586,10 +669,6 @@ window.Grafika = (function() {
                 ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(f.x | 0, (f.y + oscylacja) | 0, 5, 0, TWO_PI); ctx.fill();
             });
 
-            if (stanSerwera.bots) Object.values(stanSerwera.bots).forEach(bot => rysujBota(bot));
-            if (stanSerwera.players) Object.keys(stanSerwera.players).forEach(id => { if (id !== mojGracz.id) rysujPostac(stanSerwera.players[id], false); });
-
-            rysujPostac(mojGracz, true);
             rysujEfektyKolejki(dt);
             ctx.restore(); 
 
