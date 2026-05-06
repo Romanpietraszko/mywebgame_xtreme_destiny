@@ -658,7 +658,7 @@ window.Grafika = (function() {
         ctx.fillStyle = isMe ? '#f1c40f' : '#ffffff'; 
         ctx.font = 'bold 14px Exo 2, sans-serif'; ctx.textAlign = 'center';
         if (wKrzaku && isMe) ctx.fillStyle = 'rgba(150, 150, 150, 0.5)';
-        ctx.fillText(`${postac.name || 'Gracz'} (${Math.floor(masa)})`, 0, promien + 20);
+        ctx.fillText(`${postac.name || 'Gracz'} (${Math.floor(postac.score || 0)})`, 0, promien + 20);
         ctx.restore();
     }
 
