@@ -1,6 +1,7 @@
 // ==========================================
 // TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA+ Reżyserska)
 // WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
+// NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć
 // ==========================================
 
 (function() {
@@ -49,6 +50,15 @@
     let buforRzutuCzas = 0; // Coyote Time (Buforowanie kliknięć)
     let czyDucking = false; // Audio Ducking (Zarządzanie tłem)
 
+    // --- NOWE ZMIENNE PREDYKCJI I OPTYMALIZACJI ---
+    const LokalnyBuforZjedzonychKropek = new Set(); // Przechowuje ID zjedzonych kropek zanim serwer je usunie
+    let StatystykiLokalne = {
+        zjedzoneKropki: 0,
+        rzuconeOszczepy: 0,
+        zabojstwaZrzedu: 0,
+        czasWGrze: 0
+    };
+
     // ==========================================
     // [IDEA 1 & 2] MASZYNA STANÓW (FSM) I EVENT BUS
     // ==========================================
@@ -63,6 +73,100 @@
             if (window.Flagi) window.Flagi.Stan.aktualny = nowyStan;
             EventBus.emit('stateChanged', nowyStan);
             console.log(`🎬 [REŻYSER] Zmiana stanu gry na: ${nowyStan}`);
+        }
+    };
+
+    // ==========================================
+    // [MODUŁ AAA] LOKALNY SYSTEM OSIĄGNIĘĆ I QUESTÓW
+    // ==========================================
+    const SystemOsiagniec = {
+        odblokowane: new Set(),
+        sprawdz: function(statystyki) {
+            this.weryfikuj(statystyki.zjedzoneKropki >= 50, "ZARŁOK", "Zjedz 50 kropek materii.");
+            this.weryfikuj(statystyki.rzuconeOszczepy >= 20, "SNIPER", "Wykonaj 20 rzutów oszczepem.");
+            this.weryfikuj(statystyki.czasWGrze >= 300, "WETERAN", "Przetrwaj 5 minut na arenie.");
+            this.weryfikuj(statystyki.zabojstwaZrzedu >= 3, "MORDERCA", "Zdobądź Triple Kill!");
+        },
+        weryfikuj: function(warunek, id, opis) {
+            if (warunek && !this.odblokowane.has(id)) {
+                this.odblokowane.add(id);
+                this.pokazPowiadomienie(id, opis);
+            }
+        },
+        pokazPowiadomienie: function(tytul, opis) {
+            const achContainer = document.createElement('div');
+            achContainer.style.cssText = `
+                position: fixed; top: -100px; left: 50%; transform: translateX(-50%);
+                background: linear-gradient(135deg, rgba(46, 204, 113, 0.9), rgba(39, 174, 96, 0.9));
+                color: #fff; font-family: 'Exo 2', sans-serif; padding: 15px 30px;
+                border-radius: 10px; border: 2px solid #fff; box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+                text-align: center; z-index: 10000; transition: top 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+                pointer-events: none; text-shadow: 1px 1px 2px #000;
+            `;
+            achContainer.innerHTML = `<h3 style="margin:0; font-size:18px;">🏆 OSIĄGNIĘCIE: ${tytul}</h3><p style="margin:5px 0 0 0; font-size:13px; color:#ddd;">${opis}</p>`;
+            document.body.appendChild(achContainer);
+            
+            // Dźwięk osiągnięcia
+            let audioAch = new Audio('./assety/alert.mp3'); 
+            audioAch.volume = 0.5; audioAch.play().catch(e=>{});
+
+            setTimeout(() => { achContainer.style.top = '20px'; }, 100);
+            setTimeout(() => { achContainer.style.top = '-100px'; }, 4000);
+            setTimeout(() => { achContainer.remove(); }, 5000);
+        }
+    };
+
+    // ==========================================
+    // [MODUŁ AAA] TAKTYCZNY KALKULATOR FORMACJI BOTÓW
+    // ==========================================
+    const MenadzerFormacji = {
+        obliczPozycje: function(gracz, typFormacji) {
+            if (!gracz) return [];
+            let pozycje = [];
+            const iloscDronow = 6; // Zakładamy makietę 6 dronów do pokazania hologramu
+            const rozstaw = 80;
+            const katGracza = gracz.kat || 0;
+
+            switch(typFormacji) {
+                case 1: // Formacja V (Atak)
+                    for(let i = 1; i <= iloscDronow; i++) {
+                        let strona = i % 2 === 0 ? 1 : -1;
+                        let rzad = Math.ceil(i / 2);
+                        let offsetKat = katGracza + (strona * Math.PI * 0.75);
+                        let dystans = rzad * rozstaw;
+                        pozycje.push({
+                            x: gracz.x + Math.cos(offsetKat) * dystans,
+                            y: gracz.y + Math.sin(offsetKat) * dystans
+                        });
+                    }
+                    break;
+                case 2: // Mur Obrony (Linia przed graczem)
+                    let startX = gracz.x + Math.cos(katGracza) * rozstaw;
+                    let startY = gracz.y + Math.sin(katGracza) * rozstaw;
+                    let liniaKat = katGracza + Math.PI / 2; // Prostopadle do kierunku patrzenia
+                    for(let i = 0; i < iloscDronow; i++) {
+                        let offset = (i - (iloscDronow-1)/2) * rozstaw;
+                        pozycje.push({
+                            x: startX + Math.cos(liniaKat) * offset,
+                            y: startY + Math.sin(liniaKat) * offset
+                        });
+                    }
+                    break;
+                case 3: // Okrąg Obronny (Żółw)
+                    for(let i = 0; i < iloscDronow; i++) {
+                        let kat = (i / iloscDronow) * Math.PI * 2 + (performance.now()/1000); // Obracające się koło
+                        pozycje.push({
+                            x: gracz.x + Math.cos(kat) * rozstaw * 1.5,
+                            y: gracz.y + Math.sin(kat) * rozstaw * 1.5
+                        });
+                    }
+                    break;
+                case 4: // Formacja Luźna (Swobodna chmura)
+                default:
+                    // W luźnej formacji nie rysujemy sztywnych hologramów
+                    break;
+            }
+            return pozycje;
         }
     };
 
@@ -94,11 +198,10 @@
         muzykaGra.loop = true;
         muzykaGra.volume = 0.15; 
 
-        // === SILNIK SFX (DŹWIĘKI REAKTYWNE) ===
+        // === SILNIK SFX (DŹWIĘKI REAKTYWNE & AUDIO POOLING) ===
         const SFX = {
             throw: new Audio('./assety/throw.mp3'),
             hit: new Audio('./assety/hit.mp3'),
-            eat: new Audio('./assety/eat.mp3'),
             death: new Audio('./assety/hit.mp3'), 
             alert: new Audio('./assety/alert.mp3'),
             heartbeat: new Audio('./assety/heartbeat.mp3') // [IDEA 16] Sudden Death Audio
@@ -106,6 +209,25 @@
         if(SFX.heartbeat) { SFX.heartbeat.loop = true; SFX.heartbeat.volume = 0.6; }
 
         Object.values(SFX).forEach(audio => { if(audio) audio.preload = 'auto'; });
+
+        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek (Brak zacinania!)
+        const AudioPoolZjedzenia = [];
+        const WIEKOSC_POOLA = 10;
+        for(let i=0; i<WIEKOSC_POOLA; i++) {
+            let a = new Audio('./assety/eat.mp3');
+            a.preload = 'auto';
+            AudioPoolZjedzenia.push(a);
+        }
+        let aktualnyAudioZjedzenia = 0;
+
+        function odpalPlynnyDzwiekJedzenia(glosnosc = 0.3) {
+            if (isMuted) return;
+            let dzwiek = AudioPoolZjedzenia[aktualnyAudioZjedzenia];
+            dzwiek.currentTime = 0;
+            dzwiek.volume = glosnosc;
+            dzwiek.play().catch(e => {});
+            aktualnyAudioZjedzenia = (aktualnyAudioZjedzenia + 1) % WIEKOSC_POOLA;
+        }
 
         function odpalDzwiek(nazwa, glosnosc = 0.5) {
             if (isMuted || !SFX[nazwa]) return;
@@ -200,6 +322,7 @@
             dzwiekOgnia.muted = isMuted;
             dzwiekWhoosh.muted = isMuted;
             muzykaGra.muted = isMuted;
+            AudioPoolZjedzenia.forEach(a => a.muted = isMuted);
             if(SFX.heartbeat) SFX.heartbeat.muted = isMuted;
             btnMute.innerHTML = isMuted ? '🔇' : '🔊';
             btnMute.style.borderColor = isMuted ? '#555' : '#e74c3c';
@@ -341,6 +464,7 @@
 
             // [IDEA 13] Agresywna Czystka Mapy na start
             EventBus.emit('arenaSweep');
+            LokalnyBuforZjedzonychKropek.clear(); // Reset predykcji po restarcie
 
             socket.emit('joinGame', data);
             
@@ -395,6 +519,9 @@
             } else {
                 roznica = Math.floor((Date.now() - czasStart) / 1000); // Licznik w górę (Survival)
             }
+
+            StatystykiLokalne.czasWGrze = roznica; // Aktualizacja do systemu osiągnięć
+            SystemOsiagniec.sprawdz(StatystykiLokalne);
 
             let min = String(Math.floor(roznica / 60)).padStart(2, '0');
             let sek = String(roznica % 60).padStart(2, '0');
@@ -629,6 +756,18 @@
         socket.on('serverTick', (data) => {
             stanSerwera = window.Guardian && window.Guardian.sanityzujStanSerwera ? window.Guardian.sanityzujStanSerwera(data) : data;
             
+            // <--- WERYFIKACJA LOKALNEGO BUFORA ŻARCIA --->
+            // Usuwamy kropki, które klient już zjadł, nawet jeśli serwer jeszcze o nich pamięta (zapobiega "duchom")
+            if (stanSerwera.foods) {
+                let przefiltrowane = {};
+                Object.keys(stanSerwera.foods).forEach(id => {
+                    if (!LokalnyBuforZjedzonychKropek.has(id)) {
+                        przefiltrowane[id] = stanSerwera.foods[id];
+                    }
+                });
+                stanSerwera.foods = przefiltrowane;
+            }
+
             // Wczytywanie z serwera metadanych trybu (Mutatory/Timer)
             if (data.serverEndTime) stanSerwera.serverEndTime = data.serverEndTime;
             if (data.mutators && mutatorDisplay) {
@@ -673,6 +812,15 @@
         socket.on('killEvent', (data) => { 
             if (data.zabojca && data.ofiara) {
                 dodajDoKillfeedu(data.zabojca, data.ofiara);
+                
+                // Mój Killstreak Tracker
+                let mojeImie = inputNick.value.trim() || "Gracz";
+                if (data.zabojca === mojeImie) {
+                    StatystykiLokalne.zabojstwaZrzedu++;
+                    if (StatystykiLokalne.zabojstwaZrzedu === 2) pokazNapisKinowy("DOUBLE KILL!", 2000);
+                    if (StatystykiLokalne.zabojstwaZrzedu >= 3) pokazNapisKinowy("DOMINACJA!", 2500);
+                }
+
                 let zrodloX = 2000, zrodloY = 2000;
                 if (stanSerwera && stanSerwera.players) {
                     let ulozysko = Object.values(stanSerwera.players).find(p => p.name === data.ofiara);
@@ -823,7 +971,36 @@
                                 let predkoscKorekty = 4; 
                                 mojGracz.x += Math.cos(kat) * predkoscKorekty;
                                 mojGracz.y += Math.sin(kat) * predkoscKorekty;
+                                
+                                // Bezpieczne blokowanie kamery na granicy mapy
+                                let limit = window.Flagi.Stan.wybranyTryb === 'TEAMS' ? 6000 : 4000;
+                                if (mojGracz.x < 10) mojGracz.x = 10;
+                                if (mojGracz.x > limit - 10) mojGracz.x = limit - 10;
+                                if (mojGracz.y < 10) mojGracz.y = 10;
+                                if (mojGracz.y > limit - 10) mojGracz.y = limit - 10;
                             }
+
+                            // <--- SYSTEM AAA: NATYCHMIASTOWA PREDYKCJA JEDZENIA KROPEK --->
+                            if (stanSerwera.foods) {
+                                let zasiegZjadania = Math.min(20 + Math.sqrt(Math.max(10, mojGracz.score)) * 2, 65) + 15;
+                                Object.keys(stanSerwera.foods).forEach(fid => {
+                                    if (LokalnyBuforZjedzonychKropek.has(fid)) return; 
+                                    let kropka = stanSerwera.foods[fid];
+                                    let odlegloscX = kropka.x - mojGracz.x;
+                                    let odlegloscY = kropka.y - mojGracz.y;
+                                    
+                                    if ((odlegloscX * odlegloscX + odlegloscY * odlegloscY) < (zasiegZjadania * zasiegZjadania)) {
+                                        // Kolizja! Zjadamy to lokalnie!
+                                        LokalnyBuforZjedzonychKropek.add(fid);
+                                        mojGracz.score += 1; // Aktualizacja lokalna
+                                        StatystykiLokalne.zjedzoneKropki++;
+                                        
+                                        odpalPlynnyDzwiekJedzenia(0.15); // Dźwięk przez Pool bez zacinania
+                                        socket.emit('zgłośZjedzenieKropki', fid); // Wysyłka fast-track
+                                    }
+                                });
+                            }
+                            SystemOsiagniec.sprawdz(StatystykiLokalne);
                         }
                         ostatniaWysylkaRuchu = teraz;
                     }
@@ -839,6 +1016,8 @@
                             const centerY = window.innerHeight / 2;
                             let celKat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
                             socket.emit('rzutOszczepem', { kat: celKat });
+                            
+                            StatystykiLokalne.rzuconeOszczepy++;
                             
                             let posX = 2000, posY = 2000;
                             if (stanSerwera && stanSerwera.players && stanSerwera.players[mojeId]) {
@@ -859,22 +1038,26 @@
                         obslugaStref(mojGracz);
                         obslugaFabułyKampanii(mojGracz); 
                         
+                        // Podpięcie Hologramów Formacji dla renderingu w grafika.js
+                        if (window.Flagi.Stan.wybranyTryb === 'TEAMS') {
+                            mojGracz.pozycjeFormacji = MenadzerFormacji.obliczPozycje(mojGracz, aktywnaFormacja);
+                        }
+                        
                         if (ostatniaMasa > 0) {
                             let roznica = mojGracz.score - ostatniaMasa;
                             
                             if (roznica <= -1) {
                                 odpalDzwiek3D('hit', 0.8, mojGracz.x, mojGracz.y);
                                 wibruj(50);
+                                StatystykiLokalne.zabojstwaZrzedu = 0; // Reset Killstreaka przy otrzymaniu obrażeń
+                                
                                 let flash = document.createElement('div');
                                 flash.style.cssText = 'position: fixed; inset: 0; background: rgba(231, 76, 60, 0.4); z-index: 900; pointer-events: none; transition: opacity 0.2s ease-out;';
                                 document.body.appendChild(flash);
                                 setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 50);
                                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
                             } 
-                            else if (roznica >= 1 && (teraz - ostatniCzasJedzenia > 100)) {
-                                odpalDzwiek3D('eat', 0.2, mojGracz.x, mojGracz.y);
-                                ostatniCzasJedzenia = teraz;
-                            }
+                            // Starą logikę audio 'eat' usunięto, bo nowa natychmiastowa predykcja załatwia sprawę
                         }
                         ostatniaMasa = mojGracz.score;
 

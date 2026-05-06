@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 8: Ultimate Polish & Dynamiczne Środowiska)
+// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 8.1: Ultimate Polish - Insta-Aim, Pociski i Horror Roju)
 // ==========================================
 
 window.Grafika = (function() {
@@ -290,9 +290,31 @@ window.Grafika = (function() {
             ctx.beginPath(); ctx.moveTo(-obiekt.r, 0); ctx.lineTo(obiekt.r, 0); ctx.moveTo(0, -obiekt.r); ctx.lineTo(0, obiekt.r); ctx.stroke();
             AkceleratorRenderu.resetujCien(ctx);
         } else if (obiekt.typ === 'kokon_roju') {
-            ctx.fillStyle = '#2c3e50'; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r, obiekt.r*0.7, obiekt.faza, 0, TWO_PI); ctx.fill();
-            let puls = Math.sin(performance.now() / 300 + obiekt.faza);
-            ctx.fillStyle = `rgba(142, 68, 173, ${0.4 + puls*0.2})`; ctx.beginPath(); ctx.ellipse(0, 0, obiekt.r*0.8, obiekt.r*0.5, obiekt.faza, 0, TWO_PI); ctx.fill();
+            let czas = performance.now();
+            let puls = Math.sin(czas / 300 + obiekt.faza);
+            
+            // Ciemna biomasa wewnątrz
+            ctx.fillStyle = '#110515'; 
+            ctx.beginPath(); ctx.arc(0, 0, obiekt.r, 0, TWO_PI); ctx.fill();
+
+            // Macki poruszające się w rytm pulsu (ORGANICZNY HORROR)
+            ctx.strokeStyle = '#8e44ad';
+            ctx.lineWidth = 4;
+            for(let i = 0; i < 6; i++) {
+                let katMacki = (i * TWO_PI / 6) + (puls * 0.1);
+                let dlugoscMacki = obiekt.r * (1.1 + Math.sin(czas / 200 + i) * 0.3);
+                ctx.beginPath();
+                ctx.moveTo(0, 0);
+                ctx.quadraticCurveTo(
+                    Math.cos(katMacki + 0.5) * dlugoscMacki, Math.sin(katMacki + 0.5) * dlugoscMacki,
+                    Math.cos(katMacki) * dlugoscMacki, Math.sin(katMacki) * dlugoscMacki
+                );
+                ctx.stroke();
+            }
+
+            // Świecące, bijące serce roju na wierzchu
+            ctx.fillStyle = `rgba(231, 76, 60, ${0.4 + puls * 0.3})`; 
+            ctx.beginPath(); ctx.arc(0, 0, obiekt.r * 0.4, 0, TWO_PI); ctx.fill();
         }
         ctx.restore();
     }
@@ -326,14 +348,38 @@ window.Grafika = (function() {
         }
 
         // Siatka podłoża zależna od trybu
-        ctx.strokeStyle = tryb === 'TEAMS' ? 'rgba(52, 152, 219, 0.1)' : 'rgba(255, 255, 255, 0.03)'; 
-        ctx.lineWidth = tryb === 'TEAMS' ? 2 : 1;
-        const siatkaRozmiar = 200; 
-        const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar; const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
-        ctx.beginPath();
-        for(let x = startX; x < camera.x + screenW / cameraScale; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH / cameraScale); }
-        for(let y = startY; y < camera.y + screenH / cameraScale; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW / cameraScale, y); }
-        ctx.stroke();
+        if (tryb === 'CAMPAIGN') {
+            // Skorodowana, organiczna pajęczyna roju
+            ctx.strokeStyle = 'rgba(142, 68, 173, 0.15)'; 
+            ctx.lineWidth = 2;
+            const siatkaRozmiar = 150; 
+            const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar; 
+            const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
+            ctx.beginPath();
+            for(let x = startX; x < camera.x + screenW / cameraScale; x += siatkaRozmiar) { 
+                ctx.moveTo(x, camera.y); 
+                for(let y = camera.y; y < camera.y + screenH / cameraScale; y += 40) {
+                    ctx.lineTo(x + Math.sin(y/40)*15, y);
+                }
+            }
+            for(let y = startY; y < camera.y + screenH / cameraScale; y += siatkaRozmiar) { 
+                ctx.moveTo(camera.x, y); 
+                for(let x = camera.x; x < camera.x + screenW / cameraScale; x += 40) {
+                    ctx.lineTo(x, y + Math.sin(x/40)*15);
+                }
+            }
+            ctx.stroke();
+        } else {
+            // Zwykła siatka dla innych trybów
+            ctx.strokeStyle = tryb === 'TEAMS' ? 'rgba(52, 152, 219, 0.1)' : 'rgba(255, 255, 255, 0.03)'; 
+            ctx.lineWidth = tryb === 'TEAMS' ? 2 : 1;
+            const siatkaRozmiar = 200; 
+            const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar; const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
+            ctx.beginPath();
+            for(let x = startX; x < camera.x + screenW / cameraScale; x += siatkaRozmiar) { ctx.moveTo(x, camera.y); ctx.lineTo(x, camera.y + screenH / cameraScale); }
+            for(let y = startY; y < camera.y + screenH / cameraScale; y += siatkaRozmiar) { ctx.moveTo(camera.x, y); ctx.lineTo(camera.x + screenW / cameraScale, y); }
+            ctx.stroke();
+        }
 
         plamyPolaBitwy.forEach((plama, i) => {
             plama.zycie -= 0.001 * dt;
@@ -585,11 +631,14 @@ window.Grafika = (function() {
                 ctx.stroke();
                 ctx.fillStyle = '#ff7675'; ctx.beginPath(); ctx.arc(0, -promien * 0.2, 4, 0, TWO_PI); ctx.fill();
             } else if (typKrzaka === 'kokon_roju') {
-                ctx.fillStyle = '#8e44ad'; ctx.beginPath(); ctx.arc(-promien*0.6, 0, 8, 0, TWO_PI); ctx.arc(promien*0.6, 0, 8, 0, TWO_PI); ctx.fill();
+                // Nowe "ukrycie" gracza w kokonie Roju
+                ctx.fillStyle = '#8e44ad'; ctx.beginPath(); ctx.arc(0, 0, promien*0.8, 0, TWO_PI); ctx.fill();
                 let p = Math.sin(performance.now() / 100) * 5;
-                ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 3; ctx.beginPath();
-                ctx.moveTo(-promien*0.6, 0); ctx.quadraticCurveTo(-promien*1.5, -15 - p, -promien*1.2, -25 + p);
-                ctx.moveTo(promien*0.6, 0); ctx.quadraticCurveTo(promien*1.5, -15 - p, promien*1.2, -25 + p); ctx.stroke();
+                ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 3; 
+                for(let i=0; i<4; i++) {
+                    ctx.beginPath(); ctx.rotate(Math.PI/2);
+                    ctx.moveTo(0, 0); ctx.quadraticCurveTo(promien, -15-p, promien*1.2, -25+p); ctx.stroke();
+                }
             }
         }
 
@@ -676,6 +725,11 @@ window.Grafika = (function() {
             if (!czyMapaWygenerowana) generujSrodowisko(tryb, limitWielkosci);
             ZarzadcaPamieci.wyczyscPamiecCoRunde();
 
+            // <--- INSTA-AIM (Kierunek myszki zawsze aktualny bez czekania na serwer) --->
+            let myszSwiatX = drawCamX + screenW/2 + (pozycjaMyszki.x - screenW/2) / cameraScale;
+            let myszSwiatY = drawCamY + screenH/2 + (pozycjaMyszki.y - screenH/2) / cameraScale;
+            mojGracz.kat = Math.atan2(myszSwiatY - mojGracz.y, myszSwiatX - mojGracz.x);
+            
             // <--- LERP i Hit-Juice (Błyski i Cyferki obrażeń) --->
             if (stanSerwera.bots) {
                 Object.keys(stanSerwera.bots).forEach(id => {
@@ -725,11 +779,17 @@ window.Grafika = (function() {
                         }
 
                         LokalnyStan.players[id].score = serwerGracz.score;
-                        LokalnyStan.players[id].kat = serwerGracz.kat;
+                        LokalnyStan.players[id].kat = serwerGracz.kat; // Kąt serwerowy innych
                         LokalnyStan.players[id].isSafe = serwerGracz.isSafe;
                         if (LokalnyStan.players[id].hitFlash > 0) LokalnyStan.players[id].hitFlash -= 0.1 * dt;
                     }
                 });
+                
+                // Mój gracz zawsze używa kąta z myszki (Insta-aim)
+                if (LokalnyStan.players[mojGracz.id]) {
+                    LokalnyStan.players[mojGracz.id].kat = mojGracz.kat;
+                }
+
                 Object.keys(LokalnyStan.players).forEach(id => {
                     if (!stanSerwera.players[id]) delete LokalnyStan.players[id];
                 });
@@ -772,7 +832,7 @@ window.Grafika = (function() {
                 }
             });
             
-            // Dopisywanie moich statystyk do Lokalnego Stanu dla hit-flasha
+            // Dopisywanie moich statystyk do Lokalnego Stanu
             if(LokalnyStan.players[mojGracz.id]) {
                 KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: LokalnyStan.players[mojGracz.id], isMe: true });
             } else {
@@ -791,7 +851,18 @@ window.Grafika = (function() {
                 Object.values(stanSerwera.projectiles).forEach(proj => {
                     if (!czyWidoczny(proj.x, proj.y, 20)) return;
                     ctx.save(); ctx.translate(proj.x | 0, proj.y | 0); ctx.rotate(Math.atan2(proj.dy, proj.dx));
-                    ctx.fillStyle = proj.type === 'laser' ? '#e74c3c' : '#bdc3c7'; ctx.fillRect(-10, -3, 20, 6); ctx.restore();
+                    if (proj.type === 'laser') {
+                        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10, -3, 20, 6);
+                    } else {
+                        // Lecący Oszczep w grze
+                        ctx.strokeStyle = '#5c4033'; ctx.lineWidth = 3; 
+                        ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(10, 0); ctx.stroke();
+                        ctx.fillStyle = '#ecf0f1'; 
+                        ctx.beginPath(); ctx.moveTo(10, -4); ctx.lineTo(25, 0); ctx.lineTo(10, 4); ctx.closePath(); ctx.fill();
+                        ctx.fillStyle = 'rgba(241, 196, 15, 0.6)'; 
+                        ctx.beginPath(); ctx.arc(-15, 0, 3, 0, TWO_PI); ctx.fill();
+                    }
+                    ctx.restore();
                 });
             }
 
@@ -805,7 +876,7 @@ window.Grafika = (function() {
             rysujEfektyKolejki(dt);
             ctx.restore(); 
 
-            rysujPogode(tryb); // Nowość: Rysowanie Deszczu/Winiety na wierzchu wszystkiego
+            rysujPogode(tryb); 
 
             ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pozycjaMyszki.x, pozycjaMyszki.y, 10, 0, TWO_PI); ctx.stroke();
             ctx.fillStyle = '#e74c3c'; ctx.fillRect(pozycjaMyszki.x - 1, pozycjaMyszki.y - 1, 2, 2);
