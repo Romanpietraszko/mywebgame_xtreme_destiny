@@ -2,6 +2,7 @@
 // TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA+ Reżyserska)
 // WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
 // NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć, MENU STEROWANIA
+// FIX AAA: Natychmiastowe zjadanie kropek + bezbłędny eat.mp3 i muzyka dark_trap.mp3 na mapie
 // ==========================================
 
 (function() {
@@ -194,6 +195,7 @@
         const dzwiekWhoosh = new Audio('./assety/fire_whoosh.mp3');
         dzwiekWhoosh.volume = 0.8;
 
+        // Główna muzyka w grze
         const muzykaGra = new Audio('./assety/dark_trap.mp3');
         muzykaGra.loop = true;
         muzykaGra.volume = 0.15; 
@@ -210,9 +212,9 @@
 
         Object.values(SFX).forEach(audio => { if(audio) audio.preload = 'auto'; });
 
-        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek
+        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek (eat.mp3)
         const AudioPoolZjedzenia = [];
-        const WIEKOSC_POOLA = 10;
+        const WIEKOSC_POOLA = 10; // 10 dźwięków gotowych do jednoczesnego strzału
         for(let i=0; i<WIEKOSC_POOLA; i++) {
             let a = new Audio('./assety/eat.mp3');
             a.preload = 'auto';
@@ -438,11 +440,10 @@
                 if (window.Flagi) window.Flagi.Stan.wybranyTryb = mode;
                 step2.classList.add('hidden'); 
                 
-                // [WSTRZYKNIĘCIE NOWEGO EKRANU STEROWANIA]
                 if (document.getElementById('step-controls')) {
                     document.getElementById('step-controls').classList.remove('hidden');
                 } else {
-                    step3.classList.remove('hidden'); // Fallback bezpieczeństwa
+                    step3.classList.remove('hidden'); 
                 }
             });
         });
@@ -521,7 +522,7 @@
             
             czasStart = Date.now();
             etapKampanii = 0; 
-            ostatniaMasa = null; // [POPRAWKA] Zmiana na null pozwala poprawnie odpalac dzwiek przy 0 masy!
+            ostatniaMasa = null; 
             ostatniCzasInputu = Date.now();
             
             if (interwalCzasu) clearInterval(interwalCzasu);
@@ -649,7 +650,6 @@
             zglosInput();
             const key = e.key.toLowerCase();
             
-            // [MODUŁ AAA] System sterowania rozdziela mapowanie przycisków w locie
             if (['wasd', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
                 if (key === 'w') klawiszeKierunku.w = true;
                 if (key === 'a') klawiszeKierunku.a = true;
@@ -801,10 +801,11 @@
         socket.on('serverTick', (data) => {
             stanSerwera = window.Guardian && window.Guardian.sanityzujStanSerwera ? window.Guardian.sanityzujStanSerwera(data) : data;
             
+            // <--- WERYFIKACJA LOKALNEGO BUFORA ŻARCIA --->
             if (stanSerwera.foods) {
                 let przefiltrowane = {};
                 Object.keys(stanSerwera.foods).forEach(id => {
-                    if (!LokalnyBuforZjedzonychKropek.has(id)) {
+                    if (!LokalnyBuforZjedzonychKropek.has(String(id)) && !LokalnyBuforZjedzonychKropek.has(Number(id))) {
                         przefiltrowane[id] = stanSerwera.foods[id];
                     }
                 });
@@ -921,7 +922,6 @@
 
                 let mvpData = data.mvpStats ? `<h3 style="color:#3498db;">MVP: ${data.mvpStats.name} (Assists: ${data.mvpStats.assists})</h3>` : '';
 
-                // [POPRAWKA] Czysty ekran końcowy bez martwych przycisków map
                 uiLayer.innerHTML = `
                     <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolor}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999; max-width: 600px; margin: 0 auto;">
                         <h1 style="color: ${kolor}; font-size: 48px; font-family: 'Permanent Marker';">${tytul}</h1>
@@ -982,7 +982,6 @@
                         let dystans = 0;
                         let dx = 0; let dy = 0;
 
-                        // [MODUŁ AAA] Sterowanie warunkowe z panelu
                         if (wybraneSterowanie === 'MOUSE' || wybraneSterowanie === 'MOBILE') {
                             ruszKlawiatura = false;
                         }
@@ -1020,18 +1019,30 @@
                                 if (mojGracz.y > limit - 10) mojGracz.y = limit - 10;
                             }
 
+                            // <--- SYSTEM AAA: NATYCHMIASTOWA PREDYKCJA JEDZENIA KROPEK + DŹWIĘK --->
                             if (stanSerwera.foods) {
                                 let zasiegZjadania = Math.min(20 + Math.sqrt(Math.max(10, mojGracz.score)) * 2, 65) + 15;
+                                if (mojGracz.skin === 'arystokrata') zasiegZjadania += 15;
+
                                 Object.keys(stanSerwera.foods).forEach(fid => {
-                                    if (LokalnyBuforZjedzonychKropek.has(fid)) return; 
+                                    if (LokalnyBuforZjedzonychKropek.has(String(fid)) || LokalnyBuforZjedzonychKropek.has(Number(fid))) return; 
                                     let kropka = stanSerwera.foods[fid];
                                     let odlegloscX = kropka.x - mojGracz.x;
                                     let odlegloscY = kropka.y - mojGracz.y;
                                     
                                     if ((odlegloscX * odlegloscX + odlegloscY * odlegloscY) < (zasiegZjadania * zasiegZjadania)) {
-                                        LokalnyBuforZjedzonychKropek.add(fid);
-                                        mojGracz.score += 1; 
+                                        // Lokalnie "zjadamy" by nie mrugało
+                                        LokalnyBuforZjedzonychKropek.add(String(fid));
+                                        LokalnyBuforZjedzonychKropek.add(Number(fid));
+                                        
+                                        // Lokalna punktacja natychmiastowo do góry
+                                        let zdobytaMasa = (window.Flagi.Stan.wybranyTryb === 'TEAMS' ? 2 : 1) * (mojGracz.massMultiplier || 1);
+                                        mojGracz.score += zdobytaMasa; 
                                         StatystykiLokalne.zjedzoneKropki++;
+                                        
+                                        // Odpalamy bez zacinania dzwiek eat.mp3 z Audio Poola!
+                                        odpalPlynnyDzwiekJedzenia(0.4); 
+                                        
                                         socket.emit('zgłośZjedzenieKropki', fid); 
                                     }
                                 });
@@ -1078,11 +1089,10 @@
                             mojGracz.pozycjeFormacji = MenadzerFormacji.obliczPozycje(mojGracz, aktywnaFormacja);
                         }
                         
-                        // [POPRAWKA] Odpalanie dźwięków w oparciu o czystą różnicę masy (Działa przy 0 masy!)
                         if (ostatniaMasa !== null) {
                             let roznica = mojGracz.score - ostatniaMasa;
                             
-                            if (roznica <= -1) {
+                            if (roznica <= -1) { // Hit od obrażeń
                                 odpalDzwiek3D('hit', 0.8, mojGracz.x, mojGracz.y);
                                 wibruj(50);
                                 StatystykiLokalne.zabojstwaZrzedu = 0; 
@@ -1092,9 +1102,9 @@
                                 document.body.appendChild(flash);
                                 setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 50);
                                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
-                            } 
-                            else if (roznica >= 1) { 
-                                odpalPlynnyDzwiekJedzenia(0.25); 
+                            } else if (roznica >= 5) {
+                                // Masywne przybranie na wadze (zabójstwo gracza/drona z serwera, bo kropki za 1 pkt są filtrowane wyżej)
+                                odpalPlynnyDzwiekJedzenia(0.6); 
                             }
                         }
                         ostatniaMasa = mojGracz.score;
