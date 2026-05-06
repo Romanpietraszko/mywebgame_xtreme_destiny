@@ -108,7 +108,7 @@ const MenedzerEventow = {
                     if (p.isSafe) return; // Baza chroni przed promieniem
                     let dystans = Math.hypot(p.x - promien.x, p.y - promien.y);
                     if (dystans < promien.zasieg) {
-                        p.score = Math.max(10, Math.floor(p.score * 0.5));
+                        p.score = Math.floor(p.score * 0.5); // [POPRAWKA] Utrata połowy masy
                     }
                 });
                 return false; // Usuń promień po uderzeniu
@@ -132,8 +132,8 @@ const MenedzerEventow = {
                     
                     // Ekstremalne zniszczenie w samym horyzoncie zdarzeń
                     if (dystans < 50) {
-                        p.score = Math.max(1, p.score - 2);
-                        if (p.score <= 1) {
+                        p.score -= 2;
+                        if (p.score < 0) { // [POPRAWKA] Śmierć poniżej 0 punktów
                             io.emit('killEvent', { zabojca: "ANOMALIA OMEGA", ofiara: p.name });
                             triggerZgon(p.id, "ANOMALIĘ GRAWITACYJNĄ");
                         }
@@ -242,7 +242,7 @@ for (let i = 0; i < MAX_BOTS; i++) spawnBot();
 // ==========================================
 class TrybFree {
     static aktualizuj(p, nearby) {
-        let pRadius = 15 + Math.sqrt(p.score) * 1.5;
+        let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
         let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
 
         nearby.foods.forEach(f => {
@@ -255,7 +255,7 @@ class TrybFree {
         nearby.players.forEach(p2 => {
             if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE') return;
             let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
-            let r2 = 15 + Math.sqrt(p2.score) * 1.5;
+            let r2 = 15 + Math.sqrt(Math.max(0, p2.score)) * 1.5;
             if (dist < pRadius && p.score > p2.score * 1.15) {
                 io.emit('killEvent', { zabojca: p.name, ofiara: p2.name });
                 dodajMase(p, Math.floor(p2.score * 0.5));
@@ -282,10 +282,15 @@ class TrybFree {
             io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
             p.overcharge = 0;
             nearby.players.forEach(p2 => {
-                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) p2.score = Math.max(1, p2.score - 50);
+                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
+                    p2.score -= 50;
+                    if (p2.score < 0) triggerZgon(p2.id, p.name); // [POPRAWKA] Zabójcza Nova
+                }
             });
             nearby.bots.forEach(b => {
-                if (Math.hypot(p.x - b.x, p.y - b.y) < 300) b.score = Math.max(1, b.score - 100);
+                if (Math.hypot(p.x - b.x, p.y - b.y) < 300) {
+                    b.score -= 100;
+                }
             });
         }
     }
@@ -324,7 +329,7 @@ class TrybTeams {
                     let dist = Math.hypot(p.x - b.x, p.y - b.y);
                     if(dist < 30) {
                         p.score -= 2; 
-                        if(p.score <= 0) {
+                        if(p.score < 0) { // [POPRAWKA] Zgon od botów poniżej 0
                             io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
                             triggerZgon(p.id, "Wroga Armia");
                         }
@@ -393,7 +398,7 @@ class TrybTeams {
 // ==========================================
 class TrybCampaign {
     static aktualizuj(p, nearby) {
-        let pRadius = 15 + Math.sqrt(p.score) * 1.5;
+        let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
         let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
 
         // PvE Zbieranie jedzenia
@@ -413,14 +418,14 @@ class TrybCampaign {
             if (dist < pRadius + bRadius) {
                 if (!b.isBoss) {
                     // Obrażenia od Kamikaze
-                    p.score = Math.max(1, p.score - 5);
+                    p.score -= 5;
                     b.score = 0; // Dron ginie przy zderzeniu
                     stanKampanii.liczbaDronow--;
-                    if (p.score <= 1) triggerZgon(p.id, "Rój Maszyn");
+                    if (p.score < 0) triggerZgon(p.id, "Rój Maszyn"); // [POPRAWKA] Śmierć poniżej 0
                 } else {
                     // Miażdżące obrażenia od Bossa przy kontakcie
-                    p.score = Math.max(1, p.score - 2);
-                    if (p.score <= 1) triggerZgon(p.id, "TYTAN AKT 1");
+                    p.score -= 2;
+                    if (p.score < 0) triggerZgon(p.id, "TYTAN AKT 1"); // [POPRAWKA] Śmierć poniżej 0
                 }
             }
         });
@@ -575,9 +580,10 @@ io.on('connection', (socket) => {
     console.log(`[ połączono ] Terminal: ${socket.id}`);
 
     socket.on('joinGame', (data) => {
-        let spd = 5.0, mult = 1.0, startMass = 5;
+        // [POPRAWKA] Start od okrągłego ZERA. Mnożnik Arystokraty wciąż działa na zjadanie.
+        let spd = 5.0, mult = 1.0, startMass = 0; 
         if (data.skin === 'ninja') { spd = 5.5; mult = 0.9; }
-        else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; startMass = 15; }
+        else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; } 
         else { mult = 1.02; } 
 
         let pTeam = 'NONE';
@@ -781,7 +787,7 @@ setInterval(() => {
             
             if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
                 p.score -= 2; 
-                if (p.score <= 0) {
+                if (p.score < 0) { // [POPRAWKA] Śmierć poniżej 0
                     io.emit('killEvent', { zabojca: "System Obronny Bazy", ofiara: p.name });
                     triggerZgon(p.id, "System Obronny Bazy");
                     continue; 
@@ -833,7 +839,14 @@ setInterval(() => {
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
                 if (proj.mode === 'TEAMS' && p.team === proj.team) return; 
                 if (proj.mode === 'CAMPAIGN' && proj.team === 'BOSS') return; // Strzały bossa nie ranią bossa
-                if (!p.isShielding) p.score = Math.max(1, p.score - proj.damage);
+                if (!p.isShielding) {
+                    p.score -= proj.damage;
+                    if (p.score < 0) { // [POPRAWKA] Pociski śmiertelne poniżej 0
+                        let killer = state.players[proj.ownerId] ? state.players[proj.ownerId].name : "Zabłąkany Pocisk";
+                        io.emit('killEvent', { zabojca: killer, ofiara: p.name });
+                        triggerZgon(p.id, killer);
+                    }
+                }
                 hit = true;
             }
         });
