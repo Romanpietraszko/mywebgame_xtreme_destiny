@@ -1,5 +1,5 @@
 // ==========================================
-// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 7: LERP + Głębia 2.5D na stabilnym kodzie)
+// GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 8: Ultimate Polish & Dynamiczne Środowiska)
 // ==========================================
 
 window.Grafika = (function() {
@@ -143,7 +143,6 @@ window.Grafika = (function() {
     let dpr = 1; 
     let lastTime = performance.now(); 
     let ecoModeActive = false;
-    let lagFramesCounter = 0; 
     
     let camera = { x: 0, y: 0 };
     let cameraScale = 1.0; 
@@ -164,7 +163,7 @@ window.Grafika = (function() {
     let lokalnyBuforJedzenia = {}; 
     let plamyPolaBitwy = []; 
     
-    // <--- NOWOŚĆ: LOKALNY STAN DLA PŁYNNOŚCI (LERP) --->
+    // LOKALNY STAN DLA PŁYNNOŚCI (LERP)
     let LokalnyStan = { players: {}, bots: {} }; 
     let poprzedniePozycje = { projectiles: {} };
     let wskaznikiOffscreen = []; 
@@ -228,10 +227,24 @@ window.Grafika = (function() {
 
         FabrykaPieczatek.generujWszystko();
 
+        // Różne cząsteczki tła w zależności od trybu
         for(let i = 0; i < 150; i++) {
+            let spdX = (Math.random() - 0.5) * 0.5;
+            let spdY = (Math.random() - 0.5) * 0.5;
+            let kolor = '255, 255, 255'; // Domyślnie białe (kurz)
+
+            if (tryb === 'TEAMS') {
+                spdX = (Math.random() * 2) + 1; // Szybki poziomy ruch (dane)
+                spdY = 0;
+                kolor = '52, 152, 219'; // Niebieskawe
+            } else if (tryb === 'CAMPAIGN') {
+                kolor = Math.random() > 0.5 ? '46, 204, 113' : '142, 68, 173'; // Toksyczne zarodniki
+                spdY = (Math.random() * 1) + 0.5; // Unoszą się do góry
+            }
+
             czasteczkiTla.push({ 
                 x: Math.random() * limitWielkosci, y: Math.random() * limitWielkosci, 
-                speedX: (Math.random() - 0.5) * 0.5, speedY: (Math.random() - 0.5) * 0.5, 
+                speedX: spdX, speedY: spdY, kolorRGB: kolor,
                 r: Math.random() * 2, alpha: Math.random() * 0.5 + 0.1, głębia: Math.random() * 0.8 + 0.2 
             });
         }
@@ -261,7 +274,7 @@ window.Grafika = (function() {
         czyMapaWygenerowana = true;
     }
 
-    // <--- NOWOŚĆ: Wyizolowana funkcja do rysowania pojedynczych obiektów środowiska (na potrzeby Y-Sortingu) --->
+    // Wyizolowana funkcja do rysowania pojedynczych obiektów środowiska
     function rysujPojedynczyKrzak(obiekt) {
         ctx.save(); ctx.translate(obiekt.x | 0, obiekt.y | 0);
         if (obiekt.typ === 'ser_z_dziurami') {
@@ -286,16 +299,24 @@ window.Grafika = (function() {
 
     function rysujMape(tryb, limitWielkosci, dt) {
         ctx.save(); ctx.setTransform(dpr, 0, 0, dpr, 0, 0); 
-        ctx.fillStyle = '#08080a'; ctx.fillRect(0, 0, screenW, screenH); 
+        ctx.fillStyle = tryb === 'CAMPAIGN' ? '#0d0505' : '#08080a'; // Mroczniejsze tło w kampanii
+        ctx.fillRect(0, 0, screenW, screenH); 
         ctx.restore();
 
+        // Zależne od trybu cząsteczki
         czasteczkiTla.forEach(c => {
-            c.x += c.speedX * dt; c.y += c.speedY * dt;
+            c.x += c.speedX * dt; c.y -= c.speedY * dt; // Minus dla y, by w kampanii leciały do góry
             if (c.x < 0) c.x = limitWielkosci; if (c.x > limitWielkosci) c.x = 0;
             if (c.y < 0) c.y = limitWielkosci; if (c.y > limitWielkosci) c.y = 0;
             let drawX = c.x + (camera.x * (1 - c.głębia)); let drawY = c.y + (camera.y * (1 - c.głębia));
-            ctx.fillStyle = `rgba(255, 255, 255, ${c.alpha})`; 
-            ctx.beginPath(); ctx.arc(drawX, drawY, c.r * c.głębia, 0, TWO_PI); ctx.fill();
+            
+            ctx.fillStyle = `rgba(${c.kolorRGB}, ${c.alpha})`; 
+            ctx.beginPath(); 
+            if (tryb === 'TEAMS') {
+                ctx.fillRect(drawX, drawY, c.r * 5, c.r); // Kreski danych w TEAMS
+            } else {
+                ctx.arc(drawX, drawY, c.r * c.głębia, 0, TWO_PI); ctx.fill(); // Kurz/Zarodniki
+            }
         });
 
         if (tryb === 'TEAMS') {
@@ -304,7 +325,9 @@ window.Grafika = (function() {
             ctx.beginPath(); ctx.moveTo(500, 3000); ctx.lineTo(3000, 3000); ctx.lineTo(5500, 3000); ctx.stroke();
         }
 
-        ctx.strokeStyle = 'rgba(52, 152, 219, 0.05)'; ctx.lineWidth = 1;
+        // Siatka podłoża zależna od trybu
+        ctx.strokeStyle = tryb === 'TEAMS' ? 'rgba(52, 152, 219, 0.1)' : 'rgba(255, 255, 255, 0.03)'; 
+        ctx.lineWidth = tryb === 'TEAMS' ? 2 : 1;
         const siatkaRozmiar = 200; 
         const startX = Math.floor(camera.x / siatkaRozmiar) * siatkaRozmiar; const startY = Math.floor(camera.y / siatkaRozmiar) * siatkaRozmiar;
         ctx.beginPath();
@@ -322,6 +345,7 @@ window.Grafika = (function() {
             ctx.restore();
         });
 
+        // Rysowanie z pieczątek (Zamek/Bazy)
         if (tryb === 'FREE' && czyWidoczny(2000, 2000, 400)) {
             ctx.drawImage(FabrykaPieczatek.zamekFree, 2000 - 400, 2000 - 400);
             ctx.save(); ctx.translate(2000, 2000 + 60); ctx.rotate(performance.now() / 1000); 
@@ -353,16 +377,59 @@ window.Grafika = (function() {
         }
     }
 
+    function rysujPogode(tryb) {
+        ctx.save();
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0); // Sztywne płótno UI
+        
+        if (tryb === 'FREE') {
+            // Deszcz Noir
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            let rainOffset = (performance.now() * 1.5) % 100;
+            for (let i = 0; i < screenW; i += 40) {
+                for (let j = 0; j < screenH; j += 100) {
+                    let dropY = j + rainOffset + (i % 30);
+                    if (dropY > screenH) dropY -= screenH;
+                    ctx.moveTo(i, dropY);
+                    ctx.lineTo(i - 10, dropY + 20);
+                }
+            }
+            ctx.stroke();
+        } else if (tryb === 'CAMPAIGN') {
+            // Toksyczna winieta
+            let gradient = ctx.createRadialGradient(screenW/2, screenH/2, screenH/2, screenW/2, screenH/2, screenW);
+            gradient.addColorStop(0, 'rgba(0,0,0,0)');
+            gradient.addColorStop(1, 'rgba(50, 0, 0, 0.5)'); // Krwisto-czarne krawędzie
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, screenW, screenH);
+        }
+        ctx.restore();
+    }
+
     function rysujEfektyKolejki(dt) {
         for (let i = KolejkaEfektow.length - 1; i >= 0; i--) {
             let e = KolejkaEfektow[i];
             e.x += e.vx * dt; e.y += e.vy * dt; e.zycie -= 0.02 * dt;
-            if (e.zycie <= 0 || !czyWidoczny(e.x, e.y, 10)) { KolejkaEfektow.splice(i, 1); continue; }
-            ctx.save(); ctx.translate(e.x | 0, e.y | 0); ctx.rotate(e.kat += 0.1 * dt);
-            if (e.typ === 'luska') {
-                ctx.fillStyle = '#f1c40f'; ctx.globalAlpha = e.zycie; ctx.fillRect(-2, -4, 4, 8);
-            } else if (e.typ === 'iskra') {
-                ctx.fillStyle = '#e74c3c'; ctx.globalAlpha = e.zycie; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TWO_PI); ctx.fill();
+            if (e.zycie <= 0) { KolejkaEfektow.splice(i, 1); continue; }
+            
+            ctx.save(); ctx.translate(e.x | 0, e.y | 0); 
+            
+            if (e.typ === 'dmg_text') {
+                // Skaczące obrażenia
+                ctx.globalAlpha = Math.max(0, e.zycie);
+                ctx.fillStyle = e.kolor || '#e74c3c';
+                ctx.font = 'bold 18px Exo 2';
+                ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+                ctx.strokeText(e.tekst, 0, 0);
+                ctx.fillText(e.tekst, 0, 0);
+            } else if (czyWidoczny(e.x, e.y, 10)) {
+                ctx.rotate(e.kat += 0.1 * dt);
+                if (e.typ === 'luska') {
+                    ctx.fillStyle = '#f1c40f'; ctx.globalAlpha = e.zycie; ctx.fillRect(-2, -4, 4, 8);
+                } else if (e.typ === 'iskra') {
+                    ctx.fillStyle = '#e74c3c'; ctx.globalAlpha = e.zycie; ctx.beginPath(); ctx.arc(0, 0, 3, 0, TWO_PI); ctx.fill();
+                }
             }
             ctx.restore();
         }
@@ -390,18 +457,42 @@ window.Grafika = (function() {
         ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.rotate(bot.angle || 0);
         ctx.fillStyle = '#050505'; ctx.strokeStyle = kolor; ctx.lineWidth = 3;
         AkceleratorRenderu.ustawCien(ctx, kolor, 10);
+        
         ctx.beginPath();
-        if (isBoss) { ctx.arc(0, 0, promien, 0, TWO_PI); } 
-        else { for (let i = 0; i < 6; i++) { ctx.lineTo(Math.cos(i * Math.PI/3) * promien, Math.sin(i * Math.PI/3) * promien); } }
-        ctx.closePath(); ctx.fill(); ctx.stroke();
+        if (isBoss) { 
+            // Bossowie to groźne ośmiokąty
+            for (let i = 0; i < 8; i++) { ctx.lineTo(Math.cos(i * Math.PI/4) * promien, Math.sin(i * Math.PI/4) * promien); }
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            // Pulsujący rdzeń bossa
+            ctx.fillStyle = `rgba(155, 89, 182, ${0.5 + Math.abs(Math.sin(performance.now()/200))*0.5})`;
+            ctx.beginPath(); ctx.arc(0, 0, promien*0.5, 0, TWO_PI); ctx.fill();
+        } 
+        else { 
+            // Zwykłe drony to heksagony
+            for (let i = 0; i < 6; i++) { ctx.lineTo(Math.cos(i * Math.PI/3) * promien, Math.sin(i * Math.PI/3) * promien); }
+            ctx.closePath(); ctx.fill(); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(promien, 0); ctx.stroke(); // Wskaźnik przodu
+        }
+        
         AkceleratorRenderu.resetujCien(ctx);
-        ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(promien, 0); ctx.stroke();
         ctx.restore();
+
+        if (bot.hitFlash > 0) {
+            ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.rotate(bot.angle || 0);
+            ctx.fillStyle = `rgba(255, 255, 255, ${bot.hitFlash})`;
+            ctx.beginPath(); ctx.arc(0, 0, promien, 0, TWO_PI); ctx.fill();
+            ctx.restore();
+        }
 
         if (!isBoss) {
             ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.fillStyle = '#aaa';
             ctx.font = '10px Exo 2, sans-serif'; ctx.textAlign = 'center';
             ctx.fillText(`DRON [${Math.floor(bot.score)}]`, 0, -promien - 10); 
+            ctx.restore();
+        } else {
+            ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.fillStyle = '#e74c3c';
+            ctx.font = 'bold 16px Permanent Marker'; ctx.textAlign = 'center';
+            ctx.fillText(`TYTAN [${Math.floor(bot.score)}]`, 0, -promien - 15); 
             ctx.restore();
         }
     }
@@ -444,15 +535,42 @@ window.Grafika = (function() {
             AkceleratorRenderu.ustawCien(ctx, kolor, 15);
             ctx.drawImage(asset.img, -promien, -promien, promien * 2, promien * 2);
             AkceleratorRenderu.resetujCien(ctx);
-            ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
-            ctx.beginPath(); ctx.moveTo(promien * 0.5, 0); ctx.lineTo(promien + 10, 0); ctx.stroke();
         } else {
             ctx.fillStyle = '#111'; ctx.strokeStyle = kolor; ctx.lineWidth = 4;
             AkceleratorRenderu.ustawCien(ctx, kolor, 20);
             ctx.beginPath(); ctx.arc(0, 0, promien, 0, TWO_PI); ctx.fill(); ctx.stroke();
             AkceleratorRenderu.resetujCien(ctx);
-            ctx.fillStyle = kolor; ctx.fillRect(0, -5, promien + 10, 10);
         }
+
+        // <--- NOWY, EPICKI OSZCZEP (Rośnie wraz z masą!) --->
+        let bazaOszczepu = promien * 0.4;
+        let dlugosc = promien + 15 + Math.min(masa / 20, 25); 
+
+        // Drzewiec
+        ctx.strokeStyle = '#5c4033'; 
+        ctx.lineWidth = 3 + Math.min(masa / 200, 3); 
+        ctx.beginPath(); ctx.moveTo(bazaOszczepu, 0); ctx.lineTo(dlugosc, 0); ctx.stroke();
+
+        // Grot
+        ctx.fillStyle = '#ecf0f1'; 
+        ctx.beginPath();
+        ctx.moveTo(dlugosc, -4 - Math.min(masa/300, 4)); 
+        ctx.lineTo(dlugosc + 12 + Math.min(masa/50, 15), 0); 
+        ctx.lineTo(dlugosc, 4 + Math.min(masa/300, 4));
+        ctx.closePath(); ctx.fill();
+
+        // Energetyczny rdzeń (Vibe Noir Juice) - dla silnych graczy
+        if (masa >= 100) {
+            ctx.fillStyle = kolor; 
+            AkceleratorRenderu.ustawCien(ctx, kolor, 10);
+            ctx.beginPath();
+            ctx.moveTo(dlugosc - 2, -2);
+            ctx.lineTo(dlugosc + 8 + Math.min(masa/50, 10), 0);
+            ctx.lineTo(dlugosc - 2, 2);
+            ctx.closePath(); ctx.fill();
+            AkceleratorRenderu.resetujCien(ctx);
+        }
+        // <------------------------------------------------>
 
         if (wKrzaku && isMe) {
             if (typKrzaka === 'ser_z_dziurami') {
@@ -476,6 +594,15 @@ window.Grafika = (function() {
         }
 
         ctx.restore(); 
+
+        // Hit-Flash dla gracza
+        if (postac.hitFlash > 0) {
+            ctx.save(); ctx.translate(postac.x | 0, postac.y | 0); ctx.rotate(postac.kat || 0);
+            ctx.fillStyle = `rgba(255, 255, 255, ${postac.hitFlash})`;
+            ctx.globalCompositeOperation = 'source-atop';
+            ctx.beginPath(); ctx.arc(0, 0, promien, 0, TWO_PI); ctx.fill();
+            ctx.restore();
+        }
 
         ctx.save();
         ctx.translate(postac.x | 0, postac.y | 0); 
@@ -529,7 +656,13 @@ window.Grafika = (function() {
             let dt = Math.min(3, (now - lastTime) / 16.666); 
             lastTime = now;
 
-            let celX = mojGracz.x - screenW / 2; let celY = mojGracz.y - screenH / 2;
+            // <--- NOWOŚĆ: Skalowanie Kamery (FOV) zależne od masy --->
+            let masaDlaKamery = Math.max(10, mojGracz.score || 10);
+            let docelowaSkala = Math.max(0.4, 1.15 - Math.sqrt(masaDlaKamery) * 0.015);
+            cameraScale += (docelowaSkala - cameraScale) * (0.05 * dt);
+
+            let celX = mojGracz.x - screenW / (2 * cameraScale); 
+            let celY = mojGracz.y - screenH / (2 * cameraScale);
             camera.x += (celX - camera.x) * (0.2 * dt); 
             camera.y += (celY - camera.y) * (0.2 * dt);
 
@@ -543,23 +676,30 @@ window.Grafika = (function() {
             if (!czyMapaWygenerowana) generujSrodowisko(tryb, limitWielkosci);
             ZarzadcaPamieci.wyczyscPamiecCoRunde();
 
-            // <--- NOWOŚĆ 1: LERP (PŁYNNY RUCH BEZ SKOKÓW) --->
+            // <--- LERP i Hit-Juice (Błyski i Cyferki obrażeń) --->
             if (stanSerwera.bots) {
                 Object.keys(stanSerwera.bots).forEach(id => {
                     let serwerBot = stanSerwera.bots[id];
                     if (!LokalnyStan.bots[id]) {
-                        LokalnyStan.bots[id] = { ...serwerBot }; // Jeśli bot jest nowy, od razu kopiujemy go do lokalnego stanu
+                        LokalnyStan.bots[id] = { ...serwerBot, hitFlash: 0 }; 
                     } else {
-                        // Jeśli bot już istnieje, powoli przysuwamy jego pozycję do tej, którą przysłał serwer
                         LokalnyStan.bots[id].x += (serwerBot.x - LokalnyStan.bots[id].x) * (0.3 * dt);
                         LokalnyStan.bots[id].y += (serwerBot.y - LokalnyStan.bots[id].y) * (0.3 * dt);
+                        
+                        // Detekcja otrzymania obrażeń
+                        if (serwerBot.score < LokalnyStan.bots[id].score) {
+                            let dmg = Math.floor(LokalnyStan.bots[id].score - serwerBot.score);
+                            LokalnyStan.bots[id].hitFlash = 1.0;
+                            wstrzyknijEfektWalki('dmg_text', serwerBot.x, serwerBot.y - 20, {vy: -2, zycie: 1.0, tekst: `-${dmg}`});
+                        }
+                        
                         LokalnyStan.bots[id].score = serwerBot.score;
                         LokalnyStan.bots[id].angle = serwerBot.angle;
                         LokalnyStan.bots[id].isBoss = serwerBot.isBoss;
                         LokalnyStan.bots[id].skin = serwerBot.skin;
+                        if (LokalnyStan.bots[id].hitFlash > 0) LokalnyStan.bots[id].hitFlash -= 0.1 * dt;
                     }
                 });
-                // Kasowanie martwych botów
                 Object.keys(LokalnyStan.bots).forEach(id => {
                     if (!stanSerwera.bots[id]) {
                         plamyPolaBitwy.push({ x: LokalnyStan.bots[id].x, y: LokalnyStan.bots[id].y, r: 20 + Math.random()*20, kat: Math.random() * TWO_PI, zycie: 1.0, isBoss: LokalnyStan.bots[id].isBoss });
@@ -573,13 +713,21 @@ window.Grafika = (function() {
                 Object.keys(stanSerwera.players).forEach(id => {
                     let serwerGracz = stanSerwera.players[id];
                     if (!LokalnyStan.players[id]) {
-                        LokalnyStan.players[id] = { ...serwerGracz };
+                        LokalnyStan.players[id] = { ...serwerGracz, hitFlash: 0 };
                     } else {
                         LokalnyStan.players[id].x += (serwerGracz.x - LokalnyStan.players[id].x) * (0.3 * dt);
                         LokalnyStan.players[id].y += (serwerGracz.y - LokalnyStan.players[id].y) * (0.3 * dt);
+                        
+                        if (serwerGracz.score < LokalnyStan.players[id].score && LokalnyStan.players[id].score > 10) {
+                            let dmg = Math.floor(LokalnyStan.players[id].score - serwerGracz.score);
+                            LokalnyStan.players[id].hitFlash = 1.0;
+                            wstrzyknijEfektWalki('dmg_text', serwerGracz.x, serwerGracz.y - 20, {vy: -2, zycie: 1.0, tekst: `-${dmg}`, kolor: '#fff'});
+                        }
+
                         LokalnyStan.players[id].score = serwerGracz.score;
                         LokalnyStan.players[id].kat = serwerGracz.kat;
                         LokalnyStan.players[id].isSafe = serwerGracz.isSafe;
+                        if (LokalnyStan.players[id].hitFlash > 0) LokalnyStan.players[id].hitFlash -= 0.1 * dt;
                     }
                 });
                 Object.keys(LokalnyStan.players).forEach(id => {
@@ -606,54 +754,39 @@ window.Grafika = (function() {
 
             rysujMape(tryb, limitWielkosci, dt);
 
-            // <--- NOWOŚĆ 2: GŁĘBIA (Y-SORTING) --->
-            // Wrzucamy wszystko do jednego worka, by posortować
+            // GŁĘBIA (Y-SORTING)
             let KolejkaY = [];
 
-            // 1. Dodajemy krzaki i lasery
             MacierzOtoczenia.forEach(obiekt => {
-                if (czyWidoczny(obiekt.x, obiekt.y, obiekt.r)) {
-                    KolejkaY.push({ typObj: 'srodowisko', y: obiekt.y, dane: obiekt });
-                }
+                if (czyWidoczny(obiekt.x, obiekt.y, obiekt.r)) { KolejkaY.push({ typObj: 'srodowisko', y: obiekt.y, dane: obiekt }); }
             });
-
-            // 2. Dodajemy boty z Lokalnego Stanu
             Object.values(LokalnyStan.bots).forEach(bot => {
                 let promien = 15 + Math.sqrt(Math.min(bot.score || 10, 600)) * 1.5;
-                if (czyWidoczny(bot.x, bot.y, promien)) {
-                    KolejkaY.push({ typObj: 'bot', y: bot.y, dane: bot });
-                }
+                if (czyWidoczny(bot.x, bot.y, promien)) { KolejkaY.push({ typObj: 'bot', y: bot.y, dane: bot }); }
             });
-
-            // 3. Dodajemy graczy z Lokalnego Stanu
             Object.keys(LokalnyStan.players).forEach(id => {
                 if (id !== mojGracz.id) {
                     let p = LokalnyStan.players[id];
                     let promien = Math.min(20 + Math.sqrt(Math.max(10, p.score || 10)) * 2, 65);
-                    if (czyWidoczny(p.x, p.y, promien)) {
-                        KolejkaY.push({ typObj: 'gracz', y: p.y, dane: p, isMe: false });
-                    }
+                    if (czyWidoczny(p.x, p.y, promien)) { KolejkaY.push({ typObj: 'gracz', y: p.y, dane: p, isMe: false }); }
                 }
             });
+            
+            // Dopisywanie moich statystyk do Lokalnego Stanu dla hit-flasha
+            if(LokalnyStan.players[mojGracz.id]) {
+                KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: LokalnyStan.players[mojGracz.id], isMe: true });
+            } else {
+                KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: mojGracz, isMe: true });
+            }
 
-            // 4. Dodajemy Ciebie (żebyś mógł chować się za serem)
-            KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: mojGracz, isMe: true });
-
-            // Sortujemy całą tablicę po Y (od góry do dołu)
             KolejkaY.sort((a, b) => a.y - b.y);
 
-            // Rysujemy posortowane obiekty
             KolejkaY.forEach(element => {
-                if (element.typObj === 'srodowisko') {
-                    rysujPojedynczyKrzak(element.dane);
-                } else if (element.typObj === 'bot') {
-                    rysujBota(element.dane);
-                } else if (element.typObj === 'gracz') {
-                    rysujPostac(element.dane, element.isMe);
-                }
+                if (element.typObj === 'srodowisko') { rysujPojedynczyKrzak(element.dane); } 
+                else if (element.typObj === 'bot') { rysujBota(element.dane); } 
+                else if (element.typObj === 'gracz') { rysujPostac(element.dane, element.isMe); }
             });
 
-            // Reszta renderowania (Pociski i HUD na wierzchu)
             if (stanSerwera.projectiles) {
                 Object.values(stanSerwera.projectiles).forEach(proj => {
                     if (!czyWidoczny(proj.x, proj.y, 20)) return;
@@ -671,6 +804,8 @@ window.Grafika = (function() {
 
             rysujEfektyKolejki(dt);
             ctx.restore(); 
+
+            rysujPogode(tryb); // Nowość: Rysowanie Deszczu/Winiety na wierzchu wszystkiego
 
             ctx.strokeStyle = '#2ecc71'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(pozycjaMyszki.x, pozycjaMyszki.y, 10, 0, TWO_PI); ctx.stroke();
             ctx.fillStyle = '#e74c3c'; ctx.fillRect(pozycjaMyszki.x - 1, pozycjaMyszki.y - 1, 2, 2);
