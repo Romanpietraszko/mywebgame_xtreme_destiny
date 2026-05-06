@@ -2,6 +2,7 @@
 // SERVER.JS - Autorytatywny Sędzia (Vibe Noir - Pancerna Architektura)
 // WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
 // ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
+// FIX AAA: Wdrożenie fizyki Formacji Drużynowych
 // ==========================================
 
 const express = require('express');
@@ -339,11 +340,19 @@ class TrybTeams {
         }
     }
 
+    // [FIX AAA] Kompletna FIZYKA formacji po stronie serwera!
     static aktualizujRoj(b, lider, nearby) {
+        // Znajdź pozycję tego drona w armii lidera
+        let mojeBoty = nearby.bots.filter(ob => ob.ownerId === lider.id);
+        let mojIndex = mojeBoty.findIndex(ob => ob.id === b.id);
+        if (mojIndex === -1) mojIndex = 0;
+
         let targetX = lider.x;
         let targetY = lider.y;
-        let distToLeader = Math.hypot(lider.x - b.x, lider.y - b.y);
         let speed = 4.5;
+        let formacja = lider.aktywnaFormacja || 4; // 4 to domyślnie luźna
+        let rozstaw = 80;
+        let katLidera = lider.katRuchu || 0; // Kąt z myszki gracza
         
         if (lider.rozkazAktywny) {
             if (b.typBroni === 'miecz') {
@@ -362,14 +371,50 @@ class TrybTeams {
                 }
             }
         } else {
-            if (distToLeader < 70) speed = 0; 
-            else speed = Math.min(6, distToLeader * 0.08); 
+            // FIZYKA FORMACJI - Serwer nakierowuje drony idealnie w kropki z kalkulatora
+            if (formacja === 1) { // Formacja V (Atak)
+                let i = mojIndex + 1;
+                let strona = i % 2 === 0 ? 1 : -1;
+                let rzad = Math.ceil(i / 2);
+                let offsetKat = katLidera + (strona * Math.PI * 0.75);
+                let dystans = rzad * rozstaw;
+                targetX = lider.x + Math.cos(offsetKat) * dystans;
+                targetY = lider.y + Math.sin(offsetKat) * dystans;
+            } else if (formacja === 2) { // Mur Obrony
+                let startX = lider.x + Math.cos(katLidera) * rozstaw;
+                let startY = lider.y + Math.sin(katLidera) * rozstaw;
+                let liniaKat = katLidera + Math.PI / 2;
+                let ilosc = mojeBoty.length;
+                let offset = (mojIndex - (ilosc-1)/2) * rozstaw;
+                targetX = startX + Math.cos(liniaKat) * offset;
+                targetY = startY + Math.sin(liniaKat) * offset;
+            } else if (formacja === 3) { // Koło
+                let ilosc = Math.max(1, mojeBoty.length);
+                let kat = (mojIndex / ilosc) * Math.PI * 2 + (Date.now()/1000); 
+                targetX = lider.x + Math.cos(kat) * rozstaw * 1.5;
+                targetY = lider.y + Math.sin(kat) * rozstaw * 1.5;
+            } else { // 4 - Luźna formacja
+                targetX = lider.x;
+                targetY = lider.y;
+            }
+
+            let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
             
+            if (formacja === 4) {
+                if (distToTarget < 70) speed = 0; 
+                else speed = Math.min(6, distToTarget * 0.08); 
+            } else {
+                // Szybki ruch do uporządkowanych formacji
+                if (distToTarget < 10) speed = 0;
+                else speed = Math.min(8, distToTarget * 0.2); 
+            }
+            
+            // Antykolizja
             nearby.bots.forEach(otherB => {
                 if (otherB.id !== b.id && otherB.ownerId === b.ownerId) {
                     if (Math.hypot(otherB.x - b.x, otherB.y - b.y) < 25) {
-                        targetX -= (otherB.x - b.x) * 0.5;
-                        targetY -= (otherB.y - b.y) * 0.5;
+                        targetX -= (otherB.x - b.x) * (formacja === 4 ? 0.5 : 0.1);
+                        targetY -= (otherB.y - b.y) * (formacja === 4 ? 0.5 : 0.1);
                     }
                 }
             });
@@ -580,7 +625,6 @@ io.on('connection', (socket) => {
     console.log(`[ połączono ] Terminal: ${socket.id}`);
 
     socket.on('joinGame', (data) => {
-        // [POPRAWKA] Start od okrągłego ZERA. Mnożnik Arystokraty wciąż działa na zjadanie.
         let spd = 5.0, mult = 1.0, startMass = 0; 
         if (data.skin === 'ninja') { spd = 5.5; mult = 0.9; }
         else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; } 
@@ -624,6 +668,7 @@ io.on('connection', (socket) => {
             overcharge: 0,
             isShielding: false, isSafe: false,
             katRuchu: 0, dystansKursora: 0, rozkazAktywny: false,
+            aktywnaFormacja: 4, // [NOWOŚĆ] Domyślna formacja
             ostatniStrzal: 0 // [FAZA 1 FIX] Zmienna do ochrony przed spamem
         };
         socket.emit('init', { id: socket.id, team: pTeam });
@@ -635,6 +680,15 @@ io.on('connection', (socket) => {
             // [FAZA 1 FIX] Sanityzacja (Klamrowanie typu) ucinająca exploity NaN
             p.katRuchu = Number(dane.kat) || 0;
             p.dystansKursora = Number(dane.dystans) || 0;
+        }
+    });
+
+    // [NOWOŚĆ AAA] ODBIORNIK FORMACJI OD KLIENTA!
+    socket.on('zmianaFormacji', (formacjaId) => {
+        let p = state.players[socket.id];
+        if (p && p.mode === 'TEAMS') {
+            p.aktywnaFormacja = Number(formacjaId) || 4;
+            console.log(`[ TAKTYKA ] Gracz ${p.name} zmienił szyk na: ${p.aktywnaFormacja}`);
         }
     });
 

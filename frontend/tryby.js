@@ -1,7 +1,7 @@
 // ==========================================
 // TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA+ Reżyserska)
 // WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
-// NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć
+// NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć, MENU STEROWANIA
 // ==========================================
 
 (function() {
@@ -33,7 +33,8 @@
     let czasStart = 0;
     let interwalCzasu = null;
 
-    // NOWE STEROWANIE: Hybryda Mysz + WASD
+    // NOWE STEROWANIE: Wybór Systemu
+    let wybraneSterowanie = 'HYBRID'; // Domyślnie Hybryda
     let kursor = { x: window.innerWidth / 2, y: window.innerHeight / 2 };
     let klawiszeKierunku = { w: false, a: false, s: false, d: false };
     let ostatniaWysylkaRuchu = 0; 
@@ -41,8 +42,8 @@
     
     // Progresja Kampanii i Statystyki
     let etapKampanii = 0;
-    let ostatniaMasa = 0; // Śledzenie masy do efektu Hit Flash
-    let ostatniCzasJedzenia = 0; // Zapobiega "strzelaniu z karabinu" dźwiękiem jedzenia
+    let ostatniaMasa = null; // [POPRAWKA] Śledzenie masy startuje od null, by łapać zera!
+    let ostatniCzasJedzenia = 0; 
 
     // --- ZMIENNE LIGI AAA ---
     let ping = 0;
@@ -123,7 +124,7 @@
         obliczPozycje: function(gracz, typFormacji) {
             if (!gracz) return [];
             let pozycje = [];
-            const iloscDronow = 6; // Zakładamy makietę 6 dronów do pokazania hologramu
+            const iloscDronow = 6; 
             const rozstaw = 80;
             const katGracza = gracz.kat || 0;
 
@@ -143,7 +144,7 @@
                 case 2: // Mur Obrony (Linia przed graczem)
                     let startX = gracz.x + Math.cos(katGracza) * rozstaw;
                     let startY = gracz.y + Math.sin(katGracza) * rozstaw;
-                    let liniaKat = katGracza + Math.PI / 2; // Prostopadle do kierunku patrzenia
+                    let liniaKat = katGracza + Math.PI / 2; 
                     for(let i = 0; i < iloscDronow; i++) {
                         let offset = (i - (iloscDronow-1)/2) * rozstaw;
                         pozycje.push({
@@ -154,16 +155,15 @@
                     break;
                 case 3: // Okrąg Obronny (Żółw)
                     for(let i = 0; i < iloscDronow; i++) {
-                        let kat = (i / iloscDronow) * Math.PI * 2 + (performance.now()/1000); // Obracające się koło
+                        let kat = (i / iloscDronow) * Math.PI * 2 + (performance.now()/1000); 
                         pozycje.push({
                             x: gracz.x + Math.cos(kat) * rozstaw * 1.5,
                             y: gracz.y + Math.sin(kat) * rozstaw * 1.5
                         });
                     }
                     break;
-                case 4: // Formacja Luźna (Swobodna chmura)
+                case 4: // Formacja Luźna
                 default:
-                    // W luźnej formacji nie rysujemy sztywnych hologramów
                     break;
             }
             return pozycje;
@@ -198,19 +198,19 @@
         muzykaGra.loop = true;
         muzykaGra.volume = 0.15; 
 
-        // === SILNIK SFX (DŹWIĘKI REAKTYWNE & AUDIO POOLING) ===
+        // === SILNIK SFX (DŹWIĘKI REAKTYWNE) ===
         const SFX = {
             throw: new Audio('./assety/throw.mp3'),
             hit: new Audio('./assety/hit.mp3'),
             death: new Audio('./assety/hit.mp3'), 
             alert: new Audio('./assety/alert.mp3'),
-            heartbeat: new Audio('./assety/heartbeat.mp3') // [IDEA 16] Sudden Death Audio
+            heartbeat: new Audio('./assety/heartbeat.mp3') 
         };
         if(SFX.heartbeat) { SFX.heartbeat.loop = true; SFX.heartbeat.volume = 0.6; }
 
         Object.values(SFX).forEach(audio => { if(audio) audio.preload = 'auto'; });
 
-        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek (Brak zacinania!)
+        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek
         const AudioPoolZjedzenia = [];
         const WIEKOSC_POOLA = 10;
         for(let i=0; i<WIEKOSC_POOLA; i++) {
@@ -342,19 +342,16 @@
             }
         });
 
-        // --- LEADERBOARD ---
         const leaderboard = document.createElement('div');
         leaderboard.id = 'leaderboard';
         leaderboard.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(10,10,15,0.85); border: 2px solid #f1c40f; padding: 12px; border-radius: 8px; color: #fff; font-family: "Exo 2", sans-serif; width: 200px; z-index: 10; pointer-events: none; transition: opacity 0.3s; box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);';
         leaderboard.classList.add('hidden');
         document.getElementById('in-game-ui').appendChild(leaderboard);
 
-        // --- [IDEA 6] MUTATOR UI INDICATOR ---
         const mutatorDisplay = document.createElement('div');
         mutatorDisplay.style.cssText = 'position: absolute; top: 20px; left: 50%; transform: translateX(-50%); color: #3498db; font-family: "Exo 2", sans-serif; font-size: 12px; text-transform: uppercase; letter-spacing: 2px; text-shadow: 0 0 5px #3498db; z-index: 10; pointer-events: none;';
         document.getElementById('in-game-ui').appendChild(mutatorDisplay);
 
-        // --- MOBILNY PRZYCISK AKCJI ---
         window.addEventListener('touchstart', function addTouchBtn() {
             const mobileBtn = document.createElement('button');
             mobileBtn.innerHTML = '🎯';
@@ -395,9 +392,25 @@
         const barBlue = document.getElementById('bar-blue');
         const formationPanel = document.getElementById('formation-panel');
 
+        // [MODUŁ AAA] EKRAN WYBORU STEROWANIA
+        const stepControls = document.createElement('div');
+        stepControls.id = 'step-controls';
+        stepControls.classList.add('hidden');
+        stepControls.style.cssText = 'position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(10, 10, 15, 0.95); padding: 40px; border: 3px solid #3498db; border-radius: 15px; text-align: center; z-index: 1000; width: 85%; max-width: 550px; box-shadow: 0 0 40px rgba(52, 152, 219, 0.3);';
+        stepControls.innerHTML = `
+            <h2 style="color: #3498db; text-shadow: 0 0 10px #3498db; margin-bottom: 25px; font-family: 'Permanent Marker', sans-serif; font-size: 28px;">WYBIERZ STEROWANIE</h2>
+            <div style="display: flex; flex-direction: column; gap: 15px;">
+                <button class="main-btn ctrl-btn" data-ctrl="HYBRID" style="background: rgba(241, 196, 15, 0.15); border-color: #f1c40f;">🔥 HYBRYDA (Myszka podąża + WASD overrides)</button>
+                <button class="main-btn ctrl-btn" data-ctrl="MOUSE" style="background: rgba(52, 152, 219, 0.15); border-color: #3498db;">🖱️ TYLKO MYSZKA (Bezwzględne podążanie)</button>
+                <button class="main-btn ctrl-btn" data-ctrl="WASD" style="background: rgba(231, 76, 60, 0.15); border-color: #e74c3c;">⌨️ KLASYCZNE WASD (Ruch klawisze, Cel Myszka)</button>
+                <button class="main-btn ctrl-btn" data-ctrl="ARROWS" style="background: rgba(231, 76, 60, 0.15); border-color: #e74c3c;">⬆️ STRZAŁKI (Ruch klawisze, Cel Myszka)</button>
+                <button class="main-btn ctrl-btn" data-ctrl="MOBILE" style="background: rgba(46, 204, 113, 0.15); border-color: #2ecc71;">📱 MOBILE (Ekran Dotykowy Optymalizacja)</button>
+            </div>
+        `;
+        if(uiLayer) uiLayer.appendChild(stepControls);
+
         if (btnLeave) {
             btnLeave.addEventListener('click', () => {
-                // [IDEA 3] Graceful Teardown
                 EventBus.emit('gameTeardown');
                 if (confirm("Czy na pewno chcesz opuścić pole bitwy i wrócić do menu głównego?")) location.reload(); 
             });
@@ -423,7 +436,26 @@
             btn.addEventListener('click', (e) => {
                 const mode = e.target.getAttribute('data-mode');
                 if (window.Flagi) window.Flagi.Stan.wybranyTryb = mode;
-                step2.classList.add('hidden'); step3.classList.remove('hidden');
+                step2.classList.add('hidden'); 
+                
+                // [WSTRZYKNIĘCIE NOWEGO EKRANU STEROWANIA]
+                if (document.getElementById('step-controls')) {
+                    document.getElementById('step-controls').classList.remove('hidden');
+                } else {
+                    step3.classList.remove('hidden'); // Fallback bezpieczeństwa
+                }
+            });
+        });
+
+        // Nasłuchiwacze dla panelu sterowania
+        document.querySelectorAll('.ctrl-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                wybraneSterowanie = e.target.getAttribute('data-ctrl');
+                document.getElementById('step-controls').classList.add('hidden');
+                step3.classList.remove('hidden'); 
+                
+                dzwiekWhoosh.currentTime = 0;
+                if (!isMuted) dzwiekWhoosh.play().catch(e=>{});
             });
         });
 
@@ -462,9 +494,8 @@
                 spawnZone: sektor
             };
 
-            // [IDEA 13] Agresywna Czystka Mapy na start
             EventBus.emit('arenaSweep');
-            LokalnyBuforZjedzonychKropek.clear(); // Reset predykcji po restarcie
+            LokalnyBuforZjedzonychKropek.clear(); 
 
             socket.emit('joinGame', data);
             
@@ -490,8 +521,7 @@
             
             czasStart = Date.now();
             etapKampanii = 0; 
-            ostatniaMasa = 0; 
-            ostatniCzasJedzenia = 0;
+            ostatniaMasa = null; // [POPRAWKA] Zmiana na null pozwala poprawnie odpalac dzwiek przy 0 masy!
             ostatniCzasInputu = Date.now();
             
             if (interwalCzasu) clearInterval(interwalCzasu);
@@ -512,22 +542,20 @@
         function aktualizujCzas() {
             if (!timerDisplay) return;
             
-            // Time-Drift Sync: Jeśli serwer podsyła czas zakończenia, używamy go. Inaczej lokalny start.
             let roznica = 0;
             if (stanSerwera && stanSerwera.serverEndTime) {
                 roznica = Math.max(0, Math.floor((stanSerwera.serverEndTime - Date.now()) / 1000));
             } else {
-                roznica = Math.floor((Date.now() - czasStart) / 1000); // Licznik w górę (Survival)
+                roznica = Math.floor((Date.now() - czasStart) / 1000); 
             }
 
-            StatystykiLokalne.czasWGrze = roznica; // Aktualizacja do systemu osiągnięć
+            StatystykiLokalne.czasWGrze = roznica; 
             SystemOsiagniec.sprawdz(StatystykiLokalne);
 
             let min = String(Math.floor(roznica / 60)).padStart(2, '0');
             let sek = String(roznica % 60).padStart(2, '0');
             timerDisplay.innerText = `${min}:${sek}`;
 
-            // Protokół Sudden Death (Odliczanie w dół)
             if (stanSerwera && stanSerwera.serverEndTime && roznica <= 30 && roznica > 0) {
                 if (!isSuddenDeath) {
                     isSuddenDeath = true;
@@ -620,10 +648,20 @@
             if (window.Flagi && !['PLAYING', 'SPECTATOR'].includes(window.Flagi.Stan.aktualny)) return; 
             zglosInput();
             const key = e.key.toLowerCase();
-            if (['w', 'arrowup'].includes(key)) klawiszeKierunku.w = true;
-            if (['a', 'arrowleft'].includes(key)) klawiszeKierunku.a = true;
-            if (['s', 'arrowdown'].includes(key)) klawiszeKierunku.s = true;
-            if (['d', 'arrowright'].includes(key)) klawiszeKierunku.d = true;
+            
+            // [MODUŁ AAA] System sterowania rozdziela mapowanie przycisków w locie
+            if (['wasd', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
+                if (key === 'w') klawiszeKierunku.w = true;
+                if (key === 'a') klawiszeKierunku.a = true;
+                if (key === 's') klawiszeKierunku.s = true;
+                if (key === 'd') klawiszeKierunku.d = true;
+            }
+            if (['arrows', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
+                if (key === 'arrowup') klawiszeKierunku.w = true;
+                if (key === 'arrowleft') klawiszeKierunku.a = true;
+                if (key === 'arrowdown') klawiszeKierunku.s = true;
+                if (key === 'arrowright') klawiszeKierunku.d = true;
+            }
 
             if (['1','2','3','4'].includes(key) && window.Flagi.Stan.wybranyTryb === 'TEAMS') {
                 aktywnaFormacja = parseInt(key);
@@ -642,10 +680,18 @@
 
         window.addEventListener('keyup', (e) => {
             const key = e.key.toLowerCase();
-            if (['w', 'arrowup'].includes(key)) klawiszeKierunku.w = false;
-            if (['a', 'arrowleft'].includes(key)) klawiszeKierunku.a = false;
-            if (['s', 'arrowdown'].includes(key)) klawiszeKierunku.s = false;
-            if (['d', 'arrowright'].includes(key)) klawiszeKierunku.d = false;
+            if (['wasd', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
+                if (key === 'w') klawiszeKierunku.w = false;
+                if (key === 'a') klawiszeKierunku.a = false;
+                if (key === 's') klawiszeKierunku.s = false;
+                if (key === 'd') klawiszeKierunku.d = false;
+            }
+            if (['arrows', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
+                if (key === 'arrowup') klawiszeKierunku.w = false;
+                if (key === 'arrowleft') klawiszeKierunku.a = false;
+                if (key === 'arrowdown') klawiszeKierunku.s = false;
+                if (key === 'arrowright') klawiszeKierunku.d = false;
+            }
         });
 
         window.addEventListener('mousedown', (e) => {
@@ -746,7 +792,6 @@
 
             let redPercent = (redScore / total) * 100;
             let bluePercent = (blueScore / total) * 100;
-            // [IDEA 9] Rubber-Banding Visuals
             if (barRed) barRed.style.width = `${redPercent}%`;
             if (barBlue) barBlue.style.width = `${bluePercent}%`;
         }
@@ -756,8 +801,6 @@
         socket.on('serverTick', (data) => {
             stanSerwera = window.Guardian && window.Guardian.sanityzujStanSerwera ? window.Guardian.sanityzujStanSerwera(data) : data;
             
-            // <--- WERYFIKACJA LOKALNEGO BUFORA ŻARCIA --->
-            // Usuwamy kropki, które klient już zjadł, nawet jeśli serwer jeszcze o nich pamięta (zapobiega "duchom")
             if (stanSerwera.foods) {
                 let przefiltrowane = {};
                 Object.keys(stanSerwera.foods).forEach(id => {
@@ -768,13 +811,11 @@
                 stanSerwera.foods = przefiltrowane;
             }
 
-            // Wczytywanie z serwera metadanych trybu (Mutatory/Timer)
             if (data.serverEndTime) stanSerwera.serverEndTime = data.serverEndTime;
             if (data.mutators && mutatorDisplay) {
                 mutatorDisplay.innerText = "Aktywne Modyfikacje: " + data.mutators.join(' | ');
             }
 
-            // [IDEA 12] Virtual Spectator Mode Check
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && !stanSerwera.players[mojeId] && data.isSpectator) {
                 GameFSM.zmienStan('SPECTATOR');
                 pokazNapisKinowy("JESTEŚ WIDZEM", 3000);
@@ -813,7 +854,6 @@
             if (data.zabojca && data.ofiara) {
                 dodajDoKillfeedu(data.zabojca, data.ofiara);
                 
-                // Mój Killstreak Tracker
                 let mojeImie = inputNick.value.trim() || "Gracz";
                 if (data.zabojca === mojeImie) {
                     StatystykiLokalne.zabojstwaZrzedu++;
@@ -879,23 +919,15 @@
                 let kolor = data.killerName === "VICTORY" ? "#2ecc71" : "#e74c3c";
                 let viralText = `Osiągnąłem ${data.finalScore} masy i przetrwałem ${finalTime} w Vibe Noir (Tryb: ${tryb})! Zmierz się ze mną: ${window.location.href}`;
 
-                // [IDEA 17 & 20] MVP Stats & Map Voting UI
                 let mvpData = data.mvpStats ? `<h3 style="color:#3498db;">MVP: ${data.mvpStats.name} (Assists: ${data.mvpStats.assists})</h3>` : '';
 
+                // [POPRAWKA] Czysty ekran końcowy bez martwych przycisków map
                 uiLayer.innerHTML = `
                     <div style="text-align: center; background: rgba(5,5,5,0.95); padding: 50px; border: 3px solid ${kolor}; border-radius: 15px; box-shadow: 0 0 40px #000; position: relative; z-index: 999; max-width: 600px; margin: 0 auto;">
                         <h1 style="color: ${kolor}; font-size: 48px; font-family: 'Permanent Marker';">${tytul}</h1>
                         <p style="color: #aaa;">"${data.message}"</p>
                         ${mvpData}
                         <h2 style="color: #f1c40f;">MASA: ${data.finalScore} | CZAS: ${finalTime}</h2>
-                        
-                        <div style="margin-top: 20px; padding: 15px; border-top: 1px solid #333;">
-                            <h4 style="color:#aaa;">Głosuj na Następną Arenę:</h4>
-                            <div style="display:flex; justify-content:center; gap: 10px;">
-                                <button class="main-btn" onclick="socket.emit('voteMap', 'Neon City')">Neon City</button>
-                                <button class="main-btn" onclick="socket.emit('voteMap', 'Wasteland')">Wasteland</button>
-                            </div>
-                        </div>
 
                         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 30px;">
                             <button id="btn-share-score" class="main-btn border-blue" style="font-size: 18px;">📢 POCHWAL SIĘ WYNIKIEM</button>
@@ -921,7 +953,6 @@
             let teraz = Date.now();
             const stanAktualny = window.Flagi ? window.Flagi.Stan.aktualny : 'LOBBY';
 
-            // [IDEA 12] Jeśli gracz jest obserwatorem, omija sterowanie i przesył wektorów
             if (stanAktualny === 'SPECTATOR') {
                 if (stanSerwera && window.Grafika) {
                     let najbogatszy = null;
@@ -946,10 +977,15 @@
                         const centerX = window.innerWidth / 2;
                         const centerY = window.innerHeight / 2;
                         
+                        let ruszKlawiatura = klawiszeKierunku.w || klawiszeKierunku.s || klawiszeKierunku.a || klawiszeKierunku.d;
                         let kat = 0;
                         let dystans = 0;
-                        let ruszKlawiatura = klawiszeKierunku.w || klawiszeKierunku.s || klawiszeKierunku.a || klawiszeKierunku.d;
                         let dx = 0; let dy = 0;
+
+                        // [MODUŁ AAA] Sterowanie warunkowe z panelu
+                        if (wybraneSterowanie === 'MOUSE' || wybraneSterowanie === 'MOBILE') {
+                            ruszKlawiatura = false;
+                        }
 
                         if (ruszKlawiatura) {
                             if (klawiszeKierunku.w) dy -= 1;
@@ -959,8 +995,13 @@
                             kat = Math.atan2(dy, dx);
                             dystans = 100; 
                         } else {
-                            kat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
-                            dystans = Math.hypot(kursor.y - centerY, kursor.x - centerX);
+                            if (wybraneSterowanie === 'WASD' || wybraneSterowanie === 'ARROWS') {
+                                dystans = 0;
+                                kat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
+                            } else {
+                                kat = Math.atan2(kursor.y - centerY, kursor.x - centerX);
+                                dystans = Math.hypot(kursor.y - centerY, kursor.x - centerX);
+                            }
                         }
                         
                         socket.emit('ruchGraczaMyszka', { kat: kat, dystans: dystans });
@@ -972,7 +1013,6 @@
                                 mojGracz.x += Math.cos(kat) * predkoscKorekty;
                                 mojGracz.y += Math.sin(kat) * predkoscKorekty;
                                 
-                                // Bezpieczne blokowanie kamery na granicy mapy
                                 let limit = window.Flagi.Stan.wybranyTryb === 'TEAMS' ? 6000 : 4000;
                                 if (mojGracz.x < 10) mojGracz.x = 10;
                                 if (mojGracz.x > limit - 10) mojGracz.x = limit - 10;
@@ -980,7 +1020,6 @@
                                 if (mojGracz.y > limit - 10) mojGracz.y = limit - 10;
                             }
 
-                            // <--- SYSTEM AAA: NATYCHMIASTOWA PREDYKCJA JEDZENIA KROPEK --->
                             if (stanSerwera.foods) {
                                 let zasiegZjadania = Math.min(20 + Math.sqrt(Math.max(10, mojGracz.score)) * 2, 65) + 15;
                                 Object.keys(stanSerwera.foods).forEach(fid => {
@@ -990,13 +1029,10 @@
                                     let odlegloscY = kropka.y - mojGracz.y;
                                     
                                     if ((odlegloscX * odlegloscX + odlegloscY * odlegloscY) < (zasiegZjadania * zasiegZjadania)) {
-                                        // Kolizja! Zjadamy to lokalnie!
                                         LokalnyBuforZjedzonychKropek.add(fid);
-                                        mojGracz.score += 1; // Aktualizacja lokalna
+                                        mojGracz.score += 1; 
                                         StatystykiLokalne.zjedzoneKropki++;
-                                        
-                                        odpalPlynnyDzwiekJedzenia(0.15); // Dźwięk przez Pool bez zacinania
-                                        socket.emit('zgłośZjedzenieKropki', fid); // Wysyłka fast-track
+                                        socket.emit('zgłośZjedzenieKropki', fid); 
                                     }
                                 });
                             }
@@ -1038,18 +1074,18 @@
                         obslugaStref(mojGracz);
                         obslugaFabułyKampanii(mojGracz); 
                         
-                        // Podpięcie Hologramów Formacji dla renderingu w grafika.js
                         if (window.Flagi.Stan.wybranyTryb === 'TEAMS') {
                             mojGracz.pozycjeFormacji = MenadzerFormacji.obliczPozycje(mojGracz, aktywnaFormacja);
                         }
                         
-                        if (ostatniaMasa > 0) {
+                        // [POPRAWKA] Odpalanie dźwięków w oparciu o czystą różnicę masy (Działa przy 0 masy!)
+                        if (ostatniaMasa !== null) {
                             let roznica = mojGracz.score - ostatniaMasa;
                             
                             if (roznica <= -1) {
                                 odpalDzwiek3D('hit', 0.8, mojGracz.x, mojGracz.y);
                                 wibruj(50);
-                                StatystykiLokalne.zabojstwaZrzedu = 0; // Reset Killstreaka przy otrzymaniu obrażeń
+                                StatystykiLokalne.zabojstwaZrzedu = 0; 
                                 
                                 let flash = document.createElement('div');
                                 flash.style.cssText = 'position: fixed; inset: 0; background: rgba(231, 76, 60, 0.4); z-index: 900; pointer-events: none; transition: opacity 0.2s ease-out;';
@@ -1057,7 +1093,9 @@
                                 setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 50);
                                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
                             } 
-                            // Starą logikę audio 'eat' usunięto, bo nowa natychmiastowa predykcja załatwia sprawę
+                            else if (roznica >= 1) { 
+                                odpalPlynnyDzwiekJedzenia(0.25); 
+                            }
                         }
                         ostatniaMasa = mojGracz.score;
 
