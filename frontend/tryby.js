@@ -2,7 +2,7 @@
 // TRYBY.JS - Główny Mózg Klienta, Sieć i Kontroler Gry (Wersja AAA+ Reżyserska)
 // WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
 // NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć, MENU STEROWANIA
-// FIX AAA: Natychmiastowe zjadanie kropek + bezbłędny eat.mp3 i muzyka dark_trap.mp3 na mapie
+// FIX AAA: Natychmiastowe zjadanie kropek + bezbłędny eat.mp3 i muzyka dark_trap.mp3 na mapie, Agresywny Event Banner
 // ==========================================
 
 (function() {
@@ -180,6 +180,33 @@
         release(el) { el.remove(); el.className = ''; el.innerHTML = ''; this.pool.push(el); }
     };
 
+    // ==========================================
+    // [FIX AAA] GLOBALNY SILNIK AUDIO (FILTR ANTY-SPAMOWY)
+    // ==========================================
+    const SilnikAudio = {
+        muzykaTla: new Audio('./assety/dark_trap.mp3'),
+        bazaEat: new Audio('./assety/eat.mp3'),
+        ostatniZgryz: 0,
+        
+        startMuzyki: function() {
+            this.muzykaTla.loop = true;
+            this.muzykaTla.volume = 0.3; // Ciszej, by budować klimat Noir
+            // Odpalamy! (Działa w 100%, bo wywołane kliknięciem przycisku DESANT)
+            this.muzykaTla.play().catch(e => console.warn("[Audio] Przeglądarka zablokowała muzykę tła. Wymagane kliknięcie."));
+        },
+        
+        grajMniam: function(glosnosc = 0.4) {
+            let teraz = Date.now();
+            // Filtr 50ms - ratuje RAM przed zacinającym się dźwiękiem i trzaskami!
+            if (teraz - this.ostatniZgryz > 50) {
+                this.ostatniZgryz = teraz;
+                let dzwiek = this.bazaEat.cloneNode(); // Dźwięki nakładają się płynnie, zamiast ucinać
+                dzwiek.volume = glosnosc;
+                dzwiek.play().catch(e => {}); 
+            }
+        }
+    };
+
     document.addEventListener('DOMContentLoaded', () => {
         console.log("🛠️ Inicjalizacja interfejsu UI i Silnika Audio...");
 
@@ -195,11 +222,6 @@
         const dzwiekWhoosh = new Audio('./assety/fire_whoosh.mp3');
         dzwiekWhoosh.volume = 0.8;
 
-        // Główna muzyka w grze
-        const muzykaGra = new Audio('./assety/dark_trap.mp3');
-        muzykaGra.loop = true;
-        muzykaGra.volume = 0.15; 
-
         // === SILNIK SFX (DŹWIĘKI REAKTYWNE) ===
         const SFX = {
             throw: new Audio('./assety/throw.mp3'),
@@ -211,25 +233,6 @@
         if(SFX.heartbeat) { SFX.heartbeat.loop = true; SFX.heartbeat.volume = 0.6; }
 
         Object.values(SFX).forEach(audio => { if(audio) audio.preload = 'auto'; });
-
-        // [MODUŁ AAA] Audio Pooling dla efektu jedzenia kropek (eat.mp3)
-        const AudioPoolZjedzenia = [];
-        const WIEKOSC_POOLA = 10; // 10 dźwięków gotowych do jednoczesnego strzału
-        for(let i=0; i<WIEKOSC_POOLA; i++) {
-            let a = new Audio('./assety/eat.mp3');
-            a.preload = 'auto';
-            AudioPoolZjedzenia.push(a);
-        }
-        let aktualnyAudioZjedzenia = 0;
-
-        function odpalPlynnyDzwiekJedzenia(glosnosc = 0.3) {
-            if (isMuted) return;
-            let dzwiek = AudioPoolZjedzenia[aktualnyAudioZjedzenia];
-            dzwiek.currentTime = 0;
-            dzwiek.volume = glosnosc;
-            dzwiek.play().catch(e => {});
-            aktualnyAudioZjedzenia = (aktualnyAudioZjedzenia + 1) % WIEKOSC_POOLA;
-        }
 
         function odpalDzwiek(nazwa, glosnosc = 0.5) {
             if (isMuted || !SFX[nazwa]) return;
@@ -260,12 +263,12 @@
         function zrobAudioDucking() {
             if (isMuted || czyDucking) return;
             czyDucking = true;
-            let orgGlosnosc = muzykaGra.volume;
-            muzykaGra.volume = orgGlosnosc * 0.3; 
+            let orgGlosnosc = SilnikAudio.muzykaTla.volume;
+            SilnikAudio.muzykaTla.volume = orgGlosnosc * 0.3; 
             setTimeout(() => {
                 let volInterval = setInterval(() => {
-                    if (muzykaGra.volume < orgGlosnosc) {
-                        muzykaGra.volume = Math.min(orgGlosnosc, muzykaGra.volume + 0.02);
+                    if (SilnikAudio.muzykaTla.volume < orgGlosnosc) {
+                        SilnikAudio.muzykaTla.volume = Math.min(orgGlosnosc, SilnikAudio.muzykaTla.volume + 0.02);
                     } else {
                         czyDucking = false;
                         clearInterval(volInterval);
@@ -323,8 +326,8 @@
             isMuted = !isMuted;
             dzwiekOgnia.muted = isMuted;
             dzwiekWhoosh.muted = isMuted;
-            muzykaGra.muted = isMuted;
-            AudioPoolZjedzenia.forEach(a => a.muted = isMuted);
+            SilnikAudio.muzykaTla.muted = isMuted;
+            SilnikAudio.bazaEat.muted = isMuted;
             if(SFX.heartbeat) SFX.heartbeat.muted = isMuted;
             btnMute.innerHTML = isMuted ? '🔇' : '🔊';
             btnMute.style.borderColor = isMuted ? '#555' : '#e74c3c';
@@ -515,9 +518,10 @@
             }
             
             dzwiekOgnia.pause();
+            
+            // [FIX AAA] TWARDE WYMUSZENIE STARTU MUZYKI W MOMENCIE KLIKNIĘCIA!
             if (!isMuted) {
-                muzykaGra.currentTime = 0;
-                muzykaGra.play().catch(e => console.warn("Muzyka zablokowana:", e));
+                SilnikAudio.startMuzyki();
             }
             
             czasStart = Date.now();
@@ -631,6 +635,32 @@
             container.timeoutId = setTimeout(() => {
                 container.style.opacity = '0';
             }, czas);
+        }
+
+        // [FIX AAA] AGRESYWNY TELEGRAPHING DLA EVENTÓW (Brak opóźnień)
+        function pokazAgresywnyNapisEventu(tekst) {
+            const warstwaGracza = document.getElementById('in-game-ui');
+            let banner = document.getElementById('cinematic-banner-fast');
+            
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'cinematic-banner-fast';
+                banner.style.cssText = `
+                    position: absolute; top: 25%; left: 50%; transform: translateX(-50%);
+                    color: #e74c3c; font-family: 'Permanent Marker', cursive; font-size: clamp(25px, 4vw, 45px);
+                    text-shadow: 0 0 15px #e74c3c, 0 0 30px #000, 2px 2px 0 #000;
+                    text-align: center; z-index: 1000; pointer-events: none; width: 100%;
+                `;
+                if(warstwaGracza) warstwaGracza.appendChild(banner);
+            }
+            
+            banner.innerHTML = tekst;
+            banner.style.display = 'block';
+            
+            if (window.Grafika) window.Grafika.wywolajWstrzas(15);
+            
+            if (banner.timoutId) clearTimeout(banner.timoutId);
+            banner.timoutId = setTimeout(() => { banner.style.display = 'none'; }, 4000);
         }
 
         // 5. HYBRYDOWY SYSTEM STEROWANIA Z DETEKCJĄ AFK
@@ -872,7 +902,8 @@
         });
         
         socket.on('cinematicEvent', (tekst) => { 
-            pokazNapisKinowy(tekst, 5000); 
+            // [FIX AAA] Wypuszczamy potężny, agresywny napis, by od razu ostrzec przed wydarzeniem
+            pokazAgresywnyNapisEventu(tekst); 
             odpalDzwiek3D('alert', 0.6); 
             zrobAudioDucking();
         });
@@ -1040,9 +1071,6 @@
                                         mojGracz.score += zdobytaMasa; 
                                         StatystykiLokalne.zjedzoneKropki++;
                                         
-                                        // Odpalamy bez zacinania dzwiek eat.mp3 z Audio Poola!
-                                        odpalPlynnyDzwiekJedzenia(0.4); 
-                                        
                                         socket.emit('zgłośZjedzenieKropki', fid); 
                                     }
                                 });
@@ -1102,9 +1130,10 @@
                                 document.body.appendChild(flash);
                                 setTimeout(() => { flash.style.opacity = '0'; setTimeout(() => flash.remove(), 200); }, 50);
                                 if (window.Grafika && window.Grafika.wywolajWstrzas) window.Grafika.wywolajWstrzas(15);
-                            } else if (roznica >= 5) {
-                                // Masywne przybranie na wadze (zabójstwo gracza/drona z serwera, bo kropki za 1 pkt są filtrowane wyżej)
-                                odpalPlynnyDzwiekJedzenia(0.6); 
+                            } 
+                            // [FIX AAA] DŹWIĘK JEDZENIA ODPALANY NA PODSTAWIE PRZYROSTU MASY
+                            else if (roznica > 0) {
+                                if (!isMuted) SilnikAudio.grajMniam(roznica >= 5 ? 0.6 : 0.4); 
                             }
                         }
                         ostatniaMasa = mojGracz.score;

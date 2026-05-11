@@ -2,7 +2,7 @@
 // SERVER.JS - Autorytatywny Sędzia (Vibe Noir - Pancerna Architektura)
 // WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
 // ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
-// FIX AAA: Wdrożenie fizyki Formacji Drużynowych
+// FIX AAA: Wdrożenie fizyki Formacji Drużynowych, Zablokowanie Death Laga, Fizyczne Ściany, Noob Protection
 // ==========================================
 
 const express = require('express');
@@ -84,13 +84,19 @@ const WEAPONS = {
 // ==========================================
 const MenedzerEventow = {
     ostatniEvent: Date.now(),
-    interwal: 30000, // Pierwszy event odpali się po 30 sekundach!
+    interwal: 30000, 
     aktywnePromienie: [],
-    // [NOWOŚĆ AAA] Pula aktywnych czarnych dziur (Anomalii)
     aktywneAnomalie: [],
 
     aktualizuj: function(io, players, bots, foods, mapSize) {
         const teraz = Date.now();
+
+        // [FIX AAA] Inteligentny Timer - zatrzymuje się, gdy nie ma żywych graczy
+        const zyjacyGracze = Object.keys(players).filter(id => !players[id].isDead && players[id].mode !== 'CAMPAIGN');
+        if (zyjacyGracze.length === 0) {
+            this.ostatniEvent = teraz; 
+            return;
+        }
 
         // Odliczanie czasu do kolejnego eventu
         if (teraz - this.ostatniEvent > this.interwal) {
@@ -106,10 +112,10 @@ const MenedzerEventow = {
                 
                 // Zadawanie obrażeń - każdy w strefie traci 50% masy
                 Object.values(players).forEach(p => {
-                    if (p.isSafe) return; // Baza chroni przed promieniem
+                    if (p.isSafe || p.isDead) return; // Baza chroni przed promieniem
                     let dystans = Math.hypot(p.x - promien.x, p.y - promien.y);
                     if (dystans < promien.zasieg) {
-                        p.score = Math.floor(p.score * 0.5); // [POPRAWKA] Utrata połowy masy
+                        p.score = Math.floor(p.score * 0.5); 
                     }
                 });
                 return false; // Usuń promień po uderzeniu
@@ -121,8 +127,11 @@ const MenedzerEventow = {
         this.aktywneAnomalie = this.aktywneAnomalie.filter(anomalia => {
             if (teraz > anomalia.czasZakonczenia) return false;
 
+            // [FIX AAA] Faza Ostrzegawcza - przez pierwsze 5 sekund tylko straszy, nie wsysa
+            if (teraz < anomalia.czasStartu) return true;
+
             Object.values(players).forEach(p => {
-                if (p.isSafe || p.mode === 'CAMPAIGN') return; // Nie działa w bezpiecznej bazie i kampanii
+                if (p.isSafe || p.isDead || p.mode === 'CAMPAIGN') return; 
                 let dystans = Math.hypot(p.x - anomalia.x, p.y - anomalia.y);
                 if (dystans < anomalia.zasiegWysysania) {
                     // Wsysanie w kierunku centrum (im bliżej, tym mocniej)
@@ -134,7 +143,7 @@ const MenedzerEventow = {
                     // Ekstremalne zniszczenie w samym horyzoncie zdarzeń
                     if (dystans < 50) {
                         p.score -= 2;
-                        if (p.score < 0) { // [POPRAWKA] Śmierć poniżej 0 punktów
+                        if (p.score < 0) { 
                             io.emit('killEvent', { zabojca: "ANOMALIA OMEGA", ofiara: p.name });
                             triggerZgon(p.id, "ANOMALIĘ GRAWITACYJNĄ");
                         }
@@ -146,13 +155,12 @@ const MenedzerEventow = {
     },
 
     odpalLosowyEvent: function(io, players, bots, foods, mapSize) {
-        const klucze = Object.keys(players).filter(id => players[id].mode !== 'CAMPAIGN'); // Pijemy tylko do trybów PvP
+        const klucze = Object.keys(players).filter(id => players[id].mode !== 'CAMPAIGN'); 
         const liczbaGraczy = klucze.length;
         
-        if (liczbaGraczy === 0) return; // Jeśli serwer PvP jest pusty, AI idzie spać
+        if (liczbaGraczy === 0) return; 
 
         if (liczbaGraczy <= 3) {
-            // --- SCENARIUSZE DLA SAMOTNIKÓW (1-3 graczy) ---
             let szansa = Math.random();
             if (szansa > 0.6) {
                 // 1. ZŁOTY KONWÓJ (Loot Goblin)
@@ -182,12 +190,12 @@ const MenedzerEventow = {
                 io.emit('cinematicEvent', "WYKRYTO ANOMALIĘ GRAWITACYJNĄ. ZACHOWAJ DYSTANS OD CENTRUM!");
                 this.aktywneAnomalie.push({
                     x: mapSize / 2, y: mapSize / 2,
-                    zasiegWysysania: 1600, // Wielki zasięg
-                    czasZakonczenia: Date.now() + 20000 // Anomalia trwa 20 sekund
+                    zasiegWysysania: 1600, 
+                    czasStartu: Date.now() + 5000, // [FIX AAA] Rozgrzewka: 5 sekund na ucieczkę
+                    czasZakonczenia: Date.now() + 25000 // Anomalia trwa 20 sekund po rozgrzewce
                 });
             }
         } else {
-            // --- SCENARIUSZE DLA TŁUMU (4+ graczy) ---
             if (Math.random() > 0.5) {
                 // 1. ZRZUT ZAOPATRZENIA
                 io.emit('cinematicEvent', "ZRZUT ZAOPATRZENIA W CENTRUM MAPY ZA 5 SEKUND!");
@@ -254,7 +262,7 @@ class TrybFree {
         });
 
         nearby.players.forEach(p2 => {
-            if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE') return;
+            if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE' || p2.isDead) return;
             let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
             let r2 = 15 + Math.sqrt(Math.max(0, p2.score)) * 1.5;
             if (dist < pRadius && p.score > p2.score * 1.15) {
@@ -273,6 +281,8 @@ class TrybFree {
                 dodajMase(p, Math.floor(b.score * 0.5));
                 delete state.bots[b.id]; spawnBot();
             } else if (dist < bRadius && b.score > p.score * 1.15) {
+                if (p.score < 15) return; // [FIX AAA] Noob Protection: Drony ignorują graczy z masą poniżej 15
+                
                 io.emit('killEvent', { zabojca: b.name, ofiara: p.name });
                 b.score += Math.floor(p.score * 0.5);
                 triggerZgon(p.id, b.name);
@@ -283,9 +293,9 @@ class TrybFree {
             io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
             p.overcharge = 0;
             nearby.players.forEach(p2 => {
-                if (p.id !== p2.id && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
+                if (p.id !== p2.id && !p2.isDead && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
                     p2.score -= 50;
-                    if (p2.score < 0) triggerZgon(p2.id, p.name); // [POPRAWKA] Zabójcza Nova
+                    if (p2.score < 0) triggerZgon(p2.id, p.name); 
                 }
             });
             nearby.bots.forEach(b => {
@@ -330,7 +340,7 @@ class TrybTeams {
                     let dist = Math.hypot(p.x - b.x, p.y - b.y);
                     if(dist < 30) {
                         p.score -= 2; 
-                        if(p.score < 0) { // [POPRAWKA] Zgon od botów poniżej 0
+                        if(p.score < 0) { 
                             io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
                             triggerZgon(p.id, "Wroga Armia");
                         }
@@ -340,9 +350,7 @@ class TrybTeams {
         }
     }
 
-    // [FIX AAA] Kompletna FIZYKA formacji po stronie serwera!
     static aktualizujRoj(b, lider, nearby) {
-        // Znajdź pozycję tego drona w armii lidera
         let mojeBoty = nearby.bots.filter(ob => ob.ownerId === lider.id);
         let mojIndex = mojeBoty.findIndex(ob => ob.id === b.id);
         if (mojIndex === -1) mojIndex = 0;
@@ -350,9 +358,9 @@ class TrybTeams {
         let targetX = lider.x;
         let targetY = lider.y;
         let speed = 4.5;
-        let formacja = lider.aktywnaFormacja || 4; // 4 to domyślnie luźna
+        let formacja = lider.aktywnaFormacja || 4; 
         let rozstaw = 80;
-        let katLidera = lider.katRuchu || 0; // Kąt z myszki gracza
+        let katLidera = lider.katRuchu || 0; 
         
         if (lider.rozkazAktywny) {
             if (b.typBroni === 'miecz') {
@@ -371,8 +379,7 @@ class TrybTeams {
                 }
             }
         } else {
-            // FIZYKA FORMACJI - Serwer nakierowuje drony idealnie w kropki z kalkulatora
-            if (formacja === 1) { // Formacja V (Atak)
+            if (formacja === 1) { 
                 let i = mojIndex + 1;
                 let strona = i % 2 === 0 ? 1 : -1;
                 let rzad = Math.ceil(i / 2);
@@ -380,7 +387,7 @@ class TrybTeams {
                 let dystans = rzad * rozstaw;
                 targetX = lider.x + Math.cos(offsetKat) * dystans;
                 targetY = lider.y + Math.sin(offsetKat) * dystans;
-            } else if (formacja === 2) { // Mur Obrony
+            } else if (formacja === 2) { 
                 let startX = lider.x + Math.cos(katLidera) * rozstaw;
                 let startY = lider.y + Math.sin(katLidera) * rozstaw;
                 let liniaKat = katLidera + Math.PI / 2;
@@ -388,12 +395,12 @@ class TrybTeams {
                 let offset = (mojIndex - (ilosc-1)/2) * rozstaw;
                 targetX = startX + Math.cos(liniaKat) * offset;
                 targetY = startY + Math.sin(liniaKat) * offset;
-            } else if (formacja === 3) { // Koło
+            } else if (formacja === 3) { 
                 let ilosc = Math.max(1, mojeBoty.length);
                 let kat = (mojIndex / ilosc) * Math.PI * 2 + (Date.now()/1000); 
                 targetX = lider.x + Math.cos(kat) * rozstaw * 1.5;
                 targetY = lider.y + Math.sin(kat) * rozstaw * 1.5;
-            } else { // 4 - Luźna formacja
+            } else { 
                 targetX = lider.x;
                 targetY = lider.y;
             }
@@ -404,12 +411,10 @@ class TrybTeams {
                 if (distToTarget < 70) speed = 0; 
                 else speed = Math.min(6, distToTarget * 0.08); 
             } else {
-                // Szybki ruch do uporządkowanych formacji
                 if (distToTarget < 10) speed = 0;
                 else speed = Math.min(8, distToTarget * 0.2); 
             }
             
-            // Antykolizja
             nearby.bots.forEach(otherB => {
                 if (otherB.id !== b.id && otherB.ownerId === b.ownerId) {
                     if (Math.hypot(otherB.x - b.x, otherB.y - b.y) < 25) {
@@ -446,7 +451,6 @@ class TrybCampaign {
         let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
         let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
 
-        // PvE Zbieranie jedzenia
         nearby.foods.forEach(f => {
             if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
                 dodajMase(p, 1 * p.massMultiplier);
@@ -454,32 +458,28 @@ class TrybCampaign {
             }
         });
 
-        // Kolizje z rojem
         nearby.bots.forEach(b => {
             if (b.mode !== 'CAMPAIGN') return;
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
-            let bRadius = b.isBoss ? 50 : 25; // Znacznie większy hitbox Bossa
+            let bRadius = b.isBoss ? 50 : 25; 
             
             if (dist < pRadius + bRadius) {
                 if (!b.isBoss) {
-                    // Obrażenia od Kamikaze
                     p.score -= 5;
-                    b.score = 0; // Dron ginie przy zderzeniu
+                    b.score = 0; 
                     stanKampanii.liczbaDronow--;
-                    if (p.score < 0) triggerZgon(p.id, "Rój Maszyn"); // [POPRAWKA] Śmierć poniżej 0
+                    if (p.score < 0) triggerZgon(p.id, "Rój Maszyn"); 
                 } else {
-                    // Miażdżące obrażenia od Bossa przy kontakcie
                     p.score -= 2;
-                    if (p.score < 0) triggerZgon(p.id, "TYTAN AKT 1"); // [POPRAWKA] Śmierć poniżej 0
+                    if (p.score < 0) triggerZgon(p.id, "TYTAN AKT 1"); 
                 }
             }
         });
     }
 
     static zarzadzajFalami() {
-        let zyjacyGracze = Object.values(state.players).filter(p => p.mode === 'CAMPAIGN');
+        let zyjacyGracze = Object.values(state.players).filter(p => p.mode === 'CAMPAIGN' && !p.isDead);
         if (zyjacyGracze.length === 0) {
-            // Czyszczenie mapy z roju, gdy wszyscy przegrają
             stanKampanii.bossAktywny = false;
             stanKampanii.bossId = null;
             stanKampanii.liczbaDronow = 0;
@@ -492,19 +492,16 @@ class TrybCampaign {
         let maxScore = Math.max(...zyjacyGracze.map(p => p.score));
         let targetPlayer = zyjacyGracze.reduce((prev, current) => (prev.score > current.score) ? prev : current);
 
-        // Wywołanie Bossa, gdy przekroczysz 300 masy
         if (maxScore >= 300 && !stanKampanii.bossAktywny) {
             this.wezwijBossa(targetPlayer.x, targetPlayer.y);
             stanKampanii.bossAktywny = true;
             
-            // Czyszczenie pomniejszych dronów przed walką z bossem
             for (let id in state.bots) {
                 if (state.bots[id].mode === 'CAMPAIGN' && !state.bots[id].isBoss) delete state.bots[id];
             }
             stanKampanii.liczbaDronow = 0;
         } 
         
-        // Spawn dronów narastający w czasie, dopóki nie ma Bossa
         if (!stanKampanii.bossAktywny && stanKampanii.liczbaDronow < (maxScore / 5) + 5 && Date.now() - stanKampanii.ostatniSpawn > 1000) {
             this.spawnKamikaze(targetPlayer);
             stanKampanii.ostatniSpawn = Date.now();
@@ -514,7 +511,7 @@ class TrybCampaign {
     static spawnKamikaze(cel) {
         let id = `bot_camp_${++entityIdCounter}`;
         let angle = Math.random() * Math.PI * 2;
-        let x = cel.x + Math.cos(angle) * 1200; // Respią się poza ekranem gracza
+        let x = cel.x + Math.cos(angle) * 1200; 
         let y = cel.y + Math.sin(angle) * 1200;
 
         state.bots[id] = {
@@ -531,8 +528,8 @@ class TrybCampaign {
         stanKampanii.bossId = id;
         state.bots[id] = {
             id: id, mode: 'CAMPAIGN', isBoss: true,
-            x: x, y: y - 800, // Zlatuje z góry
-            score: 1500, // Twardy skurczybyk
+            x: x, y: y - 800, 
+            score: 1500, 
             maxScore: 1500,
             skin: 'ninja', name: 'TYTAN: OMEGA',
             angle: 0, state: 'BOSS_PHASE_1',
@@ -542,7 +539,7 @@ class TrybCampaign {
     }
 
     static aktualizujBossa(boss, players) {
-        let targets = players.filter(p => p.mode === 'CAMPAIGN');
+        let targets = players.filter(p => p.mode === 'CAMPAIGN' && !p.isDead);
         if (targets.length === 0) return;
         
         let closest = targets[0];
@@ -554,13 +551,11 @@ class TrybCampaign {
 
         let katDoGracza = Math.atan2(closest.y - boss.y, closest.x - boss.x);
 
-        // [NOWOŚĆ AAA] FAZA 3 OSTATECZNA: Poniżej 20% zdrowia Boss wpada w SZAŁ
         if (boss.score < boss.maxScore * 0.2) {
             boss.state = 'BOSS_PHASE_3';
-            boss.katObrotu += 0.15; // Bardzo szybki obrót, tryb szału
+            boss.katObrotu += 0.15; 
             boss.angle = boss.katObrotu;
             
-            // Faza 3: Strzela laserami jak minigun co 150ms
             if (Date.now() - boss.ostatniStrzal > 150) {
                 for(let i=0; i<3; i++) { 
                     let pid = ++entityIdCounter;
@@ -574,19 +569,17 @@ class TrybCampaign {
                 }
                 boss.ostatniStrzal = Date.now();
             }
-            // Mimo strzelania, agresywnie napiera
             let speed = 4.0;
             boss.x += Math.cos(katDoGracza) * speed;
             boss.y += Math.sin(katDoGracza) * speed;
 
-        // FAZA 2: Poniżej 50% zdrowia zaczyna strzelać laserami dookoła
         } else if (boss.score < boss.maxScore / 2) {
             boss.state = 'BOSS_PHASE_2';
-            boss.katObrotu += 0.08; // Powolny obrót dział
+            boss.katObrotu += 0.08; 
             boss.angle = boss.katObrotu;
             
             if (Date.now() - boss.ostatniStrzal > 500) {
-                for(let i=0; i<4; i++) { // 4 lasery w 4 strony
+                for(let i=0; i<4; i++) { 
                     let pid = ++entityIdCounter;
                     let fireAngle = boss.katObrotu + (i * Math.PI / 2);
                     state.projectiles[pid] = {
@@ -599,14 +592,12 @@ class TrybCampaign {
                 boss.ostatniStrzal = Date.now();
             }
         } else {
-            // FAZA 1: Agresywny pościg
             let speed = 3.5;
             boss.x += Math.cos(katDoGracza) * speed;
             boss.y += Math.sin(katDoGracza) * speed;
             boss.angle = katDoGracza;
         }
 
-        // Śmierć Bossa
         if (boss.score <= 0) {
             targets.forEach(p => {
                 io.to(p.id).emit('gameOver', { finalScore: p.score, killerName: "VICTORY", message: "Pokonałeś Tytana. Dostęp do Aktu II przyznany." });
@@ -646,7 +637,7 @@ io.on('connection', (socket) => {
             spawnX = pTeam === 'RED' ? 500 + (Math.random() * 400 - 200) : 5500 + (Math.random() * 400 - 200);
             spawnY = 3000 + (Math.random() * 400 - 200);
         } else if (data.mode === 'CAMPAIGN') {
-            spawnX = 3000; // Środek mapy dla Kampanii
+            spawnX = 3000; 
             spawnY = 3000;
         } else if (data.mode === 'FREE' && data.spawnZone) {
             if (data.spawnZone === 'nw') { spawnX = Math.random() * 2000; spawnY = Math.random() * 2000; }
@@ -657,7 +648,7 @@ io.on('connection', (socket) => {
 
         state.players[socket.id] = {
             id: socket.id,
-            name: String(data.name || "Nieznany").substring(0, 16), // [FAZA 1 FIX] Sanityzacja długości nicku
+            name: String(data.name || "Nieznany").substring(0, 16), 
             skin: data.skin || 'standard',
             mode: data.mode || 'FREE',
             team: pTeam,
@@ -666,10 +657,12 @@ io.on('connection', (socket) => {
             baseSpeed: spd, massMultiplier: mult,
             activeWeapon: 'sword',
             overcharge: 0,
-            isShielding: false, isSafe: false,
+            isShielding: false, 
+            isSafe: false, 
+            isDead: false, // [FIX AAA] Flaga weryfikująca stan życia
             katRuchu: 0, dystansKursora: 0, rozkazAktywny: false,
-            aktywnaFormacja: 4, // [NOWOŚĆ] Domyślna formacja
-            ostatniStrzal: 0 // [FAZA 1 FIX] Zmienna do ochrony przed spamem
+            aktywnaFormacja: 4, 
+            ostatniStrzal: 0 
         };
         socket.emit('init', { id: socket.id, team: pTeam });
     });
@@ -677,13 +670,11 @@ io.on('connection', (socket) => {
     socket.on('ruchGraczaMyszka', (dane) => {
         let p = state.players[socket.id];
         if (p) {
-            // [FAZA 1 FIX] Sanityzacja (Klamrowanie typu) ucinająca exploity NaN
             p.katRuchu = Number(dane.kat) || 0;
             p.dystansKursora = Number(dane.dystans) || 0;
         }
     });
 
-    // [NOWOŚĆ AAA] ODBIORNIK FORMACJI OD KLIENTA!
     socket.on('zmianaFormacji', (formacjaId) => {
         let p = state.players[socket.id];
         if (p && p.mode === 'TEAMS') {
@@ -692,20 +683,17 @@ io.on('connection', (socket) => {
         }
     });
 
-    // <--- [NOWOŚĆ AAA] NASŁUCHIWANIE NA PREDYKCJĘ ZJEDZENIA (ROZWIĄZUJE PROBLEM LAGÓW Z KROPKAMI) --->
     socket.on('zgłośZjedzenieKropki', (fid) => {
         let p = state.players[socket.id];
-        if (p && !p.isSafe && state.foods[fid]) {
+        if (p && !p.isSafe && !p.isDead && state.foods[fid]) {
             let f = state.foods[fid];
-            // Walidacja odległości na wypadek cheaterów (z marginesem +40px na opóźnienia sieci)
             let pRadius = Math.min(20 + Math.sqrt(Math.max(10, p.score)) * 2, 65) + 40; 
             let dist = Math.hypot(p.x - f.x, p.y - f.y);
             
             if (dist <= pRadius) {
-                // Potwierdzenie autoryzacji zjedzenia dla serwera!
                 dodajMase(p, (p.mode === 'TEAMS' ? 2 : 1) * p.massMultiplier);
                 delete state.foods[fid];
-                spawnFood(); // Uzupełniamy świat o nową kropkę
+                spawnFood(); 
             } else {
                 console.log(`[ ANTI-CHEAT ] Podejrzane zjedzenie u gracza ${p.name} (Zbyt duży dystans: ${Math.floor(dist)} > ${Math.floor(pRadius)})`);
             }
@@ -714,12 +702,10 @@ io.on('connection', (socket) => {
 
     socket.on('rzutOszczepem', (dane) => {
         let p = state.players[socket.id];
-        if (p && !p.isSafe) { 
-            
-            // [FAZA 1 FIX] Server-Side Authority (Ochrona przed auto-clickerami i crash-exploitami)
+        if (p && !p.isSafe && !p.isDead) { 
             const teraz = Date.now();
-            let limitCzasowy = p.mode === 'TEAMS' ? 500 : 200; // Twardy narzut
-            if (teraz - p.ostatniStrzal < limitCzasowy) return; // Bezlitosne ignorowanie spamu
+            let limitCzasowy = p.mode === 'TEAMS' ? 500 : 200; 
+            if (teraz - p.ostatniStrzal < limitCzasowy) return; 
             p.ostatniStrzal = teraz;
 
             let celKat = Number(dane.kat);
@@ -742,7 +728,7 @@ io.on('connection', (socket) => {
 
     socket.on('rozkazSpecjalny', () => {
         let p = state.players[socket.id];
-        if (p && p.mode === 'TEAMS') {
+        if (p && p.mode === 'TEAMS' && !p.isDead) {
             p.rozkazAktywny = true;
             setTimeout(() => { if(state.players[p.id]) p.rozkazAktywny = false; }, 2000); 
         }
@@ -750,7 +736,7 @@ io.on('connection', (socket) => {
 
     socket.on('buyShopItem', (item) => {
         let p = state.players[socket.id];
-        if (p && p.isSafe) { 
+        if (p && p.isSafe && !p.isDead) { 
             if (p.mode === 'TEAMS') {
                 let shopCost = 50; 
                 if (p.score >= shopCost) {
@@ -771,7 +757,6 @@ io.on('connection', (socket) => {
         }
     });
 
-    // [FAZA 1 FIX] PONG TEST DO BADAŃ PINGU W TRYBY.JS
     socket.on('pingTest', (timestamp) => {
         socket.emit('pongTest', timestamp);
     });
@@ -789,8 +774,6 @@ io.on('connection', (socket) => {
 setInterval(() => {
     state.tickCounter++;
 
-    // 1. SPATIAL HASHING (FAZA 1 FIX: Prealokacja i odciążenie RAM)
-    // Zamiast tworzyć setki obiektów co tick, czyścimy tylko ich zawartość
     for (let key in preallocatedGrid) {
         preallocatedGrid[key].players.length = 0;
         preallocatedGrid[key].bots.length = 0;
@@ -804,7 +787,8 @@ setInterval(() => {
         preallocatedGrid[key][type].push(entity);
     }
     
-    Object.values(state.players).forEach(p => addToGrid(p, 'players'));
+    // [FIX AAA] Nie dodajemy martwych graczy do siatki kolizji
+    Object.values(state.players).forEach(p => { if (!p.isDead) addToGrid(p, 'players') });
     Object.values(state.bots).forEach(b => addToGrid(b, 'bots'));
     Object.values(state.foods).forEach(f => addToGrid(f, 'foods'));
 
@@ -828,6 +812,8 @@ setInterval(() => {
     for (let pId in state.players) {
         let p = state.players[pId];
         
+        if (p.isDead) continue; // [FIX AAA] Pomijanie martwych graczy zatrzymuje lagi!
+
         p.isSafe = false; 
 
         if (p.mode === 'FREE') {
@@ -841,7 +827,7 @@ setInterval(() => {
             
             if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
                 p.score -= 2; 
-                if (p.score < 0) { // [POPRAWKA] Śmierć poniżej 0
+                if (p.score < 0) { 
                     io.emit('killEvent', { zabojca: "System Obronny Bazy", ofiara: p.name });
                     triggerZgon(p.id, "System Obronny Bazy");
                     continue; 
@@ -863,12 +849,9 @@ setInterval(() => {
             let nextX = p.x + Math.cos(p.katRuchu) * speed;
             let nextY = p.y + Math.sin(p.katRuchu) * speed;
 
-            if (nextX < 0 || nextX > limit || nextY < 0 || nextY > limit) {
-                triggerZgon(p.id, "Strefę Śmierci (Krawędź)");
-            } else {
-                p.x = nextX;
-                p.y = nextY;
-            }
+            // [FIX AAA] Fizyczne ściany mapy! Zamiast uśmiercać za linią, gracz się ślizga po granicy.
+            p.x = Math.max(10, Math.min(limit - 10, nextX));
+            p.y = Math.max(10, Math.min(limit - 10, nextY));
         }
     }
 
@@ -889,13 +872,13 @@ setInterval(() => {
         let hit = false;
 
         nearby.players.forEach(p => {
-            if (p.isSafe) return; 
+            if (p.isSafe || p.isDead) return; 
             if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
                 if (proj.mode === 'TEAMS' && p.team === proj.team) return; 
-                if (proj.mode === 'CAMPAIGN' && proj.team === 'BOSS') return; // Strzały bossa nie ranią bossa
+                if (proj.mode === 'CAMPAIGN' && proj.team === 'BOSS') return; 
                 if (!p.isShielding) {
                     p.score -= proj.damage;
-                    if (p.score < 0) { // [POPRAWKA] Pociski śmiertelne poniżej 0
+                    if (p.score < 0) { 
                         let killer = state.players[proj.ownerId] ? state.players[proj.ownerId].name : "Zabłąkany Pocisk";
                         io.emit('killEvent', { zabojca: killer, ofiara: p.name });
                         triggerZgon(p.id, killer);
@@ -906,7 +889,7 @@ setInterval(() => {
         });
 
         nearby.bots.forEach(b => {
-            let hitbox = 30 + (b.isBoss ? 40 : 0); // Boss ma ogromny hitbox
+            let hitbox = 30 + (b.isBoss ? 40 : 0); 
             if (Math.hypot(b.x - proj.x, b.y - proj.y) < hitbox) {
                 if (proj.mode === 'TEAMS' && b.team === proj.team) return;
                 if (proj.mode === 'CAMPAIGN' && b.isBoss && proj.team === 'BOSS') return; 
@@ -928,33 +911,29 @@ setInterval(() => {
             continue;
         }
 
-        // Nowość: Obsługa logiki Kampanii
         if (b.mode === 'CAMPAIGN') {
             if (b.isBoss) {
                 TrybCampaign.aktualizujBossa(b, Object.values(state.players));
             } else {
                 let cel = state.players[b.targetId];
-                if (cel && cel.mode === 'CAMPAIGN') {
+                if (cel && cel.mode === 'CAMPAIGN' && !cel.isDead) {
                     let speed = 5.0;
                     b.angle = Math.atan2(cel.y - b.y, cel.x - b.x);
                     b.x += Math.cos(b.angle) * speed;
                     b.y += Math.sin(b.angle) * speed;
                 } else {
-                    b.score = 0; // Jeśli cel zginął, dron też ulega autodestrukcji
+                    b.score = 0; 
                     stanKampanii.liczbaDronow--;
                 }
             }
-            continue; // Pomijamy zwykłą logikę dla dronów kampanii
+            continue; 
         }
 
-        // --- INIEKCJA LOGIKI EVENTÓW GLOBALNYCH ---
         if (b.name === "ZŁOTY DRON") {
-            // Złoty Konwój - Szybko ucieka i gubi masę
             b.angle += (Math.random() - 0.5) * 0.2; 
             b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * 8));
             b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * 8));
             
-            // Szansa na upuszczenie kulek masy podczas ucieczki
             if (Math.random() < 0.1) {
                 let idF = ++entityIdCounter;
                 state.foods[idF] = { id: idF, x: b.x, y: b.y };
@@ -963,13 +942,12 @@ setInterval(() => {
         }
 
         if (b.name === "ROBAK") {
-            // Przebudzenie Roju - Agresywnie szukają jakiegokolwiek gracza w okolicy
             let speed = 4.5;
             let nearby = getNearby(b.x, b.y);
             let closestDist = Infinity, targetPlayer = null;
             
             nearby.players.forEach(p => {
-                if (p.isSafe || p.mode !== b.mode) return;
+                if (p.isSafe || p.isDead || p.mode !== b.mode) return;
                 let dist = Math.hypot(p.x - b.x, p.y - b.y);
                 if (dist < 1000 && dist < closestDist) { closestDist = dist; targetPlayer = p; }
             });
@@ -980,9 +958,8 @@ setInterval(() => {
             b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
             continue;
         }
-        // ------------------------------------------
 
-        if (b.ownerId && state.players[b.ownerId]) {
+        if (b.ownerId && state.players[b.ownerId] && !state.players[b.ownerId].isDead) {
             let nearby = getNearby(b.x, b.y);
             TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby);
         } else {
@@ -990,7 +967,7 @@ setInterval(() => {
             let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
 
             nearby.players.forEach(p => {
-                if (p.isSafe || p.mode !== 'FREE') return; // Dzikie boty atakują tylko we FREE
+                if (p.isSafe || p.isDead || p.mode !== 'FREE') return; 
                 let dist = Math.hypot(p.x - b.x, p.y - b.y);
                 if (dist < 500) { 
                     if (b.score > p.score * 1.15) {
@@ -1022,11 +999,14 @@ setInterval(() => {
 
     // 5. WYSYŁKA
     io.emit('serverTick', {
-        serverTime: Date.now(), // [FAZA 1 FIX] Master Clock Sync dla Maszyny Stanów
+        serverTime: Date.now(), 
         players: state.players,
         bots: state.bots,
         projectiles: state.projectiles,
-        foods: state.tickCounter % 30 === 0 ? state.foods : null 
+        foods: state.tickCounter % 30 === 0 ? state.foods : null,
+        // [FIX AAA] Rozgłaszanie eventów graficznych do klientów
+        anomalie: MenedzerEventow.aktywneAnomalie,
+        promienie: MenedzerEventow.aktywnePromienie
     });
 
 }, 33); 
@@ -1046,7 +1026,14 @@ function dodajMase(gracz, ilosc) {
 
 async function triggerZgon(deadId, killerName) {
     const p = state.players[deadId];
-    if (p) {
+    // [FIX AAA] Zablokowanie Death Laga! Giniesz tylko raz.
+    if (p && !p.isDead) {
+        p.isDead = true; 
+        
+        // Natychmiastowe wyrzucenie ciała poza widok mapy, żeby nie kolidowało przez te 1.5s
+        p.x = -10000;
+        p.y = -10000;
+
         let score = Math.floor(p.score);
         console.log(`[ ŚMIERĆ ] ${p.name} poległ. Pytam Qwen o pocieszenie...`);
         
@@ -1056,7 +1043,7 @@ async function triggerZgon(deadId, killerName) {
 
         let msg = await getAIWellbeingMessage(score);
         io.to(deadId).emit('gameOver', { finalScore: score, killerName: killerName, message: msg });
-        delete state.players[deadId];
+        delete state.players[deadId]; // Ostateczne zwolnienie z pamięci RAM po wysłaniu ekranu
     }
 }
 

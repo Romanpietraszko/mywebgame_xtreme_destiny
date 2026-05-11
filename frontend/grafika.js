@@ -1,5 +1,7 @@
 // ==========================================
 // GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 8.1: Ultimate Polish - Insta-Aim, Pociski i Horror Roju)
+// DODANO: Warstwowe renderowanie Eventów Globalnych (Anomalie i Promienie Jonowe)
+// NAPRAWIONO: Wyciek pamięci w pętli plamyPolaBitwy
 // ==========================================
 
 window.Grafika = (function() {
@@ -381,15 +383,17 @@ window.Grafika = (function() {
             ctx.stroke();
         }
 
-        plamyPolaBitwy.forEach((plama, i) => {
+        // [NAPRAWIONO]: Poprawne usuwanie elementów z tablicy w pętli
+        for (let i = plamyPolaBitwy.length - 1; i >= 0; i--) {
+            let plama = plamyPolaBitwy[i];
             plama.zycie -= 0.001 * dt;
-            if (plama.zycie <= 0) { plamyPolaBitwy.splice(i, 1); return; }
-            if (!czyWidoczny(plama.x, plama.y, plama.r)) return;
+            if (plama.zycie <= 0) { plamyPolaBitwy.splice(i, 1); continue; }
+            if (!czyWidoczny(plama.x, plama.y, plama.r)) continue;
             ctx.save(); ctx.translate(plama.x, plama.y); ctx.rotate(plama.kat);
             ctx.fillStyle = plama.isBoss ? `rgba(155, 89, 182, ${plama.zycie * 0.4})` : `rgba(20, 20, 25, ${plama.zycie * 0.6})`;
             ctx.beginPath(); ctx.ellipse(0, 0, plama.r, plama.r * 0.6, 0, 0, TWO_PI); ctx.fill();
             ctx.restore();
-        });
+        }
 
         // Rysowanie z pieczątek (Zamek/Bazy)
         if (tryb === 'FREE' && czyWidoczny(2000, 2000, 400)) {
@@ -814,6 +818,69 @@ window.Grafika = (function() {
 
             rysujMape(tryb, limitWielkosci, dt);
 
+            // ==========================================
+            // WARSTWA 1: OSTRZEŻENIA O EVENTACH (POD GRACZAMI)
+            // ==========================================
+            if (stanSerwera.anomalie) {
+                stanSerwera.anomalie.forEach(anomalia => {
+                    if (!czyWidoczny(anomalia.x, anomalia.y, anomalia.zasiegWysysania)) return;
+                    ctx.save(); 
+                    ctx.translate(anomalia.x | 0, anomalia.y | 0);
+                    
+                    // Fioletowa, pulsująca strefa wsysania
+                    ctx.beginPath(); 
+                    ctx.arc(0, 0, anomalia.zasiegWysysania, 0, TWO_PI);
+                    ctx.fillStyle = 'rgba(142, 68, 173, 0.05)'; 
+                    ctx.fill();
+                    
+                    // Wirująca, przerywana linia graniczna
+                    ctx.strokeStyle = `rgba(142, 68, 173, ${0.3 + Math.sin(now/200)*0.1})`;
+                    ctx.lineWidth = 3; 
+                    ctx.setLineDash([15, 20]); 
+                    ctx.lineDashOffset = -now / 20; 
+                    ctx.stroke();
+                    ctx.restore();
+                });
+            }
+
+            if (stanSerwera.promienie) {
+                stanSerwera.promienie.forEach(promien => {
+                    if (!czyWidoczny(promien.x, promien.y, promien.zasieg)) return;
+                    let timeRemaining = promien.czasUderzenia - (stanSerwera.serverTime || Date.now());
+                    
+                    if (timeRemaining > 0) {
+                        ctx.save(); 
+                        ctx.translate(promien.x | 0, promien.y | 0);
+                        
+                        // Mruganie przyspieszające przed wybuchem
+                        let blinkSpeed = Math.max(50, timeRemaining / 10);
+                        let isBlinking = Math.floor(now / blinkSpeed) % 2 === 0;
+
+                        ctx.beginPath(); 
+                        ctx.arc(0, 0, promien.zasieg, 0, TWO_PI);
+                        ctx.fillStyle = isBlinking ? 'rgba(231, 76, 60, 0.15)' : 'rgba(231, 76, 60, 0.05)'; 
+                        ctx.fill();
+                        
+                        ctx.strokeStyle = isBlinking ? '#e74c3c' : '#c0392b'; 
+                        ctx.lineWidth = 4; 
+                        ctx.setLineDash([]); 
+                        ctx.stroke();
+
+                        // Obracający się krzyż celowniczy
+                        ctx.rotate(now / 1000);
+                        ctx.beginPath(); 
+                        ctx.moveTo(-promien.zasieg, 0); ctx.lineTo(-promien.zasieg + 50, 0);
+                        ctx.moveTo(promien.zasieg, 0); ctx.lineTo(promien.zasieg - 50, 0);
+                        ctx.moveTo(0, -promien.zasieg); ctx.lineTo(0, -promien.zasieg + 50);
+                        ctx.moveTo(0, promien.zasieg); ctx.lineTo(0, promien.zasieg - 50);
+                        ctx.lineWidth = 8; 
+                        ctx.stroke();
+                        
+                        ctx.restore();
+                    }
+                });
+            }
+
             // GŁĘBIA (Y-SORTING)
             let KolejkaY = [];
 
@@ -846,6 +913,68 @@ window.Grafika = (function() {
                 else if (element.typObj === 'bot') { rysujBota(element.dane); } 
                 else if (element.typObj === 'gracz') { rysujPostac(element.dane, element.isMe); }
             });
+
+            // ==========================================
+            // WARSTWA 2: EFEKTY DESTRUKCJI (NAD GRACZAMI)
+            // ==========================================
+            if (stanSerwera.anomalie) {
+                stanSerwera.anomalie.forEach(anomalia => {
+                    if (!czyWidoczny(anomalia.x, anomalia.y, 180)) return;
+                    ctx.save(); 
+                    ctx.translate(anomalia.x | 0, anomalia.y | 0);
+                    
+                    // Rdzeń Czarnej Dziury (zoptymalizowany, brak ciężkich gradientów)
+                    ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); 
+                    ctx.fillStyle = 'rgba(142, 68, 173, 0.2)'; ctx.fill(); // Fioletowe Halo
+                    
+                    ctx.beginPath(); ctx.arc(0, 0, 140, 0, TWO_PI); 
+                    ctx.fillStyle = 'rgba(50, 10, 80, 0.8)'; ctx.fill(); // Gęsty mrok
+                    
+                    ctx.beginPath(); ctx.arc(0, 0, 90, 0, TWO_PI); 
+                    ctx.fillStyle = '#000000'; ctx.fill(); // Absolutna czerń
+                    
+                    // Cząsteczki wsysane do środka
+                    ctx.fillStyle = '#fff';
+                    for (let i = 0; i < 8; i++) {
+                        let pDist = 180 - ((now / 4 + i * 22) % 180);
+                        let pAng = (i * Math.PI / 4) + (now / 150);
+                        ctx.beginPath(); 
+                        ctx.arc(Math.cos(pAng) * pDist, Math.sin(pAng) * pDist, 3, 0, TWO_PI); 
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                });
+            }
+
+            if (stanSerwera.promienie) {
+                stanSerwera.promienie.forEach(promien => {
+                    let timeRemaining = promien.czasUderzenia - (stanSerwera.serverTime || Date.now());
+                    
+                    // Rysuj tylko w momencie uderzenia (trwa 1 sekundę po czasie zero)
+                    if (timeRemaining <= 0 && timeRemaining > -1000) {
+                        if (!czyWidoczny(promien.x, promien.y, promien.zasieg)) return;
+                        
+                        ctx.save(); 
+                        ctx.translate(promien.x | 0, promien.y | 0);
+                        
+                        let intensity = 1 - (Math.abs(timeRemaining) / 1000); 
+                        
+                        // Oślepiający biały wybuch przykrywający wszystko
+                        ctx.beginPath(); 
+                        ctx.arc(0, 0, promien.zasieg, 0, TWO_PI);
+                        ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`; 
+                        ctx.fill();
+                        
+                        // Ognisty środek fali uderzeniowej
+                        ctx.beginPath(); 
+                        ctx.arc(0, 0, promien.zasieg * intensity, 0, TWO_PI);
+                        ctx.fillStyle = `rgba(241, 196, 15, ${intensity})`; 
+                        ctx.fill();
+                        
+                        ctx.restore();
+                    }
+                });
+            }
 
             if (stanSerwera.projectiles) {
                 Object.values(stanSerwera.projectiles).forEach(proj => {
