@@ -3,6 +3,7 @@
 // WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
 // ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
 // FIX AAA: Wdrożenie fizyki Formacji Drużynowych, Zablokowanie Death Laga, Fizyczne Ściany, Noob Protection
+// RPG AAA: System Rozwoju (Drzewko Skilli) w locie
 // ==========================================
 
 const express = require('express');
@@ -91,56 +92,46 @@ const MenedzerEventow = {
     aktualizuj: function(io, players, bots, foods, mapSize) {
         const teraz = Date.now();
 
-        // [FIX AAA] Inteligentny Timer - zatrzymuje się, gdy nie ma żywych graczy
         const zyjacyGracze = Object.keys(players).filter(id => !players[id].isDead && players[id].mode !== 'CAMPAIGN');
         if (zyjacyGracze.length === 0) {
             this.ostatniEvent = teraz; 
             return;
         }
 
-        // Odliczanie czasu do kolejnego eventu
         if (teraz - this.ostatniEvent > this.interwal) {
             this.odpalLosowyEvent(io, players, bots, foods, mapSize);
             this.ostatniEvent = teraz;
-            this.interwal = 60000 + Math.random() * 40000; // Każdy kolejny event co 60-100 sekund
+            this.interwal = 60000 + Math.random() * 40000; 
         }
 
-        // Fizyka uderzenia z kosmosu (Promień Jonowy)
         this.aktywnePromienie = this.aktywnePromienie.filter(promien => {
             if (teraz >= promien.czasUderzenia) {
-                io.emit('wstrzasKamery', 40); // Potężne trzęsienie ekranem u wszystkich
-                
-                // Zadawanie obrażeń - każdy w strefie traci 50% masy
+                io.emit('wstrzasKamery', 40); 
                 Object.values(players).forEach(p => {
-                    if (p.isSafe || p.isDead) return; // Baza chroni przed promieniem
+                    if (p.isSafe || p.isDead) return; 
                     let dystans = Math.hypot(p.x - promien.x, p.y - promien.y);
                     if (dystans < promien.zasieg) {
                         p.score = Math.floor(p.score * 0.5); 
                     }
                 });
-                return false; // Usuń promień po uderzeniu
+                return false; 
             }
             return true; 
         });
 
-        // [NOWOŚĆ AAA] Fizyka Anomalii Grawitacyjnej (Czarna Dziura)
         this.aktywneAnomalie = this.aktywneAnomalie.filter(anomalia => {
             if (teraz > anomalia.czasZakonczenia) return false;
-
-            // [FIX AAA] Faza Ostrzegawcza - przez pierwsze 5 sekund tylko straszy, nie wsysa
             if (teraz < anomalia.czasStartu) return true;
 
             Object.values(players).forEach(p => {
                 if (p.isSafe || p.isDead || p.mode === 'CAMPAIGN') return; 
                 let dystans = Math.hypot(p.x - anomalia.x, p.y - anomalia.y);
                 if (dystans < anomalia.zasiegWysysania) {
-                    // Wsysanie w kierunku centrum (im bliżej, tym mocniej)
                     let silyWsysania = (anomalia.zasiegWysysania - dystans) / anomalia.zasiegWysysania;
                     let kat = Math.atan2(anomalia.y - p.y, anomalia.x - p.x);
-                    p.x += Math.cos(kat) * (silyWsysania * 5); // Przesunięcie siłowe
+                    p.x += Math.cos(kat) * (silyWsysania * 5); 
                     p.y += Math.sin(kat) * (silyWsysania * 5);
                     
-                    // Ekstremalne zniszczenie w samym horyzoncie zdarzeń
                     if (dystans < 50) {
                         p.score -= 2;
                         if (p.score < 0) { 
@@ -163,7 +154,6 @@ const MenedzerEventow = {
         if (liczbaGraczy <= 3) {
             let szansa = Math.random();
             if (szansa > 0.6) {
-                // 1. ZŁOTY KONWÓJ (Loot Goblin)
                 io.emit('cinematicEvent', "WYKRYTO ZŁOTEGO DRONA! ZNISZCZ GO ZANIM UCIEKNIE!");
                 let idGoblin = 'bot_' + (++entityIdCounter);
                 bots[idGoblin] = {
@@ -173,7 +163,6 @@ const MenedzerEventow = {
                     angle: Math.random() * Math.PI * 2, state: 'FLEE', ownerId: null, typBroni: null
                 };
             } else if (szansa > 0.3) {
-                // 2. PRZEBUDZENIE ROJU
                 io.emit('cinematicEvent', "PRZEBUDZENIE ROJU! INSEKTY ATAKUJĄ!");
                 let cel = players[klucze[Math.floor(Math.random() * liczbaGraczy)]];
                 for (let i = 0; i < 8; i++) {
@@ -186,18 +175,16 @@ const MenedzerEventow = {
                     };
                 }
             } else {
-                // [NOWOŚĆ AAA] 3. ANOMALIA GRAWITACYJNA
                 io.emit('cinematicEvent', "WYKRYTO ANOMALIĘ GRAWITACYJNĄ. ZACHOWAJ DYSTANS OD CENTRUM!");
                 this.aktywneAnomalie.push({
                     x: mapSize / 2, y: mapSize / 2,
                     zasiegWysysania: 1600, 
-                    czasStartu: Date.now() + 5000, // [FIX AAA] Rozgrzewka: 5 sekund na ucieczkę
-                    czasZakonczenia: Date.now() + 25000 // Anomalia trwa 20 sekund po rozgrzewce
+                    czasStartu: Date.now() + 5000, 
+                    czasZakonczenia: Date.now() + 25000 
                 });
             }
         } else {
             if (Math.random() > 0.5) {
-                // 1. ZRZUT ZAOPATRZENIA
                 io.emit('cinematicEvent', "ZRZUT ZAOPATRZENIA W CENTRUM MAPY ZA 5 SEKUND!");
                 setTimeout(() => {
                     for(let i=0; i < 50; i++) {
@@ -210,7 +197,6 @@ const MenedzerEventow = {
                     }
                 }, 5000);
             } else {
-                // 2. PROMIEŃ JONOWY W BAZĘ
                 io.emit('cinematicEvent', "UWAGA! UDERZENIE JONOWE W CENTRUM ZA 5S! UCIEKAJ!");
                 this.aktywnePromienie.push({ 
                     x: mapSize/2, y: mapSize/2, 
@@ -219,6 +205,49 @@ const MenedzerEventow = {
                 });
             }
         }
+    }
+};
+
+// ==========================================
+// [MODUŁ AAA] DRZEWKO UMIEJĘTNOŚCI (RPG)
+// ==========================================
+const SystemRozwoju = {
+    sprawdzAwanse: function(p, socket) {
+        if (p.isDead || p.mode === 'CAMPAIGN') return;
+
+        if (p.score >= 50 && p.poziomRozwoju === 0) {
+            p.poziomRozwoju = 1; p.oczekujacyAwans = 1;
+            if(socket) socket.emit('awansDostepny', { poziom: 1, tryb: p.mode });
+        } else if (p.score >= 150 && p.poziomRozwoju === 1) {
+            p.poziomRozwoju = 2; p.oczekujacyAwans = 2;
+            if(socket) socket.emit('awansDostepny', { poziom: 2, tryb: p.mode });
+        } else if (p.score >= 350 && p.poziomRozwoju === 2) {
+            p.poziomRozwoju = 3; p.oczekujacyAwans = 3;
+            if(socket) socket.emit('awansDostepny', { poziom: 3, tryb: p.mode });
+        }
+    },
+    nadajSkill: function(p, wybor) {
+        if (p.oczekujacyAwans === 0) return null;
+
+        let skill = "";
+        if (p.mode === 'FREE') {
+            if (p.oczekujacyAwans === 1) skill = wybor === 1 ? 'LEKKIE_BUTY' : 'MAGNETYZM';
+            if (p.oczekujacyAwans === 2) skill = wybor === 1 ? 'WAMPIRYZM' : 'BERSERKER';
+            if (p.oczekujacyAwans === 3) skill = wybor === 1 ? 'DUCH_NOIR' : 'PLAZMA';
+        } else if (p.mode === 'TEAMS') {
+            if (p.oczekujacyAwans === 1) skill = wybor === 1 ? 'HAKER' : 'LOGISTYK';
+            if (p.oczekujacyAwans === 2) skill = wybor === 1 ? 'DOWÓDCA' : 'INŻYNIER';
+            if (p.oczekujacyAwans === 3) skill = wybor === 1 ? 'CHROMA_TARCZA' : 'WIRUS';
+        }
+
+        if (skill) {
+            p.perks.push(skill);
+            // Zastosuj natychmiastowe bufy statystyk
+            if (skill === 'LEKKIE_BUTY') p.baseSpeed *= 1.15;
+            if (skill === 'LOGISTYK') p.massMultiplier *= 2.0;
+        }
+        p.oczekujacyAwans = 0;
+        return skill;
     }
 };
 
@@ -231,7 +260,7 @@ function spawnBot() {
     let id = `bot_${++entityIdCounter}`;
     let isBoss = Math.random() < 0.05;
     state.bots[id] = {
-        id: id, mode: 'FREE', // Wyraźne oznaczenie dla trybu FREE
+        id: id, mode: 'FREE', 
         x: Math.random() * 6000, y: Math.random() * 6000,
         score: isBoss ? (150 + Math.random() * 100) : (5 + Math.random() * 20),
         skin: isBoss ? 'ninja' : 'standard',
@@ -253,6 +282,9 @@ class TrybFree {
     static aktualizuj(p, nearby) {
         let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
         let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
+        
+        // Zastosowanie Pasywki Magnetzymu
+        if (p.perks && p.perks.includes('MAGNETYZM')) magnetRange *= 2.0;
 
         nearby.foods.forEach(f => {
             if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
@@ -268,6 +300,10 @@ class TrybFree {
             if (dist < pRadius && p.score > p2.score * 1.15) {
                 io.emit('killEvent', { zabojca: p.name, ofiara: p2.name });
                 dodajMase(p, Math.floor(p2.score * 0.5));
+                
+                // Zastosowanie Wampiryzmu
+                if (p.perks && p.perks.includes('WAMPIRYZM')) dodajMase(p, Math.floor(p.score * 0.2));
+                
                 triggerZgon(p2.id, p.name);
             }
         });
@@ -279,9 +315,13 @@ class TrybFree {
             if (dist < pRadius && p.score > b.score * 1.15) {
                 io.emit('killEvent', { zabojca: p.name, ofiara: b.name });
                 dodajMase(p, Math.floor(b.score * 0.5));
+                
+                // Zastosowanie Wampiryzmu
+                if (p.perks && p.perks.includes('WAMPIRYZM')) dodajMase(p, Math.floor(p.score * 0.2));
+
                 delete state.bots[b.id]; spawnBot();
             } else if (dist < bRadius && b.score > p.score * 1.15) {
-                if (p.score < 15) return; // [FIX AAA] Noob Protection: Drony ignorują graczy z masą poniżej 15
+                if (p.score < 15) return; 
                 
                 io.emit('killEvent', { zabojca: b.name, ofiara: p.name });
                 b.score += Math.floor(p.score * 0.5);
@@ -323,7 +363,9 @@ class TrybTeams {
             if(b.ownerId || b.mode !== 'FREE') return; 
             let dist = Math.hypot(p.x - b.x, p.y - b.y);
             if(dist < 80) { 
-                b.score -= 2; 
+                // Zastosowanie pasywki Haker
+                let obrazenia = (p.perks && p.perks.includes('HAKER')) ? 25 : 2;
+                b.score -= obrazenia; 
                 if(b.score <= 0) {
                     b.ownerId = p.id;
                     b.team = p.team;
@@ -358,6 +400,10 @@ class TrybTeams {
         let targetX = lider.x;
         let targetY = lider.y;
         let speed = 4.5;
+        
+        // Zastosowanie Pasywki Dowódca
+        if (lider.perks && lider.perks.includes('DOWÓDCA')) speed *= 1.5;
+
         let formacja = lider.aktywnaFormacja || 4; 
         let rozstaw = 80;
         let katLidera = lider.katRuchu || 0; 
@@ -659,10 +705,14 @@ io.on('connection', (socket) => {
             overcharge: 0,
             isShielding: false, 
             isSafe: false, 
-            isDead: false, // [FIX AAA] Flaga weryfikująca stan życia
+            isDead: false, 
             katRuchu: 0, dystansKursora: 0, rozkazAktywny: false,
             aktywnaFormacja: 4, 
-            ostatniStrzal: 0 
+            ostatniStrzal: 0,
+            // [MODUŁ AAA] Zmienne do Drzewka Rozwoju
+            perks: [],
+            poziomRozwoju: 0,
+            oczekujacyAwans: 0
         };
         socket.emit('init', { id: socket.id, team: pTeam });
     });
@@ -711,16 +761,30 @@ io.on('connection', (socket) => {
             let celKat = Number(dane.kat);
             if (isNaN(celKat)) return;
 
+            // Zastosowanie pasywki Berserker, Plazma i Wirus
+            let isBerserker = p.perks && p.perks.includes('BERSERKER');
+            let isPlazma = p.perks && p.perks.includes('PLAZMA');
+            let isWirus = p.perks && p.perks.includes('WIRUS');
+
             let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
+            if (isBerserker) koszt *= 1.5;
+
             if (p.score > koszt) {
                 p.score -= koszt;
                 let pid = ++entityIdCounter;
+                
+                let finalDmg = p.mode === 'TEAMS' ? 25 : WEAPONS[p.activeWeapon].dmg;
+                if (isBerserker) finalDmg *= 2;
+                
+                let finalSpeed = isBerserker ? 32 : 25;
+
                 state.projectiles[pid] = {
                     id: pid, ownerId: p.id, team: p.team, mode: p.mode,
                     x: p.x, y: p.y,
                     dx: Math.cos(celKat), dy: Math.sin(celKat),
-                    life: 50, speed: 25, damage: p.mode === 'TEAMS' ? 25 : WEAPONS[p.activeWeapon].dmg, 
-                    piercing: true, type: 'oszczep'
+                    life: 50, speed: finalSpeed, damage: finalDmg, 
+                    piercing: isPlazma ? true : true, type: isPlazma ? 'laser' : 'oszczep',
+                    isWirus: isWirus
                 };
             }
         }
@@ -731,6 +795,23 @@ io.on('connection', (socket) => {
         if (p && p.mode === 'TEAMS' && !p.isDead) {
             p.rozkazAktywny = true;
             setTimeout(() => { if(state.players[p.id]) p.rozkazAktywny = false; }, 2000); 
+            
+            // Zastosowanie pasywki Chroma-Tarcza
+            if (p.perks && p.perks.includes('CHROMA_TARCZA')) {
+                p.isShielding = true;
+                setTimeout(() => { if(state.players[p.id]) p.isShielding = false; }, 3000);
+            }
+        }
+    });
+
+    // [MODUŁ AAA] Obsługa wyboru umiejętności od klienta
+    socket.on('wybierzSkill', (wybor) => {
+        let p = state.players[socket.id];
+        if (p && !p.isDead && p.oczekujacyAwans > 0) {
+            let przyznanySkill = SystemRozwoju.nadajSkill(p, Number(wybor));
+            if (przyznanySkill) {
+                socket.emit('skillPotwierdzony', { skill: przyznanySkill });
+            }
         }
     });
 
@@ -787,7 +868,6 @@ setInterval(() => {
         preallocatedGrid[key][type].push(entity);
     }
     
-    // [FIX AAA] Nie dodajemy martwych graczy do siatki kolizji
     Object.values(state.players).forEach(p => { if (!p.isDead) addToGrid(p, 'players') });
     Object.values(state.bots).forEach(b => addToGrid(b, 'bots'));
     Object.values(state.foods).forEach(f => addToGrid(f, 'foods'));
@@ -812,7 +892,10 @@ setInterval(() => {
     for (let pId in state.players) {
         let p = state.players[pId];
         
-        if (p.isDead) continue; // [FIX AAA] Pomijanie martwych graczy zatrzymuje lagi!
+        if (p.isDead) continue; 
+
+        // [MODUŁ AAA] Sprawdzanie i aplikowanie Awansów
+        SystemRozwoju.sprawdzAwanse(p, io.sockets.sockets.get(pId));
 
         p.isSafe = false; 
 
@@ -823,7 +906,13 @@ setInterval(() => {
             let wrogaBazaX = p.team === 'RED' ? 5500 : 500;
             let bazaY = 3000;
 
-            if (Math.hypot(p.x - mojaBazaX, p.y - bazaY) < 400) { p.isSafe = true; }
+            if (Math.hypot(p.x - mojaBazaX, p.y - bazaY) < 400) { 
+                p.isSafe = true; 
+                // Zastosowanie pasywki Inżynier - Leczenie w bazie
+                if (p.perks && p.perks.includes('INŻYNIER')) {
+                    dodajMase(p, 1);
+                }
+            }
             
             if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
                 p.score -= 2; 
@@ -849,7 +938,6 @@ setInterval(() => {
             let nextX = p.x + Math.cos(p.katRuchu) * speed;
             let nextY = p.y + Math.sin(p.katRuchu) * speed;
 
-            // [FIX AAA] Fizyczne ściany mapy! Zamiast uśmiercać za linią, gracz się ślizga po granicy.
             p.x = Math.max(10, Math.min(limit - 10, nextX));
             p.y = Math.max(10, Math.min(limit - 10, nextY));
         }
@@ -893,7 +981,14 @@ setInterval(() => {
             if (Math.hypot(b.x - proj.x, b.y - proj.y) < hitbox) {
                 if (proj.mode === 'TEAMS' && b.team === proj.team) return;
                 if (proj.mode === 'CAMPAIGN' && b.isBoss && proj.team === 'BOSS') return; 
-                b.score -= proj.damage;
+                
+                // Zastosowanie Pasywki Wirus
+                if (proj.isWirus && b.ownerId && b.team !== proj.team) {
+                    b.ownerId = proj.ownerId;
+                    b.team = proj.team;
+                } else {
+                    b.score -= proj.damage;
+                }
                 hit = true;
             }
         });
@@ -1004,7 +1099,6 @@ setInterval(() => {
         bots: state.bots,
         projectiles: state.projectiles,
         foods: state.tickCounter % 30 === 0 ? state.foods : null,
-        // [FIX AAA] Rozgłaszanie eventów graficznych do klientów
         anomalie: MenedzerEventow.aktywneAnomalie,
         promienie: MenedzerEventow.aktywnePromienie
     });
@@ -1026,11 +1120,9 @@ function dodajMase(gracz, ilosc) {
 
 async function triggerZgon(deadId, killerName) {
     const p = state.players[deadId];
-    // [FIX AAA] Zablokowanie Death Laga! Giniesz tylko raz.
     if (p && !p.isDead) {
         p.isDead = true; 
         
-        // Natychmiastowe wyrzucenie ciała poza widok mapy, żeby nie kolidowało przez te 1.5s
         p.x = -10000;
         p.y = -10000;
 
@@ -1043,7 +1135,7 @@ async function triggerZgon(deadId, killerName) {
 
         let msg = await getAIWellbeingMessage(score);
         io.to(deadId).emit('gameOver', { finalScore: score, killerName: killerName, message: msg });
-        delete state.players[deadId]; // Ostateczne zwolnienie z pamięci RAM po wysłaniu ekranu
+        delete state.players[deadId]; 
     }
 }
 

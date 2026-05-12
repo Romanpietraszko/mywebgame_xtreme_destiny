@@ -2,6 +2,7 @@
 // GRAFIKA.JS - Ustabilizowany Silnik Renderujący (Faza 8.1: Ultimate Polish - Insta-Aim, Pociski i Horror Roju)
 // DODANO: Warstwowe renderowanie Eventów Globalnych (Anomalie i Promienie Jonowe)
 // NAPRAWIONO: Wyciek pamięci w pętli plamyPolaBitwy
+// RPG AAA: Ewolucja wizualna broni w dłoni i rysowanie pocisków zależnych od skilli
 // ==========================================
 
 window.Grafika = (function() {
@@ -501,7 +502,9 @@ window.Grafika = (function() {
         if (wKrzaku) return; 
 
         let isBoss = bot.isBoss || bot.skin === 'ninja';
-        let kolor = isBoss ? '#9b59b6' : '#e74c3c';
+        
+        // [FIX AAA] Poprawne rysowanie Złotego Drona na arenie
+        let kolor = bot.skin === 'arystokrata' ? '#f1c40f' : (isBoss ? '#9b59b6' : '#e74c3c');
         if (bot.ownerId && bot.team) kolor = bot.team === 'RED' ? '#e74c3c' : '#3498db';
 
         ctx.save(); ctx.translate(bot.x | 0, bot.y | 0); ctx.rotate(bot.angle || 0);
@@ -510,15 +513,12 @@ window.Grafika = (function() {
         
         ctx.beginPath();
         if (isBoss) { 
-            // Bossowie to groźne ośmiokąty
             for (let i = 0; i < 8; i++) { ctx.lineTo(Math.cos(i * Math.PI/4) * promien, Math.sin(i * Math.PI/4) * promien); }
             ctx.closePath(); ctx.fill(); ctx.stroke();
-            // Pulsujący rdzeń bossa
             ctx.fillStyle = `rgba(155, 89, 182, ${0.5 + Math.abs(Math.sin(performance.now()/200))*0.5})`;
             ctx.beginPath(); ctx.arc(0, 0, promien*0.5, 0, TWO_PI); ctx.fill();
         } 
         else { 
-            // Zwykłe drony to heksagony
             for (let i = 0; i < 6; i++) { ctx.lineTo(Math.cos(i * Math.PI/3) * promien, Math.sin(i * Math.PI/3) * promien); }
             ctx.closePath(); ctx.fill(); ctx.stroke();
             ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(promien, 0); ctx.stroke(); // Wskaźnik przodu
@@ -567,10 +567,14 @@ window.Grafika = (function() {
         let kolor = skin === 'ninja' ? '#9b59b6' : (skin === 'arystokrata' ? '#f1c40f' : '#e74c3c');
         if (postac.team) kolor = postac.team === 'RED' ? '#e74c3c' : '#3498db';
 
-        if (postac.isSafe) { 
+        // Tarcza z bazy lub Chroma-Tarcza
+        if (postac.isSafe || postac.isShielding) { 
             ctx.save(); ctx.translate(postac.x | 0, postac.y | 0); 
-            ctx.strokeStyle = 'rgba(46, 204, 113, 0.6)'; ctx.lineWidth = 3; ctx.setLineDash([10, 15]); 
-            ctx.rotate(performance.now() / 800); AkceleratorRenderu.ustawCien(ctx, '#2ecc71', 15);
+            ctx.strokeStyle = postac.isShielding ? 'rgba(52, 152, 219, 0.8)' : 'rgba(46, 204, 113, 0.6)'; 
+            ctx.lineWidth = postac.isShielding ? 4 : 3; 
+            ctx.setLineDash([10, 15]); 
+            ctx.rotate(performance.now() / 800); 
+            AkceleratorRenderu.ustawCien(ctx, postac.isShielding ? '#3498db' : '#2ecc71', 15);
             ctx.beginPath(); ctx.arc(0, 0, promien + 15, 0, TWO_PI); ctx.stroke(); 
             AkceleratorRenderu.resetujCien(ctx); ctx.restore();
         }
@@ -592,30 +596,41 @@ window.Grafika = (function() {
             AkceleratorRenderu.resetujCien(ctx);
         }
 
-        // <--- NOWY, EPICKI OSZCZEP (Rośnie wraz z masą!) --->
+        // <--- [RPG AAA] EWOLUCJA WIZUALNA OSZCZEPU W DŁONI --->
         let bazaOszczepu = promien * 0.4;
         let dlugosc = promien + 15 + Math.min(masa / 20, 25); 
 
-        // Drzewiec
-        ctx.strokeStyle = '#5c4033'; 
-        ctx.lineWidth = 3 + Math.min(masa / 200, 3); 
+        // Po 50 masy (Awans 1) drzewiec robi się grubszy i ciemniejszy, jak taktyczna włócznia
+        ctx.strokeStyle = masa >= 50 ? '#2c3e50' : '#5c4033'; 
+        ctx.lineWidth = masa >= 50 ? 5 : (3 + Math.min(masa / 200, 3)); 
         ctx.beginPath(); ctx.moveTo(bazaOszczepu, 0); ctx.lineTo(dlugosc, 0); ctx.stroke();
 
-        // Grot
+        // Grot oszczepu
         ctx.fillStyle = '#ecf0f1'; 
         ctx.beginPath();
-        ctx.moveTo(dlugosc, -4 - Math.min(masa/300, 4)); 
-        ctx.lineTo(dlugosc + 12 + Math.min(masa/50, 15), 0); 
-        ctx.lineTo(dlugosc, 4 + Math.min(masa/300, 4));
+        let rozmiarGrotu = masa >= 50 ? 6 : Math.min(masa/300, 4);
+        let dlugoscGrotu = masa >= 50 ? 20 : (12 + Math.min(masa/50, 15));
+        
+        ctx.moveTo(dlugosc, -4 - rozmiarGrotu); 
+        ctx.lineTo(dlugosc + dlugoscGrotu, 0); 
+        ctx.lineTo(dlugosc, 4 + rozmiarGrotu);
         ctx.closePath(); ctx.fill();
 
-        // Energetyczny rdzeń (Vibe Noir Juice) - dla silnych graczy
-        if (masa >= 100) {
-            ctx.fillStyle = kolor; 
-            AkceleratorRenderu.ustawCien(ctx, kolor, 10);
+        // Energetyczny rdzeń
+        if (masa >= 50) {
+            // Kolor rdzenia zależy od skilla (Berserker = czerwony, Wirus = zielony, Plazma = niebieski, Domyślnie = kolor gracza)
+            let coreColor = kolor;
+            if (postac.perks) {
+                if (postac.perks.includes('BERSERKER')) coreColor = '#e74c3c';
+                else if (postac.perks.includes('WIRUS')) coreColor = '#2ecc71';
+                else if (postac.perks.includes('PLAZMA')) coreColor = '#3498db';
+            }
+
+            ctx.fillStyle = coreColor; 
+            AkceleratorRenderu.ustawCien(ctx, coreColor, 10);
             ctx.beginPath();
             ctx.moveTo(dlugosc - 2, -2);
-            ctx.lineTo(dlugosc + 8 + Math.min(masa/50, 10), 0);
+            ctx.lineTo(dlugosc + dlugoscGrotu - 2, 0);
             ctx.lineTo(dlugosc - 2, 2);
             ctx.closePath(); ctx.fill();
             AkceleratorRenderu.resetujCien(ctx);
@@ -635,7 +650,6 @@ window.Grafika = (function() {
                 ctx.stroke();
                 ctx.fillStyle = '#ff7675'; ctx.beginPath(); ctx.arc(0, -promien * 0.2, 4, 0, TWO_PI); ctx.fill();
             } else if (typKrzaka === 'kokon_roju') {
-                // Nowe "ukrycie" gracza w kokonie Roju
                 ctx.fillStyle = '#8e44ad'; ctx.beginPath(); ctx.arc(0, 0, promien*0.8, 0, TWO_PI); ctx.fill();
                 let p = Math.sin(performance.now() / 100) * 5;
                 ctx.strokeStyle = '#9b59b6'; ctx.lineWidth = 3; 
@@ -682,8 +696,24 @@ window.Grafika = (function() {
             ctx.fillStyle = kolor; ctx.beginPath(); ctx.arc(startX + (x * scale), startY + (y * scale), promienKropki, 0, TWO_PI); ctx.fill();
         }
 
-        if (LokalnyStan.bots) Object.values(LokalnyStan.bots).forEach(b => rysujKropke(b.x, b.y, b.skin === 'ninja' ? '#9b59b6' : '#e74c3c', czyMala ? 1.5 : 3));
-        if (LokalnyStan.players) Object.values(LokalnyStan.players).forEach(p => { if (p.id !== mojGracz.id) rysujKropke(p.x, p.y, (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') ? (p.team === 'RED' ? '#e74c3c' : '#3498db') : '#95a5a6', czyMala ? 2.5 : 5); });
+        // [FIX AAA] Radar prawidłowo rozpoznaje Złotego Drona (arystokrata)
+        if (LokalnyStan.bots) Object.values(LokalnyStan.bots).forEach(b => {
+            let kolorBota = b.skin === 'arystokrata' ? '#f1c40f' : (b.skin === 'ninja' ? '#9b59b6' : '#e74c3c');
+            let wielkosc = b.skin === 'arystokrata' ? (czyMala ? 3 : 5) : (czyMala ? 1.5 : 3);
+            rysujKropke(b.x, b.y, kolorBota, wielkosc);
+        });
+
+        if (LokalnyStan.players) Object.values(LokalnyStan.players).forEach(p => { 
+            // [RPG AAA] Ukrywanie graczy z perkiem DUCH_NOIR na radarze (o ile to nie członek drużyny)
+            if (p.id !== mojGracz.id) {
+                let isDuch = p.perks && p.perks.includes('DUCH_NOIR');
+                let isMyTeam = (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') && (p.team === mojGracz.team);
+                
+                if (!isDuch || isMyTeam) {
+                    rysujKropke(p.x, p.y, (window.Flagi && window.Flagi.Stan.wybranyTryb === 'TEAMS') ? (p.team === 'RED' ? '#e74c3c' : '#3498db') : '#95a5a6', czyMala ? 2.5 : 5); 
+                }
+            }
+        });
 
         let puls = 2.5 + Math.abs(Math.sin(performance.now() / 300)) * 2;
         rysujKropke(mojGracz.x, mojGracz.y, '#ffffff', czyMala ? puls : puls * 2);
@@ -709,7 +739,6 @@ window.Grafika = (function() {
             let dt = Math.min(3, (now - lastTime) / 16.666); 
             lastTime = now;
 
-            // <--- NOWOŚĆ: Skalowanie Kamery (FOV) zależne od masy --->
             let masaDlaKamery = Math.max(10, mojGracz.score || 10);
             let docelowaSkala = Math.max(0.4, 1.15 - Math.sqrt(masaDlaKamery) * 0.015);
             cameraScale += (docelowaSkala - cameraScale) * (0.05 * dt);
@@ -729,12 +758,10 @@ window.Grafika = (function() {
             if (!czyMapaWygenerowana) generujSrodowisko(tryb, limitWielkosci);
             ZarzadcaPamieci.wyczyscPamiecCoRunde();
 
-            // <--- INSTA-AIM (Kierunek myszki zawsze aktualny bez czekania na serwer) --->
             let myszSwiatX = drawCamX + screenW/2 + (pozycjaMyszki.x - screenW/2) / cameraScale;
             let myszSwiatY = drawCamY + screenH/2 + (pozycjaMyszki.y - screenH/2) / cameraScale;
             mojGracz.kat = Math.atan2(myszSwiatY - mojGracz.y, myszSwiatX - mojGracz.x);
             
-            // <--- LERP i Hit-Juice (Błyski i Cyferki obrażeń) --->
             if (stanSerwera.bots) {
                 Object.keys(stanSerwera.bots).forEach(id => {
                     let serwerBot = stanSerwera.bots[id];
@@ -744,7 +771,6 @@ window.Grafika = (function() {
                         LokalnyStan.bots[id].x += (serwerBot.x - LokalnyStan.bots[id].x) * (0.3 * dt);
                         LokalnyStan.bots[id].y += (serwerBot.y - LokalnyStan.bots[id].y) * (0.3 * dt);
                         
-                        // Detekcja otrzymania obrażeń
                         if (serwerBot.score < LokalnyStan.bots[id].score) {
                             let dmg = Math.floor(LokalnyStan.bots[id].score - serwerBot.score);
                             LokalnyStan.bots[id].hitFlash = 1.0;
@@ -783,16 +809,14 @@ window.Grafika = (function() {
                         }
 
                         LokalnyStan.players[id].score = serwerGracz.score;
-                        LokalnyStan.players[id].kat = serwerGracz.kat; // Kąt serwerowy innych
+                        LokalnyStan.players[id].kat = serwerGracz.kat;
                         LokalnyStan.players[id].isSafe = serwerGracz.isSafe;
+                        LokalnyStan.players[id].perks = serwerGracz.perks; // Aktualizuj perki do rysowania
                         if (LokalnyStan.players[id].hitFlash > 0) LokalnyStan.players[id].hitFlash -= 0.1 * dt;
                     }
                 });
                 
-                // Mój gracz zawsze używa kąta z myszki (Insta-aim)
-                if (LokalnyStan.players[mojGracz.id]) {
-                    LokalnyStan.players[mojGracz.id].kat = mojGracz.kat;
-                }
+                if (LokalnyStan.players[mojGracz.id]) { LokalnyStan.players[mojGracz.id].kat = mojGracz.kat; }
 
                 Object.keys(LokalnyStan.players).forEach(id => {
                     if (!stanSerwera.players[id]) delete LokalnyStan.players[id];
@@ -818,27 +842,15 @@ window.Grafika = (function() {
 
             rysujMape(tryb, limitWielkosci, dt);
 
-            // ==========================================
             // WARSTWA 1: OSTRZEŻENIA O EVENTACH (POD GRACZAMI)
-            // ==========================================
             if (stanSerwera.anomalie) {
                 stanSerwera.anomalie.forEach(anomalia => {
                     if (!czyWidoczny(anomalia.x, anomalia.y, anomalia.zasiegWysysania)) return;
-                    ctx.save(); 
-                    ctx.translate(anomalia.x | 0, anomalia.y | 0);
-                    
-                    // Fioletowa, pulsująca strefa wsysania
-                    ctx.beginPath(); 
-                    ctx.arc(0, 0, anomalia.zasiegWysysania, 0, TWO_PI);
-                    ctx.fillStyle = 'rgba(142, 68, 173, 0.05)'; 
-                    ctx.fill();
-                    
-                    // Wirująca, przerywana linia graniczna
+                    ctx.save(); ctx.translate(anomalia.x | 0, anomalia.y | 0);
+                    ctx.beginPath(); ctx.arc(0, 0, anomalia.zasiegWysysania, 0, TWO_PI);
+                    ctx.fillStyle = 'rgba(142, 68, 173, 0.05)'; ctx.fill();
                     ctx.strokeStyle = `rgba(142, 68, 173, ${0.3 + Math.sin(now/200)*0.1})`;
-                    ctx.lineWidth = 3; 
-                    ctx.setLineDash([15, 20]); 
-                    ctx.lineDashOffset = -now / 20; 
-                    ctx.stroke();
+                    ctx.lineWidth = 3; ctx.setLineDash([15, 20]); ctx.lineDashOffset = -now / 20; ctx.stroke();
                     ctx.restore();
                 });
             }
@@ -849,39 +861,25 @@ window.Grafika = (function() {
                     let timeRemaining = promien.czasUderzenia - (stanSerwera.serverTime || Date.now());
                     
                     if (timeRemaining > 0) {
-                        ctx.save(); 
-                        ctx.translate(promien.x | 0, promien.y | 0);
-                        
-                        // Mruganie przyspieszające przed wybuchem
+                        ctx.save(); ctx.translate(promien.x | 0, promien.y | 0);
                         let blinkSpeed = Math.max(50, timeRemaining / 10);
                         let isBlinking = Math.floor(now / blinkSpeed) % 2 === 0;
 
-                        ctx.beginPath(); 
-                        ctx.arc(0, 0, promien.zasieg, 0, TWO_PI);
-                        ctx.fillStyle = isBlinking ? 'rgba(231, 76, 60, 0.15)' : 'rgba(231, 76, 60, 0.05)'; 
-                        ctx.fill();
-                        
-                        ctx.strokeStyle = isBlinking ? '#e74c3c' : '#c0392b'; 
-                        ctx.lineWidth = 4; 
-                        ctx.setLineDash([]); 
-                        ctx.stroke();
-
-                        // Obracający się krzyż celowniczy
+                        ctx.beginPath(); ctx.arc(0, 0, promien.zasieg, 0, TWO_PI);
+                        ctx.fillStyle = isBlinking ? 'rgba(231, 76, 60, 0.15)' : 'rgba(231, 76, 60, 0.05)'; ctx.fill();
+                        ctx.strokeStyle = isBlinking ? '#e74c3c' : '#c0392b'; ctx.lineWidth = 4; ctx.setLineDash([]); ctx.stroke();
                         ctx.rotate(now / 1000);
                         ctx.beginPath(); 
                         ctx.moveTo(-promien.zasieg, 0); ctx.lineTo(-promien.zasieg + 50, 0);
                         ctx.moveTo(promien.zasieg, 0); ctx.lineTo(promien.zasieg - 50, 0);
                         ctx.moveTo(0, -promien.zasieg); ctx.lineTo(0, -promien.zasieg + 50);
                         ctx.moveTo(0, promien.zasieg); ctx.lineTo(0, promien.zasieg - 50);
-                        ctx.lineWidth = 8; 
-                        ctx.stroke();
-                        
+                        ctx.lineWidth = 8; ctx.stroke();
                         ctx.restore();
                     }
                 });
             }
 
-            // GŁĘBIA (Y-SORTING)
             let KolejkaY = [];
 
             MacierzOtoczenia.forEach(obiekt => {
@@ -899,7 +897,6 @@ window.Grafika = (function() {
                 }
             });
             
-            // Dopisywanie moich statystyk do Lokalnego Stanu
             if(LokalnyStan.players[mojGracz.id]) {
                 KolejkaY.push({ typObj: 'gracz', y: mojGracz.y, dane: LokalnyStan.players[mojGracz.id], isMe: true });
             } else {
@@ -914,33 +911,19 @@ window.Grafika = (function() {
                 else if (element.typObj === 'gracz') { rysujPostac(element.dane, element.isMe); }
             });
 
-            // ==========================================
             // WARSTWA 2: EFEKTY DESTRUKCJI (NAD GRACZAMI)
-            // ==========================================
             if (stanSerwera.anomalie) {
                 stanSerwera.anomalie.forEach(anomalia => {
                     if (!czyWidoczny(anomalia.x, anomalia.y, 180)) return;
-                    ctx.save(); 
-                    ctx.translate(anomalia.x | 0, anomalia.y | 0);
-                    
-                    // Rdzeń Czarnej Dziury (zoptymalizowany, brak ciężkich gradientów)
-                    ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); 
-                    ctx.fillStyle = 'rgba(142, 68, 173, 0.2)'; ctx.fill(); // Fioletowe Halo
-                    
-                    ctx.beginPath(); ctx.arc(0, 0, 140, 0, TWO_PI); 
-                    ctx.fillStyle = 'rgba(50, 10, 80, 0.8)'; ctx.fill(); // Gęsty mrok
-                    
-                    ctx.beginPath(); ctx.arc(0, 0, 90, 0, TWO_PI); 
-                    ctx.fillStyle = '#000000'; ctx.fill(); // Absolutna czerń
-                    
-                    // Cząsteczki wsysane do środka
+                    ctx.save(); ctx.translate(anomalia.x | 0, anomalia.y | 0);
+                    ctx.beginPath(); ctx.arc(0, 0, 180, 0, TWO_PI); ctx.fillStyle = 'rgba(142, 68, 173, 0.2)'; ctx.fill(); 
+                    ctx.beginPath(); ctx.arc(0, 0, 140, 0, TWO_PI); ctx.fillStyle = 'rgba(50, 10, 80, 0.8)'; ctx.fill(); 
+                    ctx.beginPath(); ctx.arc(0, 0, 90, 0, TWO_PI); ctx.fillStyle = '#000000'; ctx.fill(); 
                     ctx.fillStyle = '#fff';
                     for (let i = 0; i < 8; i++) {
                         let pDist = 180 - ((now / 4 + i * 22) % 180);
                         let pAng = (i * Math.PI / 4) + (now / 150);
-                        ctx.beginPath(); 
-                        ctx.arc(Math.cos(pAng) * pDist, Math.sin(pAng) * pDist, 3, 0, TWO_PI); 
-                        ctx.fill();
+                        ctx.beginPath(); ctx.arc(Math.cos(pAng) * pDist, Math.sin(pAng) * pDist, 3, 0, TWO_PI); ctx.fill();
                     }
                     ctx.restore();
                 });
@@ -949,47 +932,58 @@ window.Grafika = (function() {
             if (stanSerwera.promienie) {
                 stanSerwera.promienie.forEach(promien => {
                     let timeRemaining = promien.czasUderzenia - (stanSerwera.serverTime || Date.now());
-                    
-                    // Rysuj tylko w momencie uderzenia (trwa 1 sekundę po czasie zero)
                     if (timeRemaining <= 0 && timeRemaining > -1000) {
                         if (!czyWidoczny(promien.x, promien.y, promien.zasieg)) return;
-                        
-                        ctx.save(); 
-                        ctx.translate(promien.x | 0, promien.y | 0);
-                        
+                        ctx.save(); ctx.translate(promien.x | 0, promien.y | 0);
                         let intensity = 1 - (Math.abs(timeRemaining) / 1000); 
-                        
-                        // Oślepiający biały wybuch przykrywający wszystko
-                        ctx.beginPath(); 
-                        ctx.arc(0, 0, promien.zasieg, 0, TWO_PI);
-                        ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`; 
-                        ctx.fill();
-                        
-                        // Ognisty środek fali uderzeniowej
-                        ctx.beginPath(); 
-                        ctx.arc(0, 0, promien.zasieg * intensity, 0, TWO_PI);
-                        ctx.fillStyle = `rgba(241, 196, 15, ${intensity})`; 
-                        ctx.fill();
-                        
+                        ctx.beginPath(); ctx.arc(0, 0, promien.zasieg, 0, TWO_PI); ctx.fillStyle = `rgba(255, 255, 255, ${intensity})`; ctx.fill();
+                        ctx.beginPath(); ctx.arc(0, 0, promien.zasieg * intensity, 0, TWO_PI); ctx.fillStyle = `rgba(241, 196, 15, ${intensity})`; ctx.fill();
                         ctx.restore();
                     }
                 });
             }
 
+            // <--- [RPG AAA] WIZUALIZACJA RZUCANYCH POCISKÓW ZALEŻNA OD SKILLI --->
             if (stanSerwera.projectiles) {
                 Object.values(stanSerwera.projectiles).forEach(proj => {
                     if (!czyWidoczny(proj.x, proj.y, 20)) return;
                     ctx.save(); ctx.translate(proj.x | 0, proj.y | 0); ctx.rotate(Math.atan2(proj.dy, proj.dx));
+                    
                     if (proj.type === 'laser') {
-                        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-10, -3, 20, 6);
+                        // Bossa Laser lub Plazma Gracza
+                        AkceleratorRenderu.ustawCien(ctx, '#e74c3c', 15);
+                        ctx.fillStyle = '#e74c3c'; ctx.fillRect(-15, -4, 30, 8);
+                        ctx.fillStyle = '#fff'; ctx.fillRect(-10, -1, 20, 2);
+                        AkceleratorRenderu.resetujCien(ctx);
                     } else {
-                        // Lecący Oszczep w grze
-                        ctx.strokeStyle = '#5c4033'; ctx.lineWidth = 3; 
+                        // Zwykły oszczep lub zmutowany
+                        let pTeam = proj.team;
+                        
+                        // Drzewiec
+                        ctx.strokeStyle = proj.damage > 20 ? '#2c3e50' : '#5c4033'; // Ciemniejszy jeśli mocny
+                        ctx.lineWidth = 3; 
                         ctx.beginPath(); ctx.moveTo(-15, 0); ctx.lineTo(10, 0); ctx.stroke();
+                        
+                        // Grot
                         ctx.fillStyle = '#ecf0f1'; 
                         ctx.beginPath(); ctx.moveTo(10, -4); ctx.lineTo(25, 0); ctx.lineTo(10, 4); ctx.closePath(); ctx.fill();
-                        ctx.fillStyle = 'rgba(241, 196, 15, 0.6)'; 
-                        ctx.beginPath(); ctx.arc(-15, 0, 3, 0, TWO_PI); ctx.fill();
+                        
+                        // Efekty specjalne (Berserker / Wirus)
+                        if (proj.damage > 20 && !proj.isWirus) {
+                            // Płonący Berserker
+                            AkceleratorRenderu.ustawCien(ctx, '#e74c3c', 10);
+                            ctx.fillStyle = '#e74c3c'; ctx.beginPath(); ctx.arc(10, 0, 4, 0, TWO_PI); ctx.fill();
+                            AkceleratorRenderu.resetujCien(ctx);
+                        } else if (proj.isWirus) {
+                            // Toksyczny Wirus
+                            AkceleratorRenderu.ustawCien(ctx, '#2ecc71', 10);
+                            ctx.fillStyle = '#2ecc71'; ctx.beginPath(); ctx.arc(10, 0, 5, 0, TWO_PI); ctx.fill();
+                            AkceleratorRenderu.resetujCien(ctx);
+                        } else {
+                            // Zwykły rdzeń
+                            ctx.fillStyle = pTeam === 'RED' ? '#e74c3c' : (pTeam === 'BLUE' ? '#3498db' : 'rgba(241, 196, 15, 0.6)'); 
+                            ctx.beginPath(); ctx.arc(-15, 0, 3, 0, TWO_PI); ctx.fill();
+                        }
                     }
                     ctx.restore();
                 });

@@ -3,6 +3,7 @@
 // WDROŻONO: 20 Koncepcji Inżynieryjnych (FSM, Hooki, Mutatory, Spectator, Sudden Death)
 // NOWOŚCI AAA: Predykcja Kolizji, Audio Pooling, Kalkulator Formacji, System Osiągnięć, MENU STEROWANIA
 // FIX AAA: Natychmiastowe zjadanie kropek + bezbłędny eat.mp3 i muzyka dark_trap.mp3 na mapie, Agresywny Event Banner
+// RPG AAA: Action-RPG Skill Tree (Błyskawiczny wybór umiejętności w locie)
 // ==========================================
 
 (function() {
@@ -51,6 +52,7 @@
     let ostatniCzasInputu = Date.now(); // Detekcja AFK
     let buforRzutuCzas = 0; // Coyote Time (Buforowanie kliknięć)
     let czyDucking = false; // Audio Ducking (Zarządzanie tłem)
+    let aktywnyAwans = null; // [MODUŁ AAA] Zmienna blokująca ekran do wyboru Skilla
 
     // --- NOWE ZMIENNE PREDYKCJI I OPTYMALIZACJI ---
     const LokalnyBuforZjedzonychKropek = new Set(); // Przechowuje ID zjedzonych kropek zanim serwer je usunie
@@ -663,6 +665,45 @@
             banner.timoutId = setTimeout(() => { banner.style.display = 'none'; }, 4000);
         }
 
+        // [MODUŁ AAA] Rysowanie ekranu Wyboru Umiejętności
+        function pokazMenuAwansu(poziom, tryb) {
+            const warstwaGracza = document.getElementById('in-game-ui');
+            let banner = document.getElementById('levelup-banner');
+            
+            if (!banner) {
+                banner = document.createElement('div');
+                banner.id = 'levelup-banner';
+                banner.style.cssText = `
+                    position: absolute; top: 15%; left: 50%; transform: translateX(-50%);
+                    background: rgba(10, 10, 15, 0.9); border: 3px solid #f1c40f; border-radius: 10px;
+                    padding: 20px 40px; text-align: center; z-index: 1001; pointer-events: none;
+                    box-shadow: 0 0 30px rgba(241, 196, 15, 0.5); width: 80%; max-width: 600px;
+                `;
+                if(warstwaGracza) warstwaGracza.appendChild(banner);
+            }
+            
+            let opcja1 = "", opcja2 = "";
+            if (tryb === 'FREE') {
+                if (poziom === 1) { opcja1 = "🥾 LEKKIE BUTY (+15% Prędkości)"; opcja2 = "🧲 MAGNETYZM (Większy zasięg zbierania)"; }
+                if (poziom === 2) { opcja1 = "🦇 WAMPIRYZM (Leczenie za zabójstwa)"; opcja2 = "🪓 BERSERKER (Szybszy i mocniejszy oszczep)"; }
+                if (poziom === 3) { opcja1 = "👻 DUCH NOIR (Niewidzialność na radarze)"; opcja2 = "🔥 DZIAŁO PLAZMOWE (Przebijający laser)"; }
+            } else if (tryb === 'TEAMS') {
+                if (poziom === 1) { opcja1 = "💻 HAKER (Łatwiejsze przejmowanie)"; opcja2 = "📦 LOGISTYK (Więcej punktów)"; }
+                if (poziom === 2) { opcja1 = "👑 DOWÓDCA (Drony szybsze o 50%)"; opcja2 = "🔧 INŻYNIER (Leczenie w bazie)"; }
+                if (poziom === 3) { opcja1 = "🛡️ CHROMA-TARCZA (Aktywuj spacją)"; opcja2 = "🦠 WIRUS (Oszczep przejmuje wrogów)"; }
+            }
+
+            banner.innerHTML = `
+                <h2 style="color: #f1c40f; font-family: 'Permanent Marker', cursive; margin: 0 0 15px 0; text-shadow: 0 0 10px #f1c40f;">⚡ AWANS: POZIOM ${poziom} ⚡</h2>
+                <div style="font-family: 'Exo 2', sans-serif; font-size: 18px; color: #fff; line-height: 1.8;">
+                    Naciśnij <b style="color: #3498db; font-size: 22px;">[ 1 ]</b> ${opcja1}<br>
+                    Naciśnij <b style="color: #e74c3c; font-size: 22px;">[ 2 ]</b> ${opcja2}
+                </div>
+            `;
+            banner.style.display = 'block';
+            odpalDzwiek3D('alert', 0.8);
+        }
+
         // 5. HYBRYDOWY SYSTEM STEROWANIA Z DETEKCJĄ AFK
         function zglosInput() { ostatniCzasInputu = Date.now(); }
 
@@ -680,6 +721,22 @@
             zglosInput();
             const key = e.key.toLowerCase();
             
+            // [MODUŁ AAA] Przechwytywanie wyboru Umiejętności
+            if (aktywnyAwans) {
+                if (key === '1') {
+                    socket.emit('wybierzSkill', 1);
+                    aktywnyAwans = null;
+                    let banner = document.getElementById('levelup-banner');
+                    if (banner) banner.style.display = 'none'; 
+                } else if (key === '2') {
+                    socket.emit('wybierzSkill', 2);
+                    aktywnyAwans = null;
+                    let banner = document.getElementById('levelup-banner');
+                    if (banner) banner.style.display = 'none'; 
+                }
+                return; // Zatrzymujemy kod, by np. nie włączyć formacji "1" lub "2" w TEAMS
+            }
+
             if (['wasd', 'hybrid'].includes(wybraneSterowanie.toLowerCase())) {
                 if (key === 'w') klawiszeKierunku.w = true;
                 if (key === 'a') klawiszeKierunku.a = true;
@@ -843,8 +900,16 @@
             }
 
             if (data.serverEndTime) stanSerwera.serverEndTime = data.serverEndTime;
-            if (data.mutators && mutatorDisplay) {
-                mutatorDisplay.innerText = "Aktywne Modyfikacje: " + data.mutators.join(' | ');
+            
+            // [MODUŁ AAA] Łączenie starych mutatorów z nowymi Perkami RPG
+            let aktywneModyfikacje = data.mutators ? [...data.mutators] : [];
+            if (stanSerwera && stanSerwera.players && stanSerwera.players[mojeId] && stanSerwera.players[mojeId].perks) {
+                aktywneModyfikacje = aktywneModyfikacje.concat(stanSerwera.players[mojeId].perks);
+            }
+            if (mutatorDisplay && aktywneModyfikacje.length > 0) {
+                mutatorDisplay.innerText = "Aktywne Modyfikacje: " + aktywneModyfikacje.join(' | ');
+            } else if (mutatorDisplay) {
+                mutatorDisplay.innerText = "";
             }
 
             if (window.Flagi && window.Flagi.Stan.aktualny === 'PLAYING' && !stanSerwera.players[mojeId] && data.isSpectator) {
@@ -879,6 +944,23 @@
                 }
             }
         });
+
+        // [MODUŁ AAA] Odbiorniki Systemu Rozwoju (RPG)
+        socket.on('awansDostepny', (data) => {
+            aktywnyAwans = data;
+            pokazMenuAwansu(data.poziom, data.tryb);
+        });
+
+        socket.on('skillPotwierdzony', (data) => {
+            aktywnyAwans = null;
+            let banner = document.getElementById('levelup-banner');
+            if (banner) banner.style.display = 'none';
+            pokazNapisKinowy(`ODBLOKOWANO: ${data.skill}`, 3000);
+            odpalDzwiek3D('alert', 0.8);
+            if (window.Grafika) window.Grafika.wywolajWstrzas(10);
+            wibruj([100, 50, 100]);
+        });
+
         socket.on('shopSuccess', (data) => { alert("Ukończono modyfikację: " + data.item.toUpperCase()); zamknijSklep(); });
         
         socket.on('killEvent', (data) => { 
