@@ -17,4 +17,4 @@ COPY . .
 EXPOSE 3000
 
 # Komenda uruchamiająca serwer
-CMD ["node", "server.js"]
+CMD ["node", "backhend/server.js"]

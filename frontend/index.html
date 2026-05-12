@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <!-- 8. KULOODPORNY VIEWPORT (Z blokadą zoomu i obsługą "notch" na iPhonach) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Xtreme Destiny - Vibe Noir</title>
+    
+    <!-- SEO & SOCIAL MEDIA TAGI (Open Graph) -->
+    <meta name="description" content="Przetrwaj hordę, zdobądź masę i załóż Koronę Władcy w darmowej, mrocznej grze przeglądarkowej Vibe Noir.">
+    <meta name="keywords" content="gra przeglądarkowa, mmo, io game, vibe noir, multiplayer, survival, arena">
+    <meta name="author" content="Roman Pietraszko">
+    
+    <!-- 3. THEME COLOR (Zmieniony na głęboką czerń, by zlał się z grą na mobile) -->
+    <meta name="theme-color" content="#050505">
+    
+    <!-- 1. Tagi dla Facebooka / Discorda / Messengera (Open Graph) -->
+    <meta property="og:title" content="Xtreme Destiny: Vibe Noir">
+    <meta property="og:description" content="Czy zdołasz pokonać Bossa i zdobyć 600 masy? Zmierz się ze mną!">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://twojadomena.pl/"> <!-- W przyszłości podmień na swoją docelową domenę -->
+    <meta property="og:image" content="https://twojadomena.pl/assety/baner.jpg"> <!-- Warto w przyszłości dodać link do ładnego obrazka! -->
+
+    <!-- 2. TWITTER CARDS (Ogromne miniatury przy udostępnianiu na X) -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Xtreme Destiny: Vibe Noir">
+    <meta name="twitter:description" content="Przetrwaj hordę i zdobądź 600 masy. Wejdź na arenę Vibe Noir!">
+    <meta name="twitter:image" content="https://twojadomena.pl/assety/baner.jpg">
+
+    <!-- 7. PWA & MANIFEST (Instalacja jako aplikacja natywna) -->
+    <link rel="manifest" href="/manifest.json">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Vibe Noir">
+    
+    <!-- 9. ZESTAW IKON (Dla przeglądarek, PWA i urządzeń Apple) -->
+    <link rel="apple-touch-icon" href="/assety/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="/assety/icon-192.png">
+    <link rel="icon" type="image/x-icon" href="/assety/favicon.ico"> <!-- Klasyczna ikona na karcie przeglądarki -->
+
+    <!-- 6. PRECONNECT DLA CZCIONEK (Przyspiesza ładowanie typografii) -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    
+    <!-- 4. PRELOAD KRYTYCZNYCH ASSETÓW -->
+    <link rel="preload" as="style" href="style.css">
+    
+    <!-- CZCIONKI -->
+    <link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@500;700&family=Permanent+Marker&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <!-- 10. CZYSTY FALLBACK DLA BRAKU JAVASCRIPTU -->
+    <noscript>
+        <div style="position: fixed; inset: 0; background: #050505; color: #e74c3c; z-index: 100000; display: flex; flex-direction: column; align-items: center; justify-content: center; font-family: 'Exo 2', sans-serif; text-align: center; padding: 20px;">
+            <h1 style="font-family: 'Permanent Marker', cursive; font-size: 50px; margin-bottom: 10px;">SYSTEM HALTED</h1>
+            <p style="font-size: 20px; color: #fff;">Vibe Noir wymaga włączonego języka JavaScript oraz nowoczesnej przeglądarki do uruchomienia systemów bojowych.</p>
+        </div>
+    </noscript>
+
+    <!-- 5. KINOWY EKRAN ŁADOWANIA (SPLASH SCREEN) -->
+    <div id="splash-screen" style="position: fixed; inset: 0; background: #050505; z-index: 99999; display: flex; flex-direction: column; justify-content: center; align-items: center; transition: opacity 0.8s ease-out; pointer-events: none;">
+        <h1 style="font-family: 'Permanent Marker', cursive; font-size: clamp(40px, 8vw, 60px); color: #fff; text-shadow: 0 0 20px rgba(231, 76, 60, 0.8); margin-bottom: 30px; animation: splashPulse 1.5s infinite alternate;">VIBE NOIR</h1>
+        <div style="width: 250px; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; overflow: hidden; box-shadow: 0 0 10px rgba(231, 76, 60, 0.3);">
+            <div style="width: 100%; height: 100%; background: #e74c3c; transform-origin: left; animation: loadBarAnim 1.2s cubic-bezier(0.8, 0, 0.2, 1) forwards; box-shadow: 0 0 10px #e74c3c;"></div>
+        </div>
+        <style>
+            @keyframes splashPulse { 0% { opacity: 0.7; text-shadow: 0 0 10px rgba(231, 76, 60, 0.5); } 100% { opacity: 1; text-shadow: 0 0 30px rgba(231, 76, 60, 1); } }
+            @keyframes loadBarAnim { 0% { transform: scaleX(0); } 50% { transform: scaleX(0.4); } 100% { transform: scaleX(1); } }
+        </style>
+        <script>
+            // Skrypt ukrywający Splash Screen, gdy cała strona jest w pełni załadowana
+            window.addEventListener('load', () => {
+                setTimeout(() => {
+                    const splash = document.getElementById('splash-screen');
+                    if(splash) {
+                        splash.style.opacity = '0';
+                        setTimeout(() => splash.remove(), 800); // Usunięcie elementu po zaniknięciu
+                    }
+                }, 1200); // 1.2s opóźnienia, by dać czas na animację ładowania i budowę klimatu
+            });
+        </script>
+    </div>
+    <!-- INTERFEJS W GRZE: Przyciski ucieczki i wsparcia (Pojawia się dopiero na mapie) -->
+   <div id="ingame-controls" class="hidden" style="position: absolute; top: 15px; left: 50%; transform: translateX(-50%); z-index: 200; display: flex; flex-direction: row; gap: 8px;">
+        <button id="btn-leave" class="main-btn border-red" style="padding: 8px 12px; font-size: 14px; margin: 0; box-shadow: 0 0 10px rgba(0,0,0,0.8);">🚪 POWRÓT DO MENU</button>
+        <a href="mailto:roman.pietraszko@onet.eu" id="btn-support" class="main-btn border-blue" style="padding: 8px 12px; font-size: 14px; margin: 0; text-decoration: none; text-align: center; box-shadow: 0 0 10px rgba(0,0,0,0.8);">🛠️ WSPARCIE</a>
+    </div>
+
+    <!-- TŁO DLA DYNAMICZNEGO OGNIA (Wyczyszczone ze starych kółek, by skrypt mógł zadziałać) -->
+    <div id="css-arena-bg"></div>
+
+    <div id="ui-layer">
+        <div id="menu">
+            <h1><span class="paint-x">X</span>treme <span class="paint-d">D</span>estiny</h1>
+            <p class="subtitle">Wybierz swoją ścieżkę</p>
+
+            <!-- ZAKTUALIZOWANY PANEL INSTRUKCJI Z EFEKTEM CRT I PŁOMIENIAMI -->
+            <div style="background: rgba(0, 0, 0, 0.6); border-left: 3px solid #e74c3c; padding: 15px; margin-bottom: 20px; text-align: left; font-size: 14px; color: #ccc; position: relative; overflow: hidden; border-radius: 4px; box-shadow: inset 0 0 15px rgba(231, 76, 60, 0.1);">
+                <!-- Subtelne Scanlines (Paski CRT) -->
+                <div style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06)); background-size: 100% 2px, 3px 100%; pointer-events: none; z-index: 1;"></div>
+                
+                <div style="position: relative; z-index: 2;">
+                    <strong style="color: #fff; text-shadow: 0 0 5px rgba(255,255,255,0.5);">CEL GRY:</strong> Zaczynasz jako bezbronny pył. Zbieraj masę, aby ewoluować swoją zbroję i armię. Przetrwaj ataki, werbuj drony i pożeraj słabszych.<br><br>
+                    <strong style="color: #f1c40f; text-shadow: 0 0 5px rgba(241, 196, 15, 0.6);">STEROWANIE:</strong>
+                    <ul class="instrukcja-lista" style="list-style: none; padding-left: 0; margin-top: 8px; margin-bottom: 0;">
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Kursor Myszy / WASD:</strong> Kierunek ruchu i celowania</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>LPM (Kliknięcie):</strong> Rzut Oszczepem</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 6px;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>SPACJA:</strong> Otwarcie Sklepu (tylko w Bazie/Zamku)</li>
+                        <li style="position: relative; padding-left: 25px; margin-bottom: 0;"><span style="position: absolute; left: 0; top: 0; text-shadow: 0 0 10px #ff5722;">🔥</span> <strong>Klawisz E:</strong> Rozkaz Specjalny dla Roju (tylko tryb Drużyn)</li>
+                    </ul>
+                </div>
+            </div>
+
+            <div id="step-1">
+                <input type="text" id="playerName" placeholder="WPISZ NICK..." maxlength="12" autofocus>
+                <button id="nextBtn" class="main-btn border-blue">DALEJ</button>
+            </div>
+
+            <div id="step-2" class="hidden">
+                <h3>Wybierz Tryb Gry:</h3>
+                <button class="main-btn border-red" data-mode="FREE">🔥 Każdy na każdego</button>
+                <button class="main-btn border-purple" data-mode="TEAMS">⚔️ Wojna Drużyn</button>
+                <button class="main-btn border-gold" data-mode="CAMPAIGN" style="box-shadow: 0 0 15px rgba(241,196,15,0.4);">👑 KAMPANIA: AKT I (BUNT MASZYN)</button>
+                <button class="back-btn" data-target="step-1">Powrót</button>
+            </div>
+
+            <div id="step-3" class="hidden">
+                <h3>Wybierz Klasę:</h3>
+                <div class="char-grid">
+                    <div class="char-card selected" data-skin="standard">
+                        <img src="/assety/xtreme-destiny-postac(1).png" alt="Wojownik" onerror="this.style.display='none'" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+                        <h4>Wojownik</h4><p>Balans i Siła</p>
+                    </div>
+                    <div class="char-card" data-skin="ninja">
+                        <img src="/assety/ninja-transparent.png" alt="Widmo" onerror="this.style.display='none'" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+                        <h4>Widmo</h4><p>Szybkość (Ninja)</p>
+                    </div>
+                    <div class="char-card" data-skin="arystokrata">
+                        <img src="/assety/postac-bez-tla.png" alt="Imperator" onerror="this.style.display='none'" style="width: 60px; height: 60px; object-fit: contain; margin-bottom: 5px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3));">
+                        <h4>Imperator</h4><p>Ekonomia</p>
+                    </div>
+                </div>
+                <button id="btn-enter-arena" class="main-btn border-green">WEJDŹ NA ARENĘ</button>
+                <button class="back-btn" data-target="step-2">Powrót</button>
+            </div>
+
+            <div id="step-4" class="hidden">
+                <h3>Wybierz Sektor Zrzutu:</h3>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;">
+                    <button class="main-btn border-gold" data-spawn="nw">Sektor Północny-Zachód</button>
+                    <button class="main-btn border-gold" data-spawn="ne">Sektor Północny-Wschód</button>
+                    <button class="main-btn border-gold" data-spawn="sw">Sektor Południowy-Zachód</button>
+                    <button class="main-btn border-gold" data-spawn="se">Sektor Południowy-Wschód</button>
+                </div>
+                <button id="btn-deploy" class="main-btn border-green" id="btn-deploy">DESANT (WEJDŹ DO GRY)</button>
+                <button id="btn-back" class="back-btn" data-target="step-3">Powrót</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="in-game-ui" style="pointer-events: none; position: absolute; inset: 0; z-index: 50;">
+        <a href="https://wsi.edu.pl/?gad_source=1&gad_campaignid=21611471215" target="_blank" rel="noopener noreferrer" style="pointer-events: auto;">
+        <img id="uni-logo" src="/assety/logo.svg" alt="Logo Uczelni" onerror="this.style.display='none'" style="position: absolute; top: 20px; left: 20px; width: 80px; filter: drop-shadow(0 0 5px rgba(255,255,255,0.3)); z-index: 100;">
+    </a>
+        <!-- PASEK SIŁY DRUŻYN (Pojawia się tylko w TEAMS) -->
+       <div id="team-power-bar" class="hidden" style="position: absolute; top: 55px; left: 50%; transform: translateX(-50%); width: 400px; height: 25px; background: #111; border: 2px solid #555; border-radius: 12px; overflow: hidden; display: flex; box-shadow: 0 0 15px rgba(0,0,0,0.8);">
+            <div id="bar-red" style="width: 50%; background: linear-gradient(90deg, #c0392b, #e74c3c); box-shadow: 0 0 15px #e74c3c; transition: width 0.4s ease-out; display: flex; align-items: center; padding-left: 10px; font-weight: bold; color: white; font-size: 12px; font-family: 'Exo 2', sans-serif;">RED</div>
+            <div id="bar-blue" style="width: 50%; background: linear-gradient(90deg, #3498db, #2980b9); box-shadow: 0 0 15px #3498db; transition: width 0.4s ease-out; display: flex; justify-content: flex-end; align-items: center; padding-right: 10px; font-weight: bold; color: white; font-size: 12px; font-family: 'Exo 2', sans-serif;">BLUE</div>
+        </div>
+
+        <div id="survival-timer" class="hidden" style="position: absolute; top: 70px; left: 50%; transform: translateX(-50%); background: rgba(5,5,5,0.8); border: 2px solid #2ecc71; padding: 5px 15px; border-radius: 5px; color: #2ecc71; font-family: 'Exo 2', sans-serif; font-weight: bold; font-size: 18px;">
+            CZAS: <span id="time-display">00:00</span>
+        </div>
+
+        <div id="killfeed" style="position: absolute; top: 20px; right: 200px; width: 250px; display: flex; flex-direction: column; gap: 5px; align-items: flex-end; pointer-events: none;">
+        </div>
+
+        <!-- PANEL FORMACJI (Pojawia się tylko w TEAMS) -->
+        <div id="formation-panel" class="hidden" style="position: absolute; bottom: 20px; right: 20px; background: rgba(10,10,15,0.9); border: 2px solid #9b59b6; padding: 15px; border-radius: 8px; color: #fff; font-family: 'Exo 2', sans-serif; box-shadow: 0 0 15px rgba(155, 89, 182, 0.4);">
+            <h3 style="margin: 0 0 10px 0; color: #9b59b6; font-size: 16px; text-transform: uppercase;">Zarządzanie Rujem</h3>
+            <ul style="list-style: none; padding: 0; margin: 0; font-size: 13px; line-height: 1.8;">
+                <li><strong style="color:#f1c40f;">[1]</strong> Klin <span style="color:#aaa; font-size: 11px;">(Defensywa)</span></li>
+                <li><strong style="color:#f1c40f;">[2]</strong> Mur Tarcz <span style="color:#aaa; font-size: 11px;">(Szarża)</span></li>
+                <li><strong style="color:#f1c40f;">[3]</strong> Tyraliera <span style="color:#aaa; font-size: 11px;">(Oskrzydlenie)</span></li>
+                <li><strong style="color:#f1c40f;">[4]</strong> Tryb Manualny <span id="current-form-4" style="color:#2ecc71; margin-left: 5px;">[Aktywny]</span></li>
+            </ul>
+        </div>
+
+        <div id="midas-tutorial" class="hidden" style="position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); background: rgba(10,10,15,0.9); border: 2px solid #f1c40f; padding: 15px 25px; border-radius: 8px; color: #fff; font-size: 16px; text-align: center; box-shadow: 0 0 15px rgba(241,196,15,0.3);">
+            <strong style="color: #f1c40f;">[Midas]:</strong> <span id="midas-text">Witaj na arenie! Zbieraj jedzenie, by rosnąć.</span>
+        </div>
+
+        <div id="castle-shop" class="hidden" style="pointer-events: auto; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(5,5,5,0.95); border: 2px solid #3498db; padding: 20px; border-radius: 12px; width: 340px; text-align: center; box-shadow: 0 0 30px rgba(0,0,0,0.8);">
+            <h2 style="color: #3498db; margin-top: 0; margin-bottom: 5px;">ZBROJOWNIA / DRAFT</h2>
+            <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Wydaj masę na nową broń lub zwerbuj specjalistyczne drony.</p>
+            
+            <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                <button class="main-btn border-blue" style="font-size: 14px; padding: 12px;" onclick="kupBron('bow')"> Szybki Oszczep - 50 MASY</button>
+                <button class="main-btn border-purple" style="font-size: 14px; padding: 12px;" onclick="kupBron('sword')">Ciężki Oszczep - 50 MASY</button>
+            </div>
+            <button class="main-btn border-red" style="font-size: 14px; padding: 10px; width: 100%;" onclick="zamknijSklep()">WYJŚCIE</button>
+        </div>
+    </div>
+    <canvas id="gameCanvas"></canvas>
+    <script src="https://mywebgame-xtreme-destiny.onrender.com/socket.io/socket.io.js"></script>
+    <script src="/automatyzacja/brain.js"></script>
+    <script src="/automatyzacja/hand.js"></script>
+    <script src="/automatyzacja/guardian.js"></script>
+    <script src="flagi.js"></script>
+    <script src="grafika.js"></script>
+    <script src="tryby.js"></script>
+    <!-- REJESTRACJA SERVICE WORKERA DLA PWA -->
+    <script>
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then(registration => {
+                        console.log('🛡️ [PWA] Service Worker zarejestrowany:', registration.scope);
+                    })
+                    .catch(error => {
+                        console.log('⚠️ [PWA] Rejestracja Service Workera nie powiodła się:', error);
+                    });
+            });
+        }
+    </script>
+    <!-- POTEŻNY GENERATOR ISKIER W TLE -->
+    <script>
+        const bg = document.getElementById('css-arena-bg');
+        // Tworzymy aż 100 gęstych iskier!
+        for (let i = 0; i < 100; i++) {
+            let ember = document.createElement('div');
+            ember.classList.add('ember');
+            ember.style.left = Math.random() * 100 + 'vw';
+            // Różne grubości dla perspektywy (od 2px do 7px)
+            let size = Math.random() * 5 + 2;
+            ember.style.width = size + 'px';
+            ember.style.height = size + 'px';
+            // Ekstremalne różnice w prędkości lotu iskier
+            ember.style.animationDuration = (Math.random() * 3 + 2) + 's';
+            ember.style.animationDelay = Math.random() * 5 + 's';
+            bg.appendChild(ember);
+        }
+    </script>
+</body>
+</html>

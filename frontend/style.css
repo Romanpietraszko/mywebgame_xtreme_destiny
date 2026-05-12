@@ -1,0 +1,609 @@
+/* ========================================== */
+/* STYLE.CSS - Vibe Noir & Optymalizacja Mobile */
+/* ========================================== */
+
+/* 9. ZMIENNE CSS (CSS Variables) - Globalna spójność kolorów */
+:root {
+    --neon-red: #e74c3c;
+    --neon-blue: #3498db;
+    --neon-purple: #9b59b6;
+    --neon-green: #2ecc71;
+    --neon-gold: #f1c40f;
+    --bg-dark: rgba(5, 5, 5, 0.95);
+    --bg-glass: rgba(10, 10, 15, 0.4); /* 1. Glassmorphism baza */
+}
+
+/* RESET I BLOKADA TELEFONÓW */
+* {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none; /* Blokuje przewijanie i zoom palcami w samej grze */
+}
+
+/* ODBLOKOWANIE DLA PÓL TEKSTOWYCH (Kluczowe, by dalo się wpisać Nick!) */
+input {
+    user-select: auto;
+    -webkit-user-select: auto;
+}
+
+/* CAŁKOWITE UKRYCIE PASKÓW PRZEWIJANIA (Native App Feel) */
+::-webkit-scrollbar {
+    width: 6px;
+}
+::-webkit-scrollbar-track {
+    background: rgba(0,0,0,0.5);
+}
+::-webkit-scrollbar-thumb {
+    background: var(--neon-red);
+    border-radius: 10px;
+    box-shadow: inset 0 0 5px rgba(0,0,0,0.8);
+}
+
+body, html {
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    overflow: hidden;
+    background-color: #050505; /* Baza Vibe Noir */
+    color: #ffffff;
+    font-family: 'Exo 2', 'Rajdhani', sans-serif;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+}
+
+canvas {
+    display: block;
+    width: 100%;
+    height: 100%;
+    touch-action: none; /* Wymuszenie na płótnie gry */
+}
+
+/* KLASA POMOCNICZA */
+.hidden {
+    display: none !important;
+}
+
+/* MENU LOBBY (PRZEZROCZYSTE DLA TŁA) */
+#ui-layer {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: transparent;
+    z-index: 100;
+}
+
+/* ==========================================
+   NOWE MROCZNE MENU Z WIRUJĄCYM PŁOMIENIEM
+   ========================================== */
+#menu {
+    position: relative; 
+    /* TWARDA CZERŃ - Dodany !important by nadpisać stare style/dziedziczenia */
+    background: #050505 !important; 
+    padding: clamp(20px, 4vw, 30px);
+    border-radius: 12px;
+    border: 2px solid #1a1a1a; /* Bardzo ciemna, twarda ramka dla oddzielenia plazmy */
+    /* Animacja potężnego wejścia */
+    animation: menuExplosion 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    text-align: center;
+    width: 90%;
+    max-width: 450px;
+    z-index: 1; /* Utrzymuje zawartość nad płomieniem */
+    will-change: transform, opacity, box-shadow; /* GPU Acceleration */
+}
+
+/* Animacja rozbłysku przy wejściu na stronę */
+@keyframes menuExplosion {
+    0% { transform: scale(0.7) translateY(100px); opacity: 0; box-shadow: 0 0 0px var(--neon-red); }
+    /* Zamieniono na ciemniejszy błysk, by nie "wypalał" wnętrza */
+    40% { box-shadow: 0 0 80px 10px rgba(231, 76, 60, 0.5); } 
+    100% { transform: scale(1) translateY(0); opacity: 1; box-shadow: 0 0 40px rgba(0, 0, 0, 0.9); }
+}
+
+/* Krążąca, ognista plazma wokół ramki menu */
+#menu::before {
+    content: '';
+    position: absolute;
+    top: -4px; left: -4px; right: -4px; bottom: -4px; /* Grubość ognia */
+    border-radius: 14px; /* Dopasowane do #menu */
+    background: linear-gradient(60deg, #111 0%, var(--neon-red) 25%, #ff9800 50%, var(--neon-red) 75%, #111 100%);
+    background-size: 300% 300%;
+    z-index: -1;
+    animation: fireBorder 1.5s linear infinite;
+    /* Łuna skierowana na ZEWNĄTRZ menu */
+    box-shadow: inset 0 0 0px 5px #050505, 0 0 20px rgba(231, 76, 60, 0.8), 0 0 40px rgba(255, 152, 0, 0.5); 
+    will-change: background-position;
+}
+
+@keyframes fireBorder {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+h1 {
+    font-family: 'Permanent Marker', cursive;
+    font-size: clamp(34px, 5vw, 42px);
+    margin: 0 0 5px 0;
+    transform: rotate(-2deg);
+    animation: crtFlicker 5s infinite alternate;
+    will-change: opacity, text-shadow;
+}
+
+/* Efekt uszkodzonego neonu / CRT */
+@keyframes crtFlicker {
+    0%, 100% { opacity: 1; text-shadow: 0 0 0px rgba(255,255,255,0); }
+    3% { opacity: 0.8; text-shadow: 0 0 20px var(--neon-red); }
+    6% { opacity: 1; text-shadow: 0 0 5px rgba(255,255,255,0.3); }
+    7% { opacity: 0.6; }
+    8%, 9% { opacity: 1; }
+    10% { opacity: 0.9; }
+}
+
+.paint-x { color: var(--neon-blue); text-shadow: 0 0 15px rgba(52, 152, 219, 0.8); }
+.paint-d { color: var(--neon-red); text-shadow: 0 0 15px rgba(231, 76, 60, 0.8); }
+
+.subtitle {
+    color: #aaaaaa;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    margin-bottom: 25px;
+    font-size: clamp(12px, 1.5vw, 16px);
+}
+
+/* POLA I PRZYCISKI */
+input {
+    width: 100%;
+    padding: clamp(12px, 2vw, 15px);
+    background: rgba(15, 15, 15, 0.9); /* Ciemniejsze, by pasowały do nowego menu */
+    color: #ffffff;
+    border: 2px solid #333;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: clamp(16px, 2vw, 20px);
+    text-align: center;
+    margin-bottom: 15px;
+    transition: all 0.3s ease;
+    will-change: border-color, box-shadow;
+}
+
+input:focus {
+    border-color: var(--neon-red);
+    outline: none;
+    box-shadow: 0 0 15px rgba(231, 76, 60, 0.6);
+}
+
+.main-btn {
+    background: rgba(15, 15, 15, 0.9);
+    color: #ffffff;
+    padding: clamp(12px, 2vw, 15px);
+    width: 100%;
+    border-radius: 8px;
+    font-size: clamp(16px, 2vw, 20px);
+    font-family: inherit;
+    font-weight: bold;
+    text-transform: uppercase;
+    cursor: pointer;
+    margin-bottom: 10px;
+    transition: transform 0.2s cubic-bezier(0.2, 1.5, 0.5, 1), box-shadow 0.2s ease, background 0.2s ease;
+    border: 2px solid #555;
+    position: relative;
+    overflow: hidden;
+    will-change: transform, box-shadow;
+}
+
+.main-btn:hover {
+    transform: scale(1.03); /* Fizyczny wzrost */
+}
+
+.main-btn:active {
+    transform: scale(0.95); /* Bardziej wyraźna reakcja na dotyk */
+}
+
+/* KOLORY NEONÓW DLA PRZYCISKÓW */
+.border-blue { border-color: var(--neon-blue); }
+.border-blue:hover, .border-blue.selected { background: var(--neon-blue); color: #000; box-shadow: 0 0 20px rgba(52,152,219,0.6); }
+
+.border-red { border-color: var(--neon-red); }
+.border-red:hover, .border-red.selected { background: var(--neon-red); color: #000; box-shadow: 0 0 20px rgba(231,76,60,0.6); }
+
+.border-purple { border-color: var(--neon-purple); }
+.border-purple:hover, .border-purple.selected { background: var(--neon-purple); color: #000; box-shadow: 0 0 20px rgba(155,89,182,0.6); }
+
+.border-green { border-color: var(--neon-green); }
+.border-green:hover, .border-green.selected { background: var(--neon-green); color: #000; box-shadow: 0 0 20px rgba(46,204,113,0.6); }
+
+.border-gold { border-color: var(--neon-gold); opacity: 0.8; }
+.border-gold:hover, .border-gold.selected { background: var(--neon-gold); color: #000; box-shadow: 0 0 20px rgba(241,196,15,0.6); opacity: 1; }
+
+.back-btn {
+    background: none;
+    border: none;
+    color: #888;
+    text-decoration: underline;
+    font-family: inherit;
+    font-size: 16px;
+    cursor: pointer;
+    margin-top: 10px;
+    padding: 10px; /* Łatwiejsze kliknięcie na mobile */
+    transition: color 0.2s, transform 0.2s;
+    will-change: transform;
+}
+.back-btn:hover { 
+    color: #fff; 
+    transform: scale(1.1);
+}
+
+/* WYBÓR KLASY */
+.char-grid {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.char-card {
+    flex: 1;
+    border: 2px solid #444;
+    background: rgba(0,0,0,0.6);
+    padding: 15px 5px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.2s cubic-bezier(0.2, 1.5, 0.5, 1), box-shadow 0.2s, border-color 0.2s;
+    will-change: transform, box-shadow;
+}
+
+.char-card:hover {
+    transform: translateY(-5px);
+}
+
+.char-card h4 { margin: 0 0 5px 0; font-size: clamp(14px, 1.5vw, 16px); color: #fff; }
+.char-card p { margin: 0; font-size: clamp(11px, 1.2vw, 12px); color: #aaa; }
+
+.char-card.selected {
+    border-color: var(--neon-green);
+    background: rgba(46, 204, 113, 0.15);
+    box-shadow: 0 0 15px rgba(46,204,113,0.4);
+    transform: translateY(-3px) scale(1.05);
+}
+
+/* ==========================================
+   INTERFEJS W GRZE (IN-GAME HUD & SKLEP)
+   ========================================== */
+
+/* GLASSMORPHISM DLA ELEMENTÓW HUD */
+#leaderboard, #survival-timer, #killfeed div, #formation-panel, #team-power-bar {
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+}
+
+#castle-shop {
+    background: rgba(10, 10, 15, 0.85) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 2px solid var(--neon-blue);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.9), inset 0 0 15px rgba(52, 152, 219, 0.2) !important;
+    border-radius: 12px;
+}
+
+/* Animacja dla wiadomości w killfeedzie oraz HUD */
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+@keyframes slideInTop {
+    from { transform: translateY(-100%); opacity: 0; }
+    to { transform: translateY(0); opacity: 1; }
+}
+
+
+#leaderboard {
+    background: var(--bg-glass) !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+    border-radius: 8px;
+    position: absolute; 
+    top: 100px !important; /* Opuszczamy w dół pod logo */
+    left: 20px !important; /* PRZENOSIMY NA LEWĄ STRONĘ */
+    right: auto !important; /* Odpinamy od prawej strony (ważne!) */
+    padding: 12px; 
+    color: #fff; 
+    font-family: "Exo 2", sans-serif; 
+    width: 200px; 
+    z-index: 10; 
+    pointer-events: none; 
+    transition: opacity 0.3s; 
+}
+
+#survival-timer {
+    animation: slideInTop 0.5s cubic-bezier(0.2, 1, 0.3, 1) forwards;
+    will-change: transform, opacity;
+}
+
+#killfeed div {
+    animation: slideInRight 0.3s cubic-bezier(0.25, 0.8, 0.25, 1) forwards;
+    border-left: 3px solid var(--neon-red) !important;
+    will-change: transform, opacity;
+}
+
+/* Subtelne pulsowanie tutoriala */
+@keyframes pulseGlow {
+    0% { box-shadow: 0 0 10px rgba(241,196,15,0.2); }
+    50% { box-shadow: 0 0 20px rgba(241,196,15,0.5); }
+    100% { box-shadow: 0 0 10px rgba(241,196,15,0.2); }
+}
+
+#midas-tutorial {
+    background: rgba(15, 15, 20, 0.8) !important;
+    border: 1px solid var(--neon-gold);
+    animation: pulseGlow 2s infinite ease-in-out;
+    will-change: box-shadow;
+}
+
+/* ==========================================
+   MEDIA QUERIES - RESPONSYWNOŚĆ (HUD I MENU)
+   ========================================== */
+
+/* 1. TABLETY I MAŁE MONITORY (do 768px) */
+@media (max-width: 768px) {
+    #killfeed {
+        right: 15px !important;
+        width: 220px !important;
+    }
+    
+    #uni-logo {
+        width: 60px !important;
+    }
+
+    #survival-timer {
+        font-size: 16px !important;
+        padding: 5px 10px !important;
+    }
+}
+
+/* 2. TELEFONY PIONOWO (do 480px) */
+@media (max-width: 480px) {
+    #menu {
+        padding: 20px;
+        width: 95%;
+    }
+
+    h1 {
+        font-size: 34px;
+    }
+
+    .subtitle {
+        font-size: 12px;
+        margin-bottom: 15px;
+    }
+
+    input, .main-btn {
+        padding: 12px;
+        font-size: 16px;
+    }
+
+    .char-grid {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .char-card {
+        padding: 10px 15px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-align: left;
+    }
+
+    .char-card img { width: 40px !important; height: 40px !important; margin: 0 !important; }
+    .char-card h4 { margin: 0; font-size: 14px; }
+    .char-card p { font-size: 12px; }
+
+    #step-4 div {
+        grid-template-columns: 1fr !important;
+        gap: 5px !important;
+    }
+    
+    #step-4 .main-btn {
+        font-size: 14px;
+        padding: 10px;
+    }
+
+    #castle-shop {
+        width: 95% !important;
+        padding: 15px !important;
+    }
+    #castle-shop h2 { font-size: 18px; margin-bottom: 10px !important; }
+    #castle-shop button { font-size: 12px !important; padding: 10px !important; }
+
+    #uni-logo {
+        width: 45px !important;
+        top: 10px !important;
+        left: 10px !important;
+    }
+
+    #survival-timer {
+        top: 10px !important;
+        font-size: 12px !important;
+        padding: 3px 8px !important;
+    }
+
+    #killfeed {
+        top: 45px !important;
+        right: 10px !important;
+        width: 160px !important;
+    }
+
+    #killfeed div {
+        font-size: 10px !important;
+        padding: 4px 6px !important;
+    }
+    
+    #midas-tutorial {
+        width: 95%;
+        font-size: 12px !important;
+        padding: 10px !important;
+        bottom: 10px !important;
+    }
+}
+
+/* 3. TELEFONY POZIOMO (Niskie ekrany - do 600px wysokości) */
+@media (max-height: 600px) {
+    #ui-layer {
+        align-items: flex-start;
+        overflow-y: auto;
+        padding: 20px 0;
+    }
+
+    #menu {
+        margin: auto; 
+        padding: 15px 20px;
+    }
+
+    h1 {
+        font-size: 28px;
+        margin-bottom: 0;
+    }
+
+    .subtitle {
+        margin-bottom: 10px;
+    }
+
+    input, .main-btn {
+        padding: 10px;
+        margin-bottom: 8px;
+    }
+    
+    .char-card img { width: 35px !important; height: 35px !important; }
+
+    #killfeed {
+        top: 60px !important;
+    }
+}
+
+/* ==========================================
+   CZYSTY CSS - TŁO MENU (VIBE NOIR SYMULACJA)
+   ========================================== */
+
+#css-arena-bg {
+    position: fixed; /* Zmiana na fixed by ogień pokrył tło zza ui-layer */
+    inset: 0;
+    z-index: 10; /* Pod ui-layer, ale nad Canvasem */
+    /* Głębokie, hutnicze tło zamiast starych kształtów */
+    background-color: #050505;
+    background-image: 
+        radial-gradient(ellipse at bottom, rgba(43, 5, 5, 0.9) 0%, rgba(5, 5, 5, 0.9) 60%),
+        linear-gradient(rgba(52, 152, 219, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(52, 152, 219, 0.05) 1px, transparent 1px);
+    background-size: 100% 100%, 100px 100px, 100px 100px;
+    overflow: hidden;
+}
+
+/* ==========================================
+   ZAAWANSOWANE ISKRY (Realistyczne Kolory Bez Bieli!)
+   ========================================== */
+.ember {
+    position: absolute;
+    bottom: -50px;
+    border-radius: 50%;
+    background: transparent; /* Brak białego rdzenia! */
+    /* Nakładające się na siebie gorące cienie - żółty, pomarańcz i czerwień */
+    box-shadow: 
+        0 0 10px 4px #ff9800,  
+        0 0 20px 8px #ff5722,  
+        0 0 30px 12px #e74c3c; 
+    filter: blur(2px); /* Lekkie optyczne rozmycie soczewki */
+    animation: rise 5s infinite ease-in;
+    opacity: 0;
+    mix-blend-mode: screen; /* Efekt światła - ładnie miesza się z tłem */
+    will-change: transform, opacity;
+}
+
+@keyframes rise {
+    0% { transform: translateY(0) translateX(0) scale(0.5); opacity: 1; }
+    50% { opacity: 0.8; transform: translateY(-50vh) translateX(30px) scale(1.3); }
+    100% { transform: translateY(-100vh) translateX(-30px) scale(0.3); opacity: 0; }
+}
+
+/* -------------------------------------------------------------
+   PONIŻEJ STARE KLASY TŁA - Zostawione w razie potrzeby
+   (Skrypt w index.html renderuje główny efekt ognia) 
+   ------------------------------------------------------------- */
+
+.neon-shape {
+    position: absolute;
+    border-radius: 50%;
+    filter: blur(2px);
+    will-change: transform;
+}
+
+.bot-red {
+    width: 50vw; height: 50vh;
+    background: radial-gradient(circle, rgba(231,76,60,0.1) 0%, transparent 70%);
+    bottom: -20vh; left: -10vw; top: auto; border: none; box-shadow: none; clip-path: none;
+    animation: pulseAmbientFire 6s infinite alternate ease-in-out;
+}
+
+.bot-purple {
+    width: 60vw; height: 60vh;
+    background: radial-gradient(circle, rgba(255,87,34,0.08) 0%, transparent 70%);
+    bottom: -25vh; right: -15vw; top: auto; border: none; box-shadow: none; clip-path: none;
+    animation: pulseAmbientFire 8s infinite alternate-reverse ease-in-out;
+}
+
+.food-yellow {
+    width: 4px; 
+    height: 10px;
+    background: #fff;
+    border-radius: 50%;
+    box-shadow: 
+        0 0 10px 2px #ff5722,
+        12vw 15vh 12px 1px #e74c3c,
+        -18vw 25vh 15px 2px #ff9800,
+        22vw 45vh 10px 1px #f1c40f,
+        -25vw 8vh 20px 3px #e74c3c,
+        32vw -15vh 12px 1px #ff5722,
+        -12vw -35vh 15px 2px #ff9800,
+        8vw -20vh 14px 1px #f1c40f;
+    animation: riseUpSway infinite ease-in;
+    will-change: transform, opacity;
+}
+
+.food-1 { left: 45%; bottom: -50px; top: auto; animation-duration: 4.5s; animation-delay: 0s; }
+.food-2 { left: 35%; bottom: -50px; top: auto; animation-duration: 6s; animation-delay: 1.2s; }
+.food-3 { left: 65%; bottom: -50px; top: auto; animation-duration: 5.5s; animation-delay: 2.5s; }
+
+@keyframes riseUpSway {
+    0% { transform: translateY(110vh) translateX(0px) scale(0.5); opacity: 0; }
+    10% { opacity: 1; }
+    50% { transform: translateY(40vh) translateX(25px) scale(1); opacity: 1; }
+    90% { opacity: 0.8; }
+    100% { transform: translateY(-20vh) translateX(-20px) scale(1.2); opacity: 0; }
+}
+
+@keyframes pulseAmbientFire {
+    0% { transform: scale(1); opacity: 0.5; }
+    100% { transform: scale(1.2); opacity: 1; }
+}
+
+@keyframes floatShape {
+    0% { transform: translateY(0) translateX(0) rotate(0deg); opacity: 0; }
+    10% { opacity: 0.8; }
+    90% { opacity: 0.8; }
+    100% { transform: translateY(-500px) translateX(300px) rotate(360deg); opacity: 0; }
+}
+
+/* ZABEZPIECZENIE: Gdy wejdziesz do gry, ukrywamy tło CSS dla lepszej wydajności */
+#ui-layer.hidden ~ #css-arena-bg {
+    display: none;
+}

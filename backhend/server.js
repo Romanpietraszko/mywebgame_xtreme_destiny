@@ -1,0 +1,1167 @@
+// ==========================================
+// SERVER.JS - Autorytatywny Sędzia (Vibe Noir - Pancerna Architektura)
+// WDROŻONO FAZĘ 1: Prealokacja Siatki (RAM), Server Authority, Master Clock
+// ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
+// FIX AAA: Wdrożenie fizyki Formacji Drużynowych, Zablokowanie Death Laga, Fizyczne Ściany, Noob Protection
+// RPG AAA: System Rozwoju (Drzewko Skilli) w locie
+// ==========================================
+
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http, {
+    cors: { origin: "*", methods: ["GET", "POST"] }
+});
+const path = require('path');
+
+// --- ROUTING FRONTENDU I ASSETÓW ---
+app.use(express.static(path.join(__dirname, '../frontend')));
+app.use('/assety', express.static(path.join(__dirname, '../assety')));
+app.get('/', (req, res) => res.sendFile(path.join(__dirname, '../frontend/index.html')));
+app.use('/automatyzacja', express.static(path.join(__dirname, '../automatyzacja')));
+
+// ==========================================
+// LOKALNE AI (QWEN) - Ekran Śmierci i Wellbeing
+// ==========================================
+async function getAIWellbeingMessage(mass) {
+    try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 1500); 
+        const response = await fetch('http://127.0.0.1:11434/api/generate', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                model: 'qwen2.5:3b',
+                prompt: `Jesteś empatycznym asystentem w grze akcji. Gracz właśnie zginął i zdobył ${mass} punktów. Napisz jedno krótkie, pocieszające zdanie w klimatach cyberpunk/noir promujące relaks przed kolejną próbą. Nie witaj się.`,
+                stream: false
+            }),
+            signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        const data = await response.json();
+        return data.response.trim();
+    } catch (error) {
+        return `Zostałeś odłączony. Wynik: ${mass}. Zrób głęboki wdech i zresetuj system.`;
+    }
+}
+
+// ==========================================
+// KONFIGURACJA ŚWIATA I ZMIENNE
+// ==========================================
+const MAX_MASS = 600;
+const MAX_FOODS = 250;
+const MAX_BOTS = 60; 
+const CELL_SIZE = 400; // Spatial Hashing
+
+// [FAZA 1 FIX] Pula dla siatki przestrzennej (Zapobiega Garbage Collection)
+const preallocatedGrid = {}; 
+
+const state = {
+    players: {}, bots: {}, foods: {}, projectiles: {},
+    activeEvent: null, eventTimer: 0,
+    tickCounter: 0
+};
+
+// Zmienne trybu Kampanii
+const stanKampanii = {
+    bossAktywny: false,
+    bossId: null,
+    liczbaDronow: 0,
+    ostatniSpawn: 0
+};
+
+let entityIdCounter = 0;
+
+// Słownik Broni (Dla trybu FREE)
+const WEAPONS = {
+    'sword': { dmg: 5, life: 15, speed: 18, cost: 2, piercing: false },
+    'bow': { dmg: 8, life: 60, speed: 26, cost: 2, piercing: false },
+    'knife': { dmg: 12, life: 25, speed: 22, cost: 2, piercing: true },
+    'shuriken': { dmg: 4, life: 30, speed: 20, cost: 2, piercing: false }
+};
+
+// ==========================================
+// SYSTEM EVENTÓW GLOBALNYCH (AI DIRECTOR)
+// ==========================================
+const MenedzerEventow = {
+    ostatniEvent: Date.now(),
+    interwal: 30000, 
+    aktywnePromienie: [],
+    aktywneAnomalie: [],
+
+    aktualizuj: function(io, players, bots, foods, mapSize) {
+        const teraz = Date.now();
+
+        const zyjacyGracze = Object.keys(players).filter(id => !players[id].isDead && players[id].mode !== 'CAMPAIGN');
+        if (zyjacyGracze.length === 0) {
+            this.ostatniEvent = teraz; 
+            return;
+        }
+
+        if (teraz - this.ostatniEvent > this.interwal) {
+            this.odpalLosowyEvent(io, players, bots, foods, mapSize);
+            this.ostatniEvent = teraz;
+            this.interwal = 60000 + Math.random() * 40000; 
+        }
+
+        this.aktywnePromienie = this.aktywnePromienie.filter(promien => {
+            if (teraz >= promien.czasUderzenia) {
+                io.emit('wstrzasKamery', 40); 
+                Object.values(players).forEach(p => {
+                    if (p.isSafe || p.isDead) return; 
+                    let dystans = Math.hypot(p.x - promien.x, p.y - promien.y);
+                    if (dystans < promien.zasieg) {
+                        p.score = Math.floor(p.score * 0.5); 
+                    }
+                });
+                return false; 
+            }
+            return true; 
+        });
+
+        this.aktywneAnomalie = this.aktywneAnomalie.filter(anomalia => {
+            if (teraz > anomalia.czasZakonczenia) return false;
+            if (teraz < anomalia.czasStartu) return true;
+
+            Object.values(players).forEach(p => {
+                if (p.isSafe || p.isDead || p.mode === 'CAMPAIGN') return; 
+                let dystans = Math.hypot(p.x - anomalia.x, p.y - anomalia.y);
+                if (dystans < anomalia.zasiegWysysania) {
+                    let silyWsysania = (anomalia.zasiegWysysania - dystans) / anomalia.zasiegWysysania;
+                    let kat = Math.atan2(anomalia.y - p.y, anomalia.x - p.x);
+                    p.x += Math.cos(kat) * (silyWsysania * 5); 
+                    p.y += Math.sin(kat) * (silyWsysania * 5);
+                    
+                    if (dystans < 50) {
+                        p.score -= 2;
+                        if (p.score < 0) { 
+                            io.emit('killEvent', { zabojca: "ANOMALIA OMEGA", ofiara: p.name });
+                            triggerZgon(p.id, "ANOMALIĘ GRAWITACYJNĄ");
+                        }
+                    }
+                }
+            });
+            return true;
+        });
+    },
+
+    odpalLosowyEvent: function(io, players, bots, foods, mapSize) {
+        const klucze = Object.keys(players).filter(id => players[id].mode !== 'CAMPAIGN'); 
+        const liczbaGraczy = klucze.length;
+        
+        if (liczbaGraczy === 0) return; 
+
+        if (liczbaGraczy <= 3) {
+            let szansa = Math.random();
+            if (szansa > 0.6) {
+                io.emit('cinematicEvent', "WYKRYTO ZŁOTEGO DRONA! ZNISZCZ GO ZANIM UCIEKNIE!");
+                let idGoblin = 'bot_' + (++entityIdCounter);
+                bots[idGoblin] = {
+                    id: idGoblin, name: "ZŁOTY DRON", mode: 'FREE',
+                    x: Math.random() * mapSize, y: Math.random() * mapSize,
+                    score: 250, skin: 'arystokrata', 
+                    angle: Math.random() * Math.PI * 2, state: 'FLEE', ownerId: null, typBroni: null
+                };
+            } else if (szansa > 0.3) {
+                io.emit('cinematicEvent', "PRZEBUDZENIE ROJU! INSEKTY ATAKUJĄ!");
+                let cel = players[klucze[Math.floor(Math.random() * liczbaGraczy)]];
+                for (let i = 0; i < 8; i++) {
+                    let idRoju = 'bot_' + (++entityIdCounter);
+                    bots[idRoju] = {
+                        id: idRoju, name: "ROBAK", mode: cel.mode,
+                        x: Math.max(0, Math.min(mapSize, cel.x + Math.cos(i) * 800)), 
+                        y: Math.max(0, Math.min(mapSize, cel.y + Math.sin(i) * 800)),
+                        score: 15, skin: 'ninja', angle: 0, state: 'HUNT', ownerId: null, typBroni: null
+                    };
+                }
+            } else {
+                io.emit('cinematicEvent', "WYKRYTO ANOMALIĘ GRAWITACYJNĄ. ZACHOWAJ DYSTANS OD CENTRUM!");
+                this.aktywneAnomalie.push({
+                    x: mapSize / 2, y: mapSize / 2,
+                    zasiegWysysania: 1600, 
+                    czasStartu: Date.now() + 5000, 
+                    czasZakonczenia: Date.now() + 25000 
+                });
+            }
+        } else {
+            if (Math.random() > 0.5) {
+                io.emit('cinematicEvent', "ZRZUT ZAOPATRZENIA W CENTRUM MAPY ZA 5 SEKUND!");
+                setTimeout(() => {
+                    for(let i=0; i < 50; i++) {
+                        let idZrzutu = ++entityIdCounter;
+                        foods[idZrzutu] = {
+                            id: idZrzutu,
+                            x: Math.max(0, Math.min(mapSize, (mapSize/2) + (Math.random() - 0.5) * 800)),
+                            y: Math.max(0, Math.min(mapSize, (mapSize/2) + (Math.random() - 0.5) * 800))
+                        };
+                    }
+                }, 5000);
+            } else {
+                io.emit('cinematicEvent', "UWAGA! UDERZENIE JONOWE W CENTRUM ZA 5S! UCIEKAJ!");
+                this.aktywnePromienie.push({ 
+                    x: mapSize/2, y: mapSize/2, 
+                    zasieg: 1200, 
+                    czasUderzenia: Date.now() + 5000 
+                });
+            }
+        }
+    }
+};
+
+// ==========================================
+// [MODUŁ AAA] DRZEWKO UMIEJĘTNOŚCI (RPG)
+// ==========================================
+const SystemRozwoju = {
+    sprawdzAwanse: function(p, socket) {
+        if (p.isDead || p.mode === 'CAMPAIGN') return;
+
+        if (p.score >= 50 && p.poziomRozwoju === 0) {
+            p.poziomRozwoju = 1; p.oczekujacyAwans = 1;
+            if(socket) socket.emit('awansDostepny', { poziom: 1, tryb: p.mode });
+        } else if (p.score >= 150 && p.poziomRozwoju === 1) {
+            p.poziomRozwoju = 2; p.oczekujacyAwans = 2;
+            if(socket) socket.emit('awansDostepny', { poziom: 2, tryb: p.mode });
+        } else if (p.score >= 350 && p.poziomRozwoju === 2) {
+            p.poziomRozwoju = 3; p.oczekujacyAwans = 3;
+            if(socket) socket.emit('awansDostepny', { poziom: 3, tryb: p.mode });
+        }
+    },
+    nadajSkill: function(p, wybor) {
+        if (p.oczekujacyAwans === 0) return null;
+
+        let skill = "";
+        if (p.mode === 'FREE') {
+            if (p.oczekujacyAwans === 1) skill = wybor === 1 ? 'LEKKIE_BUTY' : 'MAGNETYZM';
+            if (p.oczekujacyAwans === 2) skill = wybor === 1 ? 'WAMPIRYZM' : 'BERSERKER';
+            if (p.oczekujacyAwans === 3) skill = wybor === 1 ? 'DUCH_NOIR' : 'PLAZMA';
+        } else if (p.mode === 'TEAMS') {
+            if (p.oczekujacyAwans === 1) skill = wybor === 1 ? 'HAKER' : 'LOGISTYK';
+            if (p.oczekujacyAwans === 2) skill = wybor === 1 ? 'DOWÓDCA' : 'INŻYNIER';
+            if (p.oczekujacyAwans === 3) skill = wybor === 1 ? 'CHROMA_TARCZA' : 'WIRUS';
+        }
+
+        if (skill) {
+            p.perks.push(skill);
+            // Zastosuj natychmiastowe bufy statystyk
+            if (skill === 'LEKKIE_BUTY') p.baseSpeed *= 1.15;
+            if (skill === 'LOGISTYK') p.massMultiplier *= 2.0;
+        }
+        p.oczekujacyAwans = 0;
+        return skill;
+    }
+};
+
+function spawnFood() {
+    let id = ++entityIdCounter;
+    state.foods[id] = { id: id, x: Math.random() * 6000, y: Math.random() * 6000 };
+}
+
+function spawnBot() {
+    let id = `bot_${++entityIdCounter}`;
+    let isBoss = Math.random() < 0.05;
+    state.bots[id] = {
+        id: id, mode: 'FREE', 
+        x: Math.random() * 6000, y: Math.random() * 6000,
+        score: isBoss ? (150 + Math.random() * 100) : (5 + Math.random() * 20),
+        skin: isBoss ? 'ninja' : 'standard',
+        name: isBoss ? 'Elita AI' : 'Dron AI',
+        angle: Math.random() * Math.PI * 2,
+        state: 'IDLE', 
+        ownerId: null, 
+        typBroni: null 
+    };
+}
+
+for (let i = 0; i < MAX_FOODS; i++) spawnFood();
+for (let i = 0; i < MAX_BOTS; i++) spawnBot();
+
+// ==========================================
+// HERMETYCZNE KLASY TRYBÓW GRY
+// ==========================================
+class TrybFree {
+    static aktualizuj(p, nearby) {
+        let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
+        let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
+        
+        // Zastosowanie Pasywki Magnetzymu
+        if (p.perks && p.perks.includes('MAGNETYZM')) magnetRange *= 2.0;
+
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 1 * p.massMultiplier);
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        nearby.players.forEach(p2 => {
+            if (p.id === p2.id || p.isSafe || p2.isSafe || p2.mode !== 'FREE' || p2.isDead) return;
+            let dist = Math.hypot(p.x - p2.x, p.y - p2.y);
+            let r2 = 15 + Math.sqrt(Math.max(0, p2.score)) * 1.5;
+            if (dist < pRadius && p.score > p2.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: p2.name });
+                dodajMase(p, Math.floor(p2.score * 0.5));
+                
+                // Zastosowanie Wampiryzmu
+                if (p.perks && p.perks.includes('WAMPIRYZM')) dodajMase(p, Math.floor(p.score * 0.2));
+                
+                triggerZgon(p2.id, p.name);
+            }
+        });
+
+        nearby.bots.forEach(b => {
+            if (p.isSafe || b.ownerId || b.mode !== 'FREE') return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            let bRadius = 15 + Math.sqrt(b.score) * 1.5;
+            if (dist < pRadius && p.score > b.score * 1.15) {
+                io.emit('killEvent', { zabojca: p.name, ofiara: b.name });
+                dodajMase(p, Math.floor(b.score * 0.5));
+                
+                // Zastosowanie Wampiryzmu
+                if (p.perks && p.perks.includes('WAMPIRYZM')) dodajMase(p, Math.floor(p.score * 0.2));
+
+                delete state.bots[b.id]; spawnBot();
+            } else if (dist < bRadius && b.score > p.score * 1.15) {
+                if (p.score < 15) return; 
+                
+                io.emit('killEvent', { zabojca: b.name, ofiara: p.name });
+                b.score += Math.floor(p.score * 0.5);
+                triggerZgon(p.id, b.name);
+            }
+        });
+
+        if (p.overcharge >= 100) {
+            io.emit('killEvent', { zabojca: "SYSTEM", ofiara: `TYTAN ${p.name} UŻYWA NOVA!` });
+            p.overcharge = 0;
+            nearby.players.forEach(p2 => {
+                if (p.id !== p2.id && !p2.isDead && Math.hypot(p.x - p2.x, p.y - p2.y) < 300) {
+                    p2.score -= 50;
+                    if (p2.score < 0) triggerZgon(p2.id, p.name); 
+                }
+            });
+            nearby.bots.forEach(b => {
+                if (Math.hypot(p.x - b.x, p.y - b.y) < 300) {
+                    b.score -= 100;
+                }
+            });
+        }
+    }
+}
+
+class TrybTeams {
+    static aktualizuj(p, nearby) {
+        let pRadius = 25; 
+        let magnetRange = pRadius + 20;
+
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 2 * p.massMultiplier); 
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        nearby.bots.forEach(b => {
+            if(b.ownerId || b.mode !== 'FREE') return; 
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            if(dist < 80) { 
+                // Zastosowanie pasywki Haker
+                let obrazenia = (p.perks && p.perks.includes('HAKER')) ? 25 : 2;
+                b.score -= obrazenia; 
+                if(b.score <= 0) {
+                    b.ownerId = p.id;
+                    b.team = p.team;
+                    b.score = 25; 
+                    b.typBroni = 'miecz'; 
+                    spawnBot(); 
+                }
+            }
+        });
+        
+        if (!p.isSafe) {
+            nearby.bots.forEach(b => {
+                if(b.ownerId && b.team !== p.team) {
+                    let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                    if(dist < 30) {
+                        p.score -= 2; 
+                        if(p.score < 0) { 
+                            io.emit('killEvent', { zabojca: "Wroga Armia", ofiara: p.name });
+                            triggerZgon(p.id, "Wroga Armia");
+                        }
+                    }
+                }
+            });
+        }
+    }
+
+    static aktualizujRoj(b, lider, nearby) {
+        let mojeBoty = nearby.bots.filter(ob => ob.ownerId === lider.id);
+        let mojIndex = mojeBoty.findIndex(ob => ob.id === b.id);
+        if (mojIndex === -1) mojIndex = 0;
+
+        let targetX = lider.x;
+        let targetY = lider.y;
+        let speed = 4.5;
+        
+        // Zastosowanie Pasywki Dowódca
+        if (lider.perks && lider.perks.includes('DOWÓDCA')) speed *= 1.5;
+
+        let formacja = lider.aktywnaFormacja || 4; 
+        let rozstaw = 80;
+        let katLidera = lider.katRuchu || 0; 
+        
+        if (lider.rozkazAktywny) {
+            if (b.typBroni === 'miecz') {
+                targetX = lider.x + Math.cos(lider.katRuchu) * 400; 
+                targetY = lider.y + Math.sin(lider.katRuchu) * 400;
+                speed = 10;
+            } else if (b.typBroni === 'luk') {
+                speed = 0; 
+                if (Math.random() < 0.05) {
+                     let pid = ++entityIdCounter;
+                     state.projectiles[pid] = {
+                         id: pid, ownerId: lider.id, team: lider.team, mode: lider.mode,
+                         x: b.x, y: b.y, dx: Math.cos(lider.katRuchu), dy: Math.sin(lider.katRuchu),
+                         life: 30, speed: 20, damage: 8, piercing: false, type: 'laser'
+                     };
+                }
+            }
+        } else {
+            if (formacja === 1) { 
+                let i = mojIndex + 1;
+                let strona = i % 2 === 0 ? 1 : -1;
+                let rzad = Math.ceil(i / 2);
+                let offsetKat = katLidera + (strona * Math.PI * 0.75);
+                let dystans = rzad * rozstaw;
+                targetX = lider.x + Math.cos(offsetKat) * dystans;
+                targetY = lider.y + Math.sin(offsetKat) * dystans;
+            } else if (formacja === 2) { 
+                let startX = lider.x + Math.cos(katLidera) * rozstaw;
+                let startY = lider.y + Math.sin(katLidera) * rozstaw;
+                let liniaKat = katLidera + Math.PI / 2;
+                let ilosc = mojeBoty.length;
+                let offset = (mojIndex - (ilosc-1)/2) * rozstaw;
+                targetX = startX + Math.cos(liniaKat) * offset;
+                targetY = startY + Math.sin(liniaKat) * offset;
+            } else if (formacja === 3) { 
+                let ilosc = Math.max(1, mojeBoty.length);
+                let kat = (mojIndex / ilosc) * Math.PI * 2 + (Date.now()/1000); 
+                targetX = lider.x + Math.cos(kat) * rozstaw * 1.5;
+                targetY = lider.y + Math.sin(kat) * rozstaw * 1.5;
+            } else { 
+                targetX = lider.x;
+                targetY = lider.y;
+            }
+
+            let distToTarget = Math.hypot(targetX - b.x, targetY - b.y);
+            
+            if (formacja === 4) {
+                if (distToTarget < 70) speed = 0; 
+                else speed = Math.min(6, distToTarget * 0.08); 
+            } else {
+                if (distToTarget < 10) speed = 0;
+                else speed = Math.min(8, distToTarget * 0.2); 
+            }
+            
+            nearby.bots.forEach(otherB => {
+                if (otherB.id !== b.id && otherB.ownerId === b.ownerId) {
+                    if (Math.hypot(otherB.x - b.x, otherB.y - b.y) < 25) {
+                        targetX -= (otherB.x - b.x) * (formacja === 4 ? 0.5 : 0.1);
+                        targetY -= (otherB.y - b.y) * (formacja === 4 ? 0.5 : 0.1);
+                    }
+                }
+            });
+        }
+        
+        if(speed > 0) {
+            let moveAngle = Math.atan2(targetY - b.y, targetX - b.x);
+            b.x += Math.cos(moveAngle) * speed;
+            b.y += Math.sin(moveAngle) * speed;
+            b.angle = moveAngle;
+        }
+
+        nearby.bots.forEach(enemyB => {
+            if (enemyB.ownerId && enemyB.team !== b.team) {
+                if (Math.hypot(b.x - enemyB.x, b.y - enemyB.y) < 25) {
+                    b.score -= 5;
+                    enemyB.score -= 5;
+                }
+            }
+        });
+    }
+}
+
+// ==========================================
+// NOWA KLASA: TRYB KAMPANII (PvE)
+// ==========================================
+class TrybCampaign {
+    static aktualizuj(p, nearby) {
+        let pRadius = 15 + Math.sqrt(Math.max(0, p.score)) * 1.5;
+        let magnetRange = p.skin === 'arystokrata' ? pRadius + 15 : pRadius;
+
+        nearby.foods.forEach(f => {
+            if (state.foods[f.id] && Math.hypot(p.x - f.x, p.y - f.y) < magnetRange) {
+                dodajMase(p, 1 * p.massMultiplier);
+                delete state.foods[f.id]; spawnFood();
+            }
+        });
+
+        nearby.bots.forEach(b => {
+            if (b.mode !== 'CAMPAIGN') return;
+            let dist = Math.hypot(p.x - b.x, p.y - b.y);
+            let bRadius = b.isBoss ? 50 : 25; 
+            
+            if (dist < pRadius + bRadius) {
+                if (!b.isBoss) {
+                    p.score -= 5;
+                    b.score = 0; 
+                    stanKampanii.liczbaDronow--;
+                    if (p.score < 0) triggerZgon(p.id, "Rój Maszyn"); 
+                } else {
+                    p.score -= 2;
+                    if (p.score < 0) triggerZgon(p.id, "TYTAN AKT 1"); 
+                }
+            }
+        });
+    }
+
+    static zarzadzajFalami() {
+        let zyjacyGracze = Object.values(state.players).filter(p => p.mode === 'CAMPAIGN' && !p.isDead);
+        if (zyjacyGracze.length === 0) {
+            stanKampanii.bossAktywny = false;
+            stanKampanii.bossId = null;
+            stanKampanii.liczbaDronow = 0;
+            for (let id in state.bots) {
+                if (state.bots[id].mode === 'CAMPAIGN') delete state.bots[id];
+            }
+            return;
+        }
+
+        let maxScore = Math.max(...zyjacyGracze.map(p => p.score));
+        let targetPlayer = zyjacyGracze.reduce((prev, current) => (prev.score > current.score) ? prev : current);
+
+        if (maxScore >= 300 && !stanKampanii.bossAktywny) {
+            this.wezwijBossa(targetPlayer.x, targetPlayer.y);
+            stanKampanii.bossAktywny = true;
+            
+            for (let id in state.bots) {
+                if (state.bots[id].mode === 'CAMPAIGN' && !state.bots[id].isBoss) delete state.bots[id];
+            }
+            stanKampanii.liczbaDronow = 0;
+        } 
+        
+        if (!stanKampanii.bossAktywny && stanKampanii.liczbaDronow < (maxScore / 5) + 5 && Date.now() - stanKampanii.ostatniSpawn > 1000) {
+            this.spawnKamikaze(targetPlayer);
+            stanKampanii.ostatniSpawn = Date.now();
+        }
+    }
+
+    static spawnKamikaze(cel) {
+        let id = `bot_camp_${++entityIdCounter}`;
+        let angle = Math.random() * Math.PI * 2;
+        let x = cel.x + Math.cos(angle) * 1200; 
+        let y = cel.y + Math.sin(angle) * 1200;
+
+        state.bots[id] = {
+            id: id, mode: 'CAMPAIGN', isBoss: false,
+            x: Math.max(0, Math.min(6000, x)), y: Math.max(0, Math.min(6000, y)),
+            score: 15, skin: 'standard', name: 'Dron Roju',
+            angle: 0, state: 'HUNT', targetId: cel.id
+        };
+        stanKampanii.liczbaDronow++;
+    }
+
+    static wezwijBossa(x, y) {
+        let id = `boss_${++entityIdCounter}`;
+        stanKampanii.bossId = id;
+        state.bots[id] = {
+            id: id, mode: 'CAMPAIGN', isBoss: true,
+            x: x, y: y - 800, 
+            score: 1500, 
+            maxScore: 1500,
+            skin: 'ninja', name: 'TYTAN: OMEGA',
+            angle: 0, state: 'BOSS_PHASE_1',
+            ostatniStrzal: 0, katObrotu: 0
+        };
+        io.emit('killEvent', { zabojca: "SYSTEM", ofiara: "TYTAN OMEGA WSZEDŁ DO SEKTORA!" });
+    }
+
+    static aktualizujBossa(boss, players) {
+        let targets = players.filter(p => p.mode === 'CAMPAIGN' && !p.isDead);
+        if (targets.length === 0) return;
+        
+        let closest = targets[0];
+        let minDist = Math.hypot(boss.x - closest.x, boss.y - closest.y);
+        for(let i=1; i<targets.length; i++) {
+            let d = Math.hypot(boss.x - targets[i].x, boss.y - targets[i].y);
+            if (d < minDist) { minDist = d; closest = targets[i]; }
+        }
+
+        let katDoGracza = Math.atan2(closest.y - boss.y, closest.x - boss.x);
+
+        if (boss.score < boss.maxScore * 0.2) {
+            boss.state = 'BOSS_PHASE_3';
+            boss.katObrotu += 0.15; 
+            boss.angle = boss.katObrotu;
+            
+            if (Date.now() - boss.ostatniStrzal > 150) {
+                for(let i=0; i<3; i++) { 
+                    let pid = ++entityIdCounter;
+                    let fireAngle = boss.katObrotu + (i * Math.PI * 0.66);
+                    state.projectiles[pid] = {
+                        id: pid, ownerId: boss.id, team: 'BOSS', mode: 'CAMPAIGN',
+                        x: boss.x, y: boss.y,
+                        dx: Math.cos(fireAngle), dy: Math.sin(fireAngle),
+                        life: 100, speed: 18, damage: 15, piercing: true, type: 'laser'
+                    };
+                }
+                boss.ostatniStrzal = Date.now();
+            }
+            let speed = 4.0;
+            boss.x += Math.cos(katDoGracza) * speed;
+            boss.y += Math.sin(katDoGracza) * speed;
+
+        } else if (boss.score < boss.maxScore / 2) {
+            boss.state = 'BOSS_PHASE_2';
+            boss.katObrotu += 0.08; 
+            boss.angle = boss.katObrotu;
+            
+            if (Date.now() - boss.ostatniStrzal > 500) {
+                for(let i=0; i<4; i++) { 
+                    let pid = ++entityIdCounter;
+                    let fireAngle = boss.katObrotu + (i * Math.PI / 2);
+                    state.projectiles[pid] = {
+                        id: pid, ownerId: boss.id, team: 'BOSS', mode: 'CAMPAIGN',
+                        x: boss.x, y: boss.y,
+                        dx: Math.cos(fireAngle), dy: Math.sin(fireAngle),
+                        life: 80, speed: 12, damage: 20, piercing: true, type: 'laser'
+                    };
+                }
+                boss.ostatniStrzal = Date.now();
+            }
+        } else {
+            let speed = 3.5;
+            boss.x += Math.cos(katDoGracza) * speed;
+            boss.y += Math.sin(katDoGracza) * speed;
+            boss.angle = katDoGracza;
+        }
+
+        if (boss.score <= 0) {
+            targets.forEach(p => {
+                io.to(p.id).emit('gameOver', { finalScore: p.score, killerName: "VICTORY", message: "Pokonałeś Tytana. Dostęp do Aktu II przyznany." });
+                delete state.players[p.id];
+            });
+            stanKampanii.bossAktywny = false;
+            stanKampanii.bossId = null;
+        }
+    }
+}
+
+// ==========================================
+// OBSŁUGA KLIENCKA (SOCKET.IO)
+// ==========================================
+io.on('connection', (socket) => {
+    console.log(`[ połączono ] Terminal: ${socket.id}`);
+
+    socket.on('joinGame', (data) => {
+        let spd = 5.0, mult = 1.0, startMass = 0; 
+        if (data.skin === 'ninja') { spd = 5.5; mult = 0.9; }
+        else if (data.skin === 'arystokrata') { spd = 4.8; mult = 1.1; } 
+        else { mult = 1.02; } 
+
+        let pTeam = 'NONE';
+        let spawnX = 2000 + (Math.random() * 200 - 100);
+        let spawnY = 2000 + (Math.random() * 200 - 100);
+
+        if (data.mode === 'TEAMS') {
+            let redCount = 0, blueCount = 0;
+            for (let id in state.players) {
+                if (state.players[id].mode === 'TEAMS') {
+                    if (state.players[id].team === 'RED') redCount++;
+                    if (state.players[id].team === 'BLUE') blueCount++;
+                }
+            }
+            pTeam = redCount <= blueCount ? 'RED' : 'BLUE';
+            spawnX = pTeam === 'RED' ? 500 + (Math.random() * 400 - 200) : 5500 + (Math.random() * 400 - 200);
+            spawnY = 3000 + (Math.random() * 400 - 200);
+        } else if (data.mode === 'CAMPAIGN') {
+            spawnX = 3000; 
+            spawnY = 3000;
+        } else if (data.mode === 'FREE' && data.spawnZone) {
+            if (data.spawnZone === 'nw') { spawnX = Math.random() * 2000; spawnY = Math.random() * 2000; }
+            else if (data.spawnZone === 'ne') { spawnX = 2000 + Math.random() * 2000; spawnY = Math.random() * 2000; }
+            else if (data.spawnZone === 'sw') { spawnX = Math.random() * 2000; spawnY = 2000 + Math.random() * 2000; }
+            else if (data.spawnZone === 'se') { spawnX = 2000 + Math.random() * 2000; spawnY = 2000 + Math.random() * 2000; }
+        }
+
+        state.players[socket.id] = {
+            id: socket.id,
+            name: String(data.name || "Nieznany").substring(0, 16), 
+            skin: data.skin || 'standard',
+            mode: data.mode || 'FREE',
+            team: pTeam,
+            x: spawnX, y: spawnY,
+            score: startMass,
+            baseSpeed: spd, massMultiplier: mult,
+            activeWeapon: 'sword',
+            overcharge: 0,
+            isShielding: false, 
+            isSafe: false, 
+            isDead: false, 
+            katRuchu: 0, dystansKursora: 0, rozkazAktywny: false,
+            aktywnaFormacja: 4, 
+            ostatniStrzal: 0,
+            // [MODUŁ AAA] Zmienne do Drzewka Rozwoju
+            perks: [],
+            poziomRozwoju: 0,
+            oczekujacyAwans: 0
+        };
+        socket.emit('init', { id: socket.id, team: pTeam });
+    });
+
+    socket.on('ruchGraczaMyszka', (dane) => {
+        let p = state.players[socket.id];
+        if (p) {
+            p.katRuchu = Number(dane.kat) || 0;
+            p.dystansKursora = Number(dane.dystans) || 0;
+        }
+    });
+
+    socket.on('zmianaFormacji', (formacjaId) => {
+        let p = state.players[socket.id];
+        if (p && p.mode === 'TEAMS') {
+            p.aktywnaFormacja = Number(formacjaId) || 4;
+            console.log(`[ TAKTYKA ] Gracz ${p.name} zmienił szyk na: ${p.aktywnaFormacja}`);
+        }
+    });
+
+    socket.on('zgłośZjedzenieKropki', (fid) => {
+        let p = state.players[socket.id];
+        if (p && !p.isSafe && !p.isDead && state.foods[fid]) {
+            let f = state.foods[fid];
+            let pRadius = Math.min(20 + Math.sqrt(Math.max(10, p.score)) * 2, 65) + 40; 
+            let dist = Math.hypot(p.x - f.x, p.y - f.y);
+            
+            if (dist <= pRadius) {
+                dodajMase(p, (p.mode === 'TEAMS' ? 2 : 1) * p.massMultiplier);
+                delete state.foods[fid];
+                spawnFood(); 
+            } else {
+                console.log(`[ ANTI-CHEAT ] Podejrzane zjedzenie u gracza ${p.name} (Zbyt duży dystans: ${Math.floor(dist)} > ${Math.floor(pRadius)})`);
+            }
+        }
+    });
+
+    socket.on('rzutOszczepem', (dane) => {
+        let p = state.players[socket.id];
+        if (p && !p.isSafe && !p.isDead) { 
+            const teraz = Date.now();
+            let limitCzasowy = p.mode === 'TEAMS' ? 500 : 200; 
+            if (teraz - p.ostatniStrzal < limitCzasowy) return; 
+            p.ostatniStrzal = teraz;
+
+            let celKat = Number(dane.kat);
+            if (isNaN(celKat)) return;
+
+            // Zastosowanie pasywki Berserker, Plazma i Wirus
+            let isBerserker = p.perks && p.perks.includes('BERSERKER');
+            let isPlazma = p.perks && p.perks.includes('PLAZMA');
+            let isWirus = p.perks && p.perks.includes('WIRUS');
+
+            let koszt = p.mode === 'TEAMS' ? 5 : (WEAPONS[p.activeWeapon]?.cost || 2);
+            if (isBerserker) koszt *= 1.5;
+
+            if (p.score > koszt) {
+                p.score -= koszt;
+                let pid = ++entityIdCounter;
+                
+                let finalDmg = p.mode === 'TEAMS' ? 25 : WEAPONS[p.activeWeapon].dmg;
+                if (isBerserker) finalDmg *= 2;
+                
+                let finalSpeed = isBerserker ? 32 : 25;
+
+                state.projectiles[pid] = {
+                    id: pid, ownerId: p.id, team: p.team, mode: p.mode,
+                    x: p.x, y: p.y,
+                    dx: Math.cos(celKat), dy: Math.sin(celKat),
+                    life: 50, speed: finalSpeed, damage: finalDmg, 
+                    piercing: isPlazma ? true : true, type: isPlazma ? 'laser' : 'oszczep',
+                    isWirus: isWirus
+                };
+            }
+        }
+    });
+
+    socket.on('rozkazSpecjalny', () => {
+        let p = state.players[socket.id];
+        if (p && p.mode === 'TEAMS' && !p.isDead) {
+            p.rozkazAktywny = true;
+            setTimeout(() => { if(state.players[p.id]) p.rozkazAktywny = false; }, 2000); 
+            
+            // Zastosowanie pasywki Chroma-Tarcza
+            if (p.perks && p.perks.includes('CHROMA_TARCZA')) {
+                p.isShielding = true;
+                setTimeout(() => { if(state.players[p.id]) p.isShielding = false; }, 3000);
+            }
+        }
+    });
+
+    // [MODUŁ AAA] Obsługa wyboru umiejętności od klienta
+    socket.on('wybierzSkill', (wybor) => {
+        let p = state.players[socket.id];
+        if (p && !p.isDead && p.oczekujacyAwans > 0) {
+            let przyznanySkill = SystemRozwoju.nadajSkill(p, Number(wybor));
+            if (przyznanySkill) {
+                socket.emit('skillPotwierdzony', { skill: przyznanySkill });
+            }
+        }
+    });
+
+    socket.on('buyShopItem', (item) => {
+        let p = state.players[socket.id];
+        if (p && p.isSafe && !p.isDead) { 
+            if (p.mode === 'TEAMS') {
+                if (item === 'buy_bots') {
+                    let cost = 50;
+                    if (p.score >= cost) {
+                        p.score -= cost;
+                        // Spawnowanie 3 nowych dronów dla gracza
+                        for(let i=0; i<3; i++) {
+                            let id = `bot_${++entityIdCounter}`;
+                            state.bots[id] = {
+                                id: id, mode: 'TEAMS',
+                                x: p.x + (Math.random()*100-50), y: p.y + (Math.random()*100-50),
+                                score: 25, skin: 'standard', name: 'Dron',
+                                angle: 0, state: 'HUNT', ownerId: p.id, team: p.team, typBroni: 'miecz'
+                            };
+                        }
+                        socket.emit('shopSuccess', { item: "WSPARCIE Z POWIETRZA (3 DRONY)" });
+                    }
+                } else if (item === 'upgrade_bots') {
+                    let cost = 100;
+                    if (p.score >= cost) {
+                        p.score -= cost;
+                        // Zmiana broni wszystkim posiadanym botom na lasery
+                        Object.values(state.bots).forEach(b => {
+                            if (b.ownerId === p.id) b.typBroni = 'luk'; 
+                        });
+                        socket.emit('shopSuccess', { item: "ULEPSZENIE DRONÓW (LASERY)" });
+                    }
+                }
+            } else {
+                let shopCost = (WEAPONS[item]?.cost || 2) * 25; 
+                if (p.score >= shopCost) {
+                    p.score -= shopCost;
+                    p.activeWeapon = item;
+                    socket.emit('shopSuccess', { item: item });
+                }
+            }
+        }
+    });
+
+    socket.on('pingTest', (timestamp) => {
+        socket.emit('pongTest', timestamp);
+    });
+
+    socket.on('disconnect', () => {
+        console.log(`[ rozłączono ] Terminal: ${socket.id}`);
+        for(let bId in state.bots) { if(state.bots[bId].ownerId === socket.id) delete state.bots[bId]; }
+        delete state.players[socket.id];
+    });
+});
+
+// ==========================================
+// GŁÓWNA PĘTLA GRY (30 FPS)
+// ==========================================
+setInterval(() => {
+    state.tickCounter++;
+
+    for (let key in preallocatedGrid) {
+        preallocatedGrid[key].players.length = 0;
+        preallocatedGrid[key].bots.length = 0;
+        preallocatedGrid[key].foods.length = 0;
+    }
+
+    function addToGrid(entity, type) {
+        if (!entity) return;
+        let key = `${Math.floor(entity.x / CELL_SIZE)},${Math.floor(entity.y / CELL_SIZE)}`;
+        if (!preallocatedGrid[key]) preallocatedGrid[key] = { players: [], bots: [], foods: [] };
+        preallocatedGrid[key][type].push(entity);
+    }
+    
+    Object.values(state.players).forEach(p => { if (!p.isDead) addToGrid(p, 'players') });
+    Object.values(state.bots).forEach(b => addToGrid(b, 'bots'));
+    Object.values(state.foods).forEach(f => addToGrid(f, 'foods'));
+
+    function getNearby(x, y) {
+        let cx = Math.floor(x / CELL_SIZE), cy = Math.floor(y / CELL_SIZE);
+        let nearby = { players: [], bots: [], foods: [] };
+        for (let dx = -1; dx <= 1; dx++) {
+            for (let dy = -1; dy <= 1; dy++) {
+                let cell = preallocatedGrid[`${cx + dx},${cy + dy}`];
+                if (cell) {
+                    nearby.players.push(...cell.players);
+                    nearby.bots.push(...cell.bots);
+                    nearby.foods.push(...cell.foods);
+                }
+            }
+        }
+        return nearby;
+    }
+
+    // 2. LOGIKA GRACZY & RUCH MYSZKĄ & STREFA BEZPIECZNA
+    for (let pId in state.players) {
+        let p = state.players[pId];
+        
+        if (p.isDead) continue; 
+
+        // [MODUŁ AAA] Sprawdzanie i aplikowanie Awansów
+        SystemRozwoju.sprawdzAwanse(p, io.sockets.sockets.get(pId));
+
+        p.isSafe = false; 
+
+        if (p.mode === 'FREE') {
+            if (Math.hypot(p.x - 2000, p.y - 2000) < 400) { p.isSafe = true; }
+        } else if (p.mode === 'TEAMS') {
+            let mojaBazaX = p.team === 'RED' ? 500 : 5500;
+            let wrogaBazaX = p.team === 'RED' ? 5500 : 500;
+            let bazaY = 3000;
+
+            if (Math.hypot(p.x - mojaBazaX, p.y - bazaY) < 400) { 
+                p.isSafe = true; 
+                // Zastosowanie pasywki Inżynier - Leczenie w bazie
+                if (p.perks && p.perks.includes('INŻYNIER')) {
+                    dodajMase(p, 1);
+                }
+            }
+            
+            if (Math.hypot(p.x - wrogaBazaX, p.y - bazaY) < 400) {
+                p.score -= 2; 
+                if (p.score < 0) { 
+                    io.emit('killEvent', { zabojca: "System Obronny Bazy", ofiara: p.name });
+                    triggerZgon(p.id, "System Obronny Bazy");
+                    continue; 
+                }
+            }
+        }
+
+        let nearby = getNearby(p.x, p.y);
+
+        if (p.mode === 'FREE') TrybFree.aktualizuj(p, nearby);
+        else if (p.mode === 'TEAMS') TrybTeams.aktualizuj(p, nearby);
+        else if (p.mode === 'CAMPAIGN') TrybCampaign.aktualizuj(p, nearby);
+
+        const MARTWA_STREFA = 30; 
+        let speed = Math.max(2.0, p.baseSpeed - (p.mode === 'FREE' ? Math.max(0, (p.score - 50) / 600) * 2.0 : 0));
+        
+        if (p.dystansKursora !== undefined && p.dystansKursora > MARTWA_STREFA) {
+            let limit = p.mode === 'TEAMS' ? 6000 : 4000;
+            let nextX = p.x + Math.cos(p.katRuchu) * speed;
+            let nextY = p.y + Math.sin(p.katRuchu) * speed;
+
+            p.x = Math.max(10, Math.min(limit - 10, nextX));
+            p.y = Math.max(10, Math.min(limit - 10, nextY));
+        }
+    }
+
+    // 2.5 ZARZĄDZANIE KAMPANIĄ
+    TrybCampaign.zarzadzajFalami();
+
+    // 2.6 GLOBALNE EVENTY (AI DIRECTOR)
+    MenedzerEventow.aktualizuj(io, state.players, state.bots, state.foods, 6000);
+
+    // 3. LOGIKA POCISKÓW I OSZCZEPÓW
+    for (let projId in state.projectiles) {
+        let proj = state.projectiles[projId];
+        proj.x += proj.dx * proj.speed;
+        proj.y += proj.dy * proj.speed;
+        proj.life--;
+
+        let nearby = getNearby(proj.x, proj.y);
+        let hit = false;
+
+        nearby.players.forEach(p => {
+            if (p.isSafe || p.isDead) return; 
+            if (p.id !== proj.ownerId && Math.hypot(p.x - proj.x, p.y - proj.y) < 30) {
+                if (proj.mode === 'TEAMS' && p.team === proj.team) return; 
+                if (proj.mode === 'CAMPAIGN' && proj.team === 'BOSS') return; 
+                if (!p.isShielding) {
+                    p.score -= proj.damage;
+                    if (p.score < 0) { 
+                        let killer = state.players[proj.ownerId] ? state.players[proj.ownerId].name : "Zabłąkany Pocisk";
+                        io.emit('killEvent', { zabojca: killer, ofiara: p.name });
+                        triggerZgon(p.id, killer);
+                    }
+                }
+                hit = true;
+            }
+        });
+
+        nearby.bots.forEach(b => {
+            let hitbox = 30 + (b.isBoss ? 40 : 0); 
+            if (Math.hypot(b.x - proj.x, b.y - proj.y) < hitbox) {
+                if (proj.mode === 'TEAMS' && b.team === proj.team) return;
+                if (proj.mode === 'CAMPAIGN' && b.isBoss && proj.team === 'BOSS') return; 
+                
+                // Zastosowanie Pasywki Wirus
+                if (proj.isWirus && b.ownerId && b.team !== proj.team) {
+                    b.ownerId = proj.ownerId;
+                    b.team = proj.team;
+                } else {
+                    b.score -= proj.damage;
+                }
+                hit = true;
+            }
+        });
+
+        if (hit && !proj.piercing) proj.life = 0;
+        if (proj.life <= 0) delete state.projectiles[projId];
+    }
+
+    // 4. LOGIKA DRONÓW
+    for (let bId in state.bots) {
+        let b = state.bots[bId];
+        
+        if (b.score <= 0) {
+            delete state.bots[bId];
+            continue;
+        }
+
+        if (b.mode === 'CAMPAIGN') {
+            if (b.isBoss) {
+                TrybCampaign.aktualizujBossa(b, Object.values(state.players));
+            } else {
+                let cel = state.players[b.targetId];
+                if (cel && cel.mode === 'CAMPAIGN' && !cel.isDead) {
+                    let speed = 5.0;
+                    b.angle = Math.atan2(cel.y - b.y, cel.x - b.x);
+                    b.x += Math.cos(b.angle) * speed;
+                    b.y += Math.sin(b.angle) * speed;
+                } else {
+                    b.score = 0; 
+                    stanKampanii.liczbaDronow--;
+                }
+            }
+            continue; 
+        }
+
+        if (b.name === "ZŁOTY DRON") {
+            b.angle += (Math.random() - 0.5) * 0.2; 
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * 8));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * 8));
+            
+            if (Math.random() < 0.1) {
+                let idF = ++entityIdCounter;
+                state.foods[idF] = { id: idF, x: b.x, y: b.y };
+            }
+            continue; 
+        }
+
+        if (b.name === "ROBAK") {
+            let speed = 4.5;
+            let nearby = getNearby(b.x, b.y);
+            let closestDist = Infinity, targetPlayer = null;
+            
+            nearby.players.forEach(p => {
+                if (p.isSafe || p.isDead || p.mode !== b.mode) return;
+                let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                if (dist < 1000 && dist < closestDist) { closestDist = dist; targetPlayer = p; }
+            });
+            
+            if (targetPlayer) b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x);
+            
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
+            continue;
+        }
+
+        if (b.ownerId && state.players[b.ownerId] && !state.players[b.ownerId].isDead) {
+            let nearby = getNearby(b.x, b.y);
+            TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby);
+        } else {
+            let nearby = getNearby(b.x, b.y);
+            let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
+
+            nearby.players.forEach(p => {
+                if (p.isSafe || p.isDead || p.mode !== 'FREE') return; 
+                let dist = Math.hypot(p.x - b.x, p.y - b.y);
+                if (dist < 500) { 
+                    if (b.score > p.score * 1.15) {
+                        if (dist < closestDist) { closestDist = dist; targetPlayer = p; }
+                    } else if (p.score > b.score * 1.15) {
+                        predatorPlayer = p;
+                    }
+                }
+            });
+
+            if (predatorPlayer) {
+                b.state = 'FLEE';
+                b.angle = Math.atan2(b.y - predatorPlayer.y, b.x - predatorPlayer.x); 
+            } else if (targetPlayer) {
+                b.state = 'HUNT';
+                b.angle = Math.atan2(targetPlayer.y - b.y, targetPlayer.x - b.x); 
+            } else {
+                b.state = 'IDLE';
+                if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2; 
+            }
+
+            let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
+            if (b.skin === 'ninja') speed += 1.0; 
+
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
+        }
+    }
+
+    // 5. WYSYŁKA
+    io.emit('serverTick', {
+        serverTime: Date.now(), 
+        players: state.players,
+        bots: state.bots,
+        projectiles: state.projectiles,
+        foods: state.tickCounter % 30 === 0 ? state.foods : null,
+        anomalie: MenedzerEventow.aktywneAnomalie,
+        promienie: MenedzerEventow.aktywnePromienie
+    });
+
+}, 33); 
+
+// ==========================================
+// FUNKCJE POMOCNICZE
+// ==========================================
+function dodajMase(gracz, ilosc) {
+    if (gracz.score + ilosc <= MAX_MASS) {
+        gracz.score += ilosc;
+    } else {
+        let nadwyzka = (gracz.score + ilosc) - MAX_MASS;
+        gracz.score = MAX_MASS;
+        gracz.overcharge += nadwyzka; 
+    }
+}
+
+async function triggerZgon(deadId, killerName) {
+    const p = state.players[deadId];
+    if (p && !p.isDead) {
+        p.isDead = true; 
+        
+        p.x = -10000;
+        p.y = -10000;
+
+        let score = Math.floor(p.score);
+        console.log(`[ ŚMIERĆ ] ${p.name} poległ. Pytam Qwen o pocieszenie...`);
+        
+        if(p.mode === 'TEAMS') {
+            for(let bId in state.bots) { if(state.bots[bId].ownerId === deadId) delete state.bots[bId]; }
+        }
+
+        let msg = await getAIWellbeingMessage(score);
+        io.to(deadId).emit('gameOver', { finalScore: score, killerName: killerName, message: msg });
+        delete state.players[deadId]; 
+    }
+}
+
+const PORT = process.env.PORT || 3000;
+http.listen(PORT, () => {
+    console.log(`=========================================`);
+    console.log(` SYSTEM ONLINE: Sędzia Vibe Noir `);
+    console.log(` Oczekuję na graczy na porcie ${PORT} `);
+    console.log(`=========================================`);
+});
