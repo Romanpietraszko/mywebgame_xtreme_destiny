@@ -819,13 +819,32 @@ io.on('connection', (socket) => {
         let p = state.players[socket.id];
         if (p && p.isSafe && !p.isDead) { 
             if (p.mode === 'TEAMS') {
-                let shopCost = 50; 
-                if (p.score >= shopCost) {
-                    p.score -= shopCost;
-                    Object.values(state.bots).forEach(b => {
-                        if (b.ownerId === p.id && Math.random() > 0.5) b.typBroni = item;
-                    });
-                    socket.emit('shopSuccess', { item: item });
+                if (item === 'buy_bots') {
+                    let cost = 50;
+                    if (p.score >= cost) {
+                        p.score -= cost;
+                        // Spawnowanie 3 nowych dronów dla gracza
+                        for(let i=0; i<3; i++) {
+                            let id = `bot_${++entityIdCounter}`;
+                            state.bots[id] = {
+                                id: id, mode: 'TEAMS',
+                                x: p.x + (Math.random()*100-50), y: p.y + (Math.random()*100-50),
+                                score: 25, skin: 'standard', name: 'Dron',
+                                angle: 0, state: 'HUNT', ownerId: p.id, team: p.team, typBroni: 'miecz'
+                            };
+                        }
+                        socket.emit('shopSuccess', { item: "WSPARCIE Z POWIETRZA (3 DRONY)" });
+                    }
+                } else if (item === 'upgrade_bots') {
+                    let cost = 100;
+                    if (p.score >= cost) {
+                        p.score -= cost;
+                        // Zmiana broni wszystkim posiadanym botom na lasery
+                        Object.values(state.bots).forEach(b => {
+                            if (b.ownerId === p.id) b.typBroni = 'luk'; 
+                        });
+                        socket.emit('shopSuccess', { item: "ULEPSZENIE DRONÓW (LASERY)" });
+                    }
                 }
             } else {
                 let shopCost = (WEAPONS[item]?.cost || 2) * 25; 

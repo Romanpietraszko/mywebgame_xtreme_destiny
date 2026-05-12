@@ -759,7 +759,34 @@
             }
 
             if (e.code === 'Space' && czyWBazie) {
-                if (!czyWsklepie) { czyWsklepie = true; if (castleShop) castleShop.classList.remove('hidden'); } 
+                if (!czyWsklepie) { 
+                    czyWsklepie = true; 
+                    if (castleShop) {
+                        let tryb = window.Flagi ? window.Flagi.Stan.wybranyTryb : 'FREE';
+                        if (tryb === 'TEAMS') {
+                            castleShop.innerHTML = `
+                                <h2 style="color: #9b59b6; margin-top: 0; margin-bottom: 5px;">CENTRUM DOWODZENIA</h2>
+                                <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Zarządzaj swoją armią dronów.</p>
+                                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                                    <button class="main-btn border-blue" style="font-size: 14px; padding: 12px;" onclick="kupBron('buy_bots')">🚁 ZWERBUJ 3 DRONY - 50 MASY</button>
+                                    <button class="main-btn border-purple" style="font-size: 14px; padding: 12px;" onclick="kupBron('upgrade_bots')">🔫 WYPOSAŻ W LASERY - 100 MASY</button>
+                                </div>
+                                <button class="main-btn border-red" style="font-size: 14px; padding: 10px; width: 100%;" onclick="zamknijSklep()">WYJŚCIE</button>
+                            `;
+                        } else {
+                            castleShop.innerHTML = `
+                                <h2 style="color: #3498db; margin-top: 0; margin-bottom: 5px;">ZBROJOWNIA</h2>
+                                <p style="color: #aaa; font-size: 12px; margin-bottom: 20px;">Ulepsz swój oszczep za masę.</p>
+                                <div style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 15px;">
+                                    <button class="main-btn border-blue" style="font-size: 14px; padding: 12px;" onclick="kupBron('bow')">⚡ SZYBKI OSZCZEP - 50 MASY</button>
+                                    <button class="main-btn border-purple" style="font-size: 14px; padding: 12px;" onclick="kupBron('knife')">🗡️ CIĘŻKIE OSTRZE - 50 MASY</button>
+                                </div>
+                                <button class="main-btn border-red" style="font-size: 14px; padding: 10px; width: 100%;" onclick="zamknijSklep()">WYJŚCIE</button>
+                            `;
+                        }
+                        castleShop.classList.remove('hidden'); 
+                    } 
+                } 
                 else zamknijSklep();
             }
             if (e.code === 'KeyE') socket.emit('rozkazSpecjalny');
