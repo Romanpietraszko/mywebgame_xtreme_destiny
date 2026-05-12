@@ -351,7 +351,7 @@
 
         const leaderboard = document.createElement('div');
         leaderboard.id = 'leaderboard';
-        leaderboard.style.cssText = 'position: absolute; top: 20px; right: 20px; background: rgba(10,10,15,0.85); border: 2px solid #f1c40f; padding: 12px; border-radius: 8px; color: #fff; font-family: "Exo 2", sans-serif; width: 200px; z-index: 10; pointer-events: none; transition: opacity 0.3s; box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);';
+        leaderboard.style.cssText = 'position: absolute; top: 15px; left: calc(50% + 160px); background: rgba(10,10,15,0.85); border: 2px solid #f1c40f; padding: 12px; border-radius: 8px; color: #fff; font-family: "Exo 2", sans-serif; width: 180px; z-index: 10; pointer-events: none; transition: opacity 0.3s; box-shadow: 0 0 15px rgba(241, 196, 15, 0.2);';
         leaderboard.classList.add('hidden');
         document.getElementById('in-game-ui').appendChild(leaderboard);
 
