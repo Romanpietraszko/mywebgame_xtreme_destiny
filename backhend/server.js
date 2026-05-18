@@ -4,6 +4,7 @@
 // ROZBUDOWA AAA: Odbiór Predykcji Jedzenia, Anomalia Grawitacyjna, Faza 3 Bossa
 // FIX AAA: Wdrożenie fizyki Formacji Drużynowych, Zablokowanie Death Laga, Fizyczne Ściany, Noob Protection
 // RPG AAA: System Rozwoju (Drzewko Skilli) w locie
+// FIX PROD: Delta Time Clamping, Optymalizacja GC, Payload Diet
 // ==========================================
 
 const express = require('express');
@@ -89,7 +90,7 @@ const MenedzerEventow = {
     aktywnePromienie: [],
     aktywneAnomalie: [],
 
-    aktualizuj: function(io, players, bots, foods, mapSize) {
+    aktualizuj: function(io, players, bots, foods, mapSize, dt = 1.0) {
         const teraz = Date.now();
 
         const zyjacyGracze = Object.keys(players).filter(id => !players[id].isDead && players[id].mode !== 'CAMPAIGN');
@@ -129,8 +130,10 @@ const MenedzerEventow = {
                 if (dystans < anomalia.zasiegWysysania) {
                     let silyWsysania = (anomalia.zasiegWysysania - dystans) / anomalia.zasiegWysysania;
                     let kat = Math.atan2(anomalia.y - p.y, anomalia.x - p.x);
-                    p.x += Math.cos(kat) * (silyWsysania * 5); 
-                    p.y += Math.sin(kat) * (silyWsysania * 5);
+                    
+                    // Aplikacja Delta Time do przyciągania anomalii
+                    p.x += Math.cos(kat) * (silyWsysania * 5 * dt); 
+                    p.y += Math.sin(kat) * (silyWsysania * 5 * dt);
                     
                     if (dystans < 50) {
                         p.score -= 2;
@@ -392,7 +395,7 @@ class TrybTeams {
         }
     }
 
-    static aktualizujRoj(b, lider, nearby) {
+    static aktualizujRoj(b, lider, nearby, dt = 1.0) {
         let mojeBoty = nearby.bots.filter(ob => ob.ownerId === lider.id);
         let mojIndex = mojeBoty.findIndex(ob => ob.id === b.id);
         if (mojIndex === -1) mojIndex = 0;
@@ -472,9 +475,10 @@ class TrybTeams {
         }
         
         if(speed > 0) {
+            let finalSpeed = speed * dt; // Aplikacja Delta Time
             let moveAngle = Math.atan2(targetY - b.y, targetX - b.x);
-            b.x += Math.cos(moveAngle) * speed;
-            b.y += Math.sin(moveAngle) * speed;
+            b.x += Math.cos(moveAngle) * finalSpeed;
+            b.y += Math.sin(moveAngle) * finalSpeed;
             b.angle = moveAngle;
         }
 
@@ -584,7 +588,7 @@ class TrybCampaign {
         io.emit('killEvent', { zabojca: "SYSTEM", ofiara: "TYTAN OMEGA WSZEDŁ DO SEKTORA!" });
     }
 
-    static aktualizujBossa(boss, players) {
+    static aktualizujBossa(boss, players, dt = 1.0) {
         let targets = players.filter(p => p.mode === 'CAMPAIGN' && !p.isDead);
         if (targets.length === 0) return;
         
@@ -615,7 +619,7 @@ class TrybCampaign {
                 }
                 boss.ostatniStrzal = Date.now();
             }
-            let speed = 4.0;
+            let speed = 4.0 * dt; // Aplikacja Delta Time
             boss.x += Math.cos(katDoGracza) * speed;
             boss.y += Math.sin(katDoGracza) * speed;
 
@@ -638,7 +642,7 @@ class TrybCampaign {
                 boss.ostatniStrzal = Date.now();
             }
         } else {
-            let speed = 3.5;
+            let speed = 3.5 * dt; // Aplikacja Delta Time
             boss.x += Math.cos(katDoGracza) * speed;
             boss.y += Math.sin(katDoGracza) * speed;
             boss.angle = katDoGracza;
@@ -871,7 +875,15 @@ io.on('connection', (socket) => {
 // ==========================================
 // GŁÓWNA PĘTLA GRY (30 FPS)
 // ==========================================
+let ostatniCzasTicku = Date.now(); // [FIX PROD] Inicjalizacja czasu dla Delta Time
+
 setInterval(() => {
+    // [FIX PROD] 1. Obliczanie zaciśniętego Delta Time (Clamping)
+    const terazTick = Date.now();
+    let surowe_dt = (terazTick - ostatniCzasTicku) / 33.33;
+    let dt = Math.max(0.5, Math.min(surowe_dt, 3.0)); 
+    ostatniCzasTicku = terazTick;
+
     state.tickCounter++;
 
     for (let key in preallocatedGrid) {
@@ -897,10 +909,11 @@ setInterval(() => {
         for (let dx = -1; dx <= 1; dx++) {
             for (let dy = -1; dy <= 1; dy++) {
                 let cell = preallocatedGrid[`${cx + dx},${cy + dy}`];
+                // [FIX PROD] 2. Zwykłe pętle zamiast morderczego spread operatora (Zabójca Lagów GC)
                 if (cell) {
-                    nearby.players.push(...cell.players);
-                    nearby.bots.push(...cell.bots);
-                    nearby.foods.push(...cell.foods);
+                    for (let i = 0; i < cell.players.length; i++) nearby.players.push(cell.players[i]);
+                    for (let i = 0; i < cell.bots.length; i++) nearby.bots.push(cell.bots[i]);
+                    for (let i = 0; i < cell.foods.length; i++) nearby.foods.push(cell.foods[i]);
                 }
             }
         }
@@ -951,11 +964,12 @@ setInterval(() => {
 
         const MARTWA_STREFA = 30; 
         let speed = Math.max(2.0, p.baseSpeed - (p.mode === 'FREE' ? Math.max(0, (p.score - 50) / 600) * 2.0 : 0));
+        let zaktualizowanaPredkosc = speed * dt; // [FIX PROD] Aplikacja Delta Time do ruchu gracza
         
         if (p.dystansKursora !== undefined && p.dystansKursora > MARTWA_STREFA) {
             let limit = p.mode === 'TEAMS' ? 6000 : 4000;
-            let nextX = p.x + Math.cos(p.katRuchu) * speed;
-            let nextY = p.y + Math.sin(p.katRuchu) * speed;
+            let nextX = p.x + Math.cos(p.katRuchu) * zaktualizowanaPredkosc;
+            let nextY = p.y + Math.sin(p.katRuchu) * zaktualizowanaPredkosc;
 
             p.x = Math.max(10, Math.min(limit - 10, nextX));
             p.y = Math.max(10, Math.min(limit - 10, nextY));
@@ -965,14 +979,15 @@ setInterval(() => {
     // 2.5 ZARZĄDZANIE KAMPANIĄ
     TrybCampaign.zarzadzajFalami();
 
-    // 2.6 GLOBALNE EVENTY (AI DIRECTOR)
-    MenedzerEventow.aktualizuj(io, state.players, state.bots, state.foods, 6000);
+    // 2.6 GLOBALNE EVENTY (AI DIRECTOR) - [FIX PROD] Przekazanie dt do anomalii
+    MenedzerEventow.aktualizuj(io, state.players, state.bots, state.foods, 6000, dt);
 
     // 3. LOGIKA POCISKÓW I OSZCZEPÓW
     for (let projId in state.projectiles) {
         let proj = state.projectiles[projId];
-        proj.x += proj.dx * proj.speed;
-        proj.y += proj.dy * proj.speed;
+        // [FIX PROD] Aplikacja Delta Time do lotu pocisków
+        proj.x += proj.dx * (proj.speed * dt);
+        proj.y += proj.dy * (proj.speed * dt);
         proj.life--;
 
         let nearby = getNearby(proj.x, proj.y);
@@ -1027,11 +1042,11 @@ setInterval(() => {
 
         if (b.mode === 'CAMPAIGN') {
             if (b.isBoss) {
-                TrybCampaign.aktualizujBossa(b, Object.values(state.players));
+                TrybCampaign.aktualizujBossa(b, Object.values(state.players), dt); // [FIX PROD] Przekazanie dt
             } else {
                 let cel = state.players[b.targetId];
                 if (cel && cel.mode === 'CAMPAIGN' && !cel.isDead) {
-                    let speed = 5.0;
+                    let speed = 5.0 * dt; // [FIX PROD] Delta Time Kamikaze
                     b.angle = Math.atan2(cel.y - b.y, cel.x - b.x);
                     b.x += Math.cos(b.angle) * speed;
                     b.y += Math.sin(b.angle) * speed;
@@ -1045,8 +1060,8 @@ setInterval(() => {
 
         if (b.name === "ZŁOTY DRON") {
             b.angle += (Math.random() - 0.5) * 0.2; 
-            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * 8));
-            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * 8));
+            b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * (8 * dt))); // [FIX PROD] Delta Time Złoty Dron
+            b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * (8 * dt)));
             
             if (Math.random() < 0.1) {
                 let idF = ++entityIdCounter;
@@ -1056,7 +1071,7 @@ setInterval(() => {
         }
 
         if (b.name === "ROBAK") {
-            let speed = 4.5;
+            let speed = 4.5 * dt; // [FIX PROD] Delta Time Rój
             let nearby = getNearby(b.x, b.y);
             let closestDist = Infinity, targetPlayer = null;
             
@@ -1075,7 +1090,7 @@ setInterval(() => {
 
         if (b.ownerId && state.players[b.ownerId] && !state.players[b.ownerId].isDead) {
             let nearby = getNearby(b.x, b.y);
-            TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby);
+            TrybTeams.aktualizujRoj(b, state.players[b.ownerId], nearby, dt); // [FIX PROD] Przekazanie dt do roju
         } else {
             let nearby = getNearby(b.x, b.y);
             let targetPlayer = null, predatorPlayer = null, closestDist = Infinity;
@@ -1103,20 +1118,54 @@ setInterval(() => {
                 if (Math.random() < 0.05) b.angle = Math.random() * Math.PI * 2; 
             }
 
-            let speed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
-            if (b.skin === 'ninja') speed += 1.0; 
+            let baseBotSpeed = b.state === 'FLEE' ? 3.5 : (b.state === 'HUNT' ? 2.8 : 1.5);
+            if (b.skin === 'ninja') baseBotSpeed += 1.0; 
+            let speed = baseBotSpeed * dt; // [FIX PROD] Delta Time Boty
 
             b.x = Math.max(0, Math.min(6000, b.x + Math.cos(b.angle) * speed));
             b.y = Math.max(0, Math.min(6000, b.y + Math.sin(b.angle) * speed));
         }
     }
 
-    // 5. WYSYŁKA
+    // [FIX PROD] 3. PAYLOAD DIET - Odchudzenie paczki o ułamki i zbędne stringi przed wysyłką
+    let lekkieGracze = {};
+    for (let id in state.players) {
+        let p = state.players[id];
+        lekkieGracze[id] = {
+            id: p.id, name: p.name, skin: p.skin, mode: p.mode, team: p.team,
+            x: Math.round(p.x), y: Math.round(p.y), score: Math.round(p.score),
+            activeWeapon: p.activeWeapon, isShielding: p.isShielding, isSafe: p.isSafe, isDead: p.isDead,
+            katRuchu: Math.round(p.katRuchu * 100) / 100, poziomRozwoju: p.poziomRozwoju, oczekujacyAwans: p.oczekujacyAwans, perks: p.perks
+        };
+    }
+
+    let lekkieBoty = {};
+    for (let id in state.bots) {
+        let b = state.bots[id];
+        lekkieBoty[id] = {
+            id: b.id, mode: b.mode, x: Math.round(b.x), y: Math.round(b.y), score: Math.round(b.score),
+            skin: b.skin, name: b.name, angle: Math.round(b.angle * 100) / 100, state: b.state, 
+            ownerId: b.ownerId, team: b.team, typBroni: b.typBroni, isBoss: b.isBoss
+        };
+    }
+
+    let lekkiePociski = {};
+    for (let id in state.projectiles) {
+        let proj = state.projectiles[id];
+        lekkiePociski[id] = {
+            id: proj.id, ownerId: proj.ownerId, team: proj.team, mode: proj.mode,
+            x: Math.round(proj.x), y: Math.round(proj.y),
+            type: proj.type, isWirus: proj.isWirus,
+            dx: Math.round(proj.dx * 100) / 100, dy: Math.round(proj.dy * 100) / 100
+        };
+    }
+
+    // 5. WYSYŁKA (Zoptymalizowana)
     io.emit('serverTick', {
         serverTime: Date.now(), 
-        players: state.players,
-        bots: state.bots,
-        projectiles: state.projectiles,
+        players: lekkieGracze,
+        bots: lekkieBoty,
+        projectiles: lekkiePociski,
         foods: state.tickCounter % 30 === 0 ? state.foods : null,
         anomalie: MenedzerEventow.aktywneAnomalie,
         promienie: MenedzerEventow.aktywnePromienie
